@@ -46,6 +46,11 @@ contextBridge.exposeInMainWorld('xiAPI', {
 
   // Game launch
   launchGame: (opts) => ipcRenderer.invoke('launch-game', opts),
+  onGameExited: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('game-exited', handler);
+    return () => ipcRenderer.removeListener('game-exited', handler);
+  },
 
   // Addons
   getAddons: (ashitaPath) => ipcRenderer.invoke('get-addons', ashitaPath),

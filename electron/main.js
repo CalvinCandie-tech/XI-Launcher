@@ -651,6 +651,21 @@ function registerIPC() {
     }
   });
 
+  // Watch for game process to exit, then notify renderer
+  const watchForGameExit = (processName) => {
+    // Wait a few seconds for the process to start
+    setTimeout(() => {
+      const poll = setInterval(() => {
+        exec(`tasklist /FI "IMAGENAME eq ${processName}" /NH`, (err, stdout) => {
+          if (err || !stdout.toLowerCase().includes(processName.toLowerCase())) {
+            clearInterval(poll);
+            try { mainWindow?.webContents?.send('game-exited'); } catch {}
+          }
+        });
+      }, 5000);
+    }, 10000);
+  };
+
   // Game launch
   ipcMain.handle('launch-game', async (_, opts) => {
     try {
@@ -670,6 +685,8 @@ function registerIPC() {
         exec(`powershell -Command "${psCmd}"`, { timeout: 15000 }, (err) => {
           if (err) console.error('Launch error:', err.message);
         });
+        // Watch for game exit and notify renderer
+        watchForGameExit('pol.exe');
         return { success: true, message: 'xiloader launched' };
       } else {
         if (!opts.ashitaPath) return { error: 'Ashita path is not set. Go to Profiles → Installation Paths and set the Ashita v4 path.' };
@@ -683,6 +700,8 @@ function registerIPC() {
         exec(`powershell -Command "${psCmd}"`, { timeout: 15000 }, (err) => {
           if (err) console.error('Launch error:', err.message);
         });
+        // Watch for game exit and notify renderer
+        watchForGameExit('pol.exe');
         return { success: true, message: `Ashita launched with profile: ${opts.profileName}` };
       }
     } catch (e) {

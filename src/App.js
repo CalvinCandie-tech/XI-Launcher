@@ -380,6 +380,46 @@ function App() {
     }, interval);
   }, []);
 
+  const fadeInMusic = useCallback(async () => {
+    if (!audioRef.current || musicTracks.length === 0) return;
+    const audio = audioRef.current;
+    const targetVol = musicVolume;
+    audio.volume = 0;
+    // Resume from where we left off, or start current track
+    if (audio.src) {
+      audio.play().catch(() => {});
+    } else {
+      const trackIdx = getTrackIndex(musicIndex);
+      const track = musicTracks[trackIdx];
+      if (!track) return;
+      const dataUrl = await api.getMusicPath(track);
+      if (dataUrl) {
+        audio.src = dataUrl;
+        audio.play().catch(() => {});
+      }
+    }
+    setMusicPlaying(true);
+    const steps = 60;
+    const interval = 120; // ~7s fade in
+    let step = 0;
+    const fade = setInterval(() => {
+      step++;
+      audio.volume = Math.min(targetVol, targetVol * (step / steps));
+      if (step >= steps) {
+        clearInterval(fade);
+        audio.volume = targetVol;
+      }
+    }, interval);
+  }, [musicVolume, musicTracks, musicIndex, getTrackIndex]);
+
+  // Fade music back in when game exits
+  useEffect(() => {
+    if (!api?.onGameExited) return;
+    return api.onGameExited(() => {
+      fadeInMusic();
+    });
+  }, [fadeInMusic]);
+
   const handleLaunch = useCallback(async (useXiloader) => {
     if (!api || !config) return;
     fadeOutMusic();
