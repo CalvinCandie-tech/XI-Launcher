@@ -361,8 +361,28 @@ function App() {
     if (api) api.storeSet(key, value);
   }, [saveCurrentProfileSettings, loadProfileSettings]);
 
+  const fadeOutMusic = useCallback(() => {
+    if (!audioRef.current || audioRef.current.paused) return;
+    const audio = audioRef.current;
+    const startVol = audio.volume;
+    const steps = 20;
+    const interval = 75; // 1.5s total fade
+    let step = 0;
+    const fade = setInterval(() => {
+      step++;
+      audio.volume = Math.max(0, startVol * (1 - step / steps));
+      if (step >= steps) {
+        clearInterval(fade);
+        audio.pause();
+        audio.volume = startVol;
+        setMusicPlaying(false);
+      }
+    }, interval);
+  }, []);
+
   const handleLaunch = useCallback(async (useXiloader) => {
     if (!api || !config) return;
+    fadeOutMusic();
     setIsLaunching(true);
     setLaunchLog('');
     try {
@@ -388,7 +408,7 @@ function App() {
     } finally {
       setTimeout(() => setIsLaunching(false), 2000);
     }
-  }, [config, updateConfig]);
+  }, [config, updateConfig, fadeOutMusic]);
 
   if (!api) {
     return (
