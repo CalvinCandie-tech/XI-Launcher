@@ -4,7 +4,7 @@ import './XIPivotTab.css';
 const api = window.xiAPI;
 
 const HD_PACKS = [
-  { name: 'XiView', desc: 'HD UI overhaul — status icons, fonts, GUI elements, and menu skins for modern resolutions', url: 'https://github.com/KenshiDRK/XiView' },
+  { name: 'XiView', desc: 'HD UI overhaul — status icons, fonts, GUI elements, and menu skins for modern resolutions', url: 'https://github.com/KenshiDRK/XiView', variants: ['Normal', 'Widescreen'] },
   { name: 'FFXI-Vision', desc: 'Overhauled in-game map files with cleaner, more detailed zone maps', url: 'https://github.com/Drauku/FFXI-Vision' },
   { name: 'Remapster', desc: 'Hand-drawn, detailed zone maps — cities, dungeons, open world, and more. Available in 1024 or 2048 resolution', url: 'https://github.com/AkadenTK/remapster_maps', releaseAsset: true },
   { name: 'AshenbubsHD', desc: 'Massive HD upscale project — 232,000+ textures covering armor, enemies, NPCs, magic effects, and more', url: 'https://github.com/Exarie/AshenbubsHD-Beta' },
@@ -137,6 +137,7 @@ function XIPivotTab({ config, onSettingsSaved }) {
 
   const [hdPackStatus, setHdPackStatus] = useState({}); // { packName: { status, message, percent } }
   const [remapsterRes, setRemapsterRes] = useState('2048');
+  const [xiviewVariant, setXiviewVariant] = useState('Widescreen');
 
   useEffect(() => {
     if (!api?.onHDPackProgress) return;
@@ -154,7 +155,8 @@ function XIPivotTab({ config, onSettingsSaved }) {
     if (pack.releaseAsset) {
       result = await api.installHDPackRelease(config.ashitaPath, pack.name, pack.url, remapsterRes);
     } else {
-      result = await api.installHDPack(config.ashitaPath, pack.name, pack.url);
+      const subdir = pack.variants ? (pack.name === 'XiView' ? xiviewVariant : null) : null;
+      result = await api.installHDPack(config.ashitaPath, pack.name, pack.url, subdir);
     }
     if (result.success) {
       if (!pivotConfig.overlays.includes(pack.name)) {
@@ -418,6 +420,14 @@ function XIPivotTab({ config, onSettingsSaved }) {
                   <span className="hdpack-res-label">Resolution:</span>
                   <button className={`btn btn-sm ${remapsterRes === '1024' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setRemapsterRes('1024')}>1024</button>
                   <button className={`btn btn-sm ${remapsterRes === '2048' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setRemapsterRes('2048')}>2048</button>
+                </div>
+              )}
+              {pack.variants && (
+                <div className="hdpack-resolution">
+                  <span className="hdpack-res-label">Variant:</span>
+                  {pack.variants.map(v => (
+                    <button key={v} className={`btn btn-sm ${xiviewVariant === v ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setXiviewVariant(v)}>{v}</button>
+                  ))}
                 </div>
               )}
               <div className="hdpack-actions">

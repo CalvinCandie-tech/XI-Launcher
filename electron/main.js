@@ -1279,7 +1279,7 @@ function registerIPC() {
   });
 
   // Download and install an HD mod pack from GitHub
-  ipcMain.handle('install-hdpack', async (_, ashitaPath, packName, repoUrl) => {
+  ipcMain.handle('install-hdpack', async (_, ashitaPath, packName, repoUrl, subdir) => {
 
 
 
@@ -1388,6 +1388,15 @@ function registerIPC() {
         if (candidateContents.some(f => isDatDir(f))) {
           innerDir = candidate;
         }
+      }
+
+      // If a specific subdirectory was requested (e.g. XiView variant), use it
+      if (subdir) {
+        const subPath = path.join(innerDir, subdir);
+        if (!fs.existsSync(subPath)) {
+          return { success: false, error: `Subdirectory "${subdir}" not found in the repository.` };
+        }
+        innerDir = subPath;
       }
 
       sendProgress('copy', 85, 'Copying files to DATs folder...');

@@ -86,7 +86,7 @@ contextBridge.exposeInMainWorld('xiAPI', {
 
   // XIPivot
   installXIPivot: (ashitaPath) => ipcRenderer.invoke('install-xipivot', ashitaPath),
-  installHDPack: (ashitaPath, packName, repoUrl) => ipcRenderer.invoke('install-hdpack', ashitaPath, packName, repoUrl),
+  installHDPack: (ashitaPath, packName, repoUrl, subdir) => ipcRenderer.invoke('install-hdpack', ashitaPath, packName, repoUrl, subdir),
   installHDPackRelease: (ashitaPath, packName, repoUrl, resolution) => ipcRenderer.invoke('install-hdpack-release', ashitaPath, packName, repoUrl, resolution),
   onHDPackProgress: (callback) => {
     const handler = (_, packName, phase, percent, detail) => callback(packName, phase, percent, detail);
