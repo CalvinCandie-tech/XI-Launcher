@@ -7,7 +7,8 @@ const HD_PACKS = [
   { name: 'XiView', desc: 'HD UI overhaul — status icons, fonts, GUI elements, and menu skins for modern resolutions', url: 'https://github.com/KenshiDRK/XiView' },
   { name: 'FFXI-Vision', desc: 'Overhauled in-game map files with cleaner, more detailed zone maps', url: 'https://github.com/Drauku/FFXI-Vision' },
   { name: 'Remapster', desc: 'Hand-drawn, detailed zone maps — cities, dungeons, open world, and more. Available in 1024 or 2048 resolution', url: 'https://github.com/AkadenTK/remapster_maps', releaseAsset: true },
-  { name: 'AshenbubsHD', desc: 'Massive HD upscale project — 232,000+ textures covering armor, enemies, NPCs, magic effects, and more', url: 'https://github.com/Exarie/AshenbubsHD-Beta' }
+  { name: 'AshenbubsHD', desc: 'Massive HD upscale project — 232,000+ textures covering armor, enemies, NPCs, magic effects, and more', url: 'https://github.com/Exarie/AshenbubsHD-Beta' },
+  { name: 'LoFi-FFXI', desc: 'Lo-fi music replacements for FFXI — chill, relaxed versions of in-game BGM tracks', url: 'https://github.com/CatsAndBoats/LoFi-FFXI' }
 ];
 
 function XIPivotTab({ config, onSettingsSaved }) {

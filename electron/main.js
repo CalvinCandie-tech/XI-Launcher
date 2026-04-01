@@ -1382,11 +1382,12 @@ function registerIPC() {
       // ROM directories directly inside the overlay folder.
       const innerContents = fs.readdirSync(innerDir);
       const subDirs = innerContents.filter(f => fs.statSync(path.join(innerDir, f)).isDirectory());
-      const hasRomDirs = subDirs.some(d => /^ROM\d*$/i.test(d));
+      const isDatDir = (name) => /^(ROM|sound)\d*$/i.test(name);
+      const hasRomDirs = subDirs.some(d => isDatDir(d));
       if (!hasRomDirs && subDirs.length === 1) {
         const candidate = path.join(innerDir, subDirs[0]);
         const candidateContents = fs.readdirSync(candidate);
-        if (candidateContents.some(f => /^ROM\d*$/i.test(f))) {
+        if (candidateContents.some(f => isDatDir(f))) {
           innerDir = candidate;
         }
       }
