@@ -104,6 +104,9 @@ contextBridge.exposeInMainWorld('xiAPI', {
     return () => ipcRenderer.removeListener('ashita-install-progress', handler);
   },
 
+  // Addon update check
+  checkAddonUpdates: (addonList) => ipcRenderer.invoke('check-addon-updates', addonList),
+
   // Community addon install
   installAddon: (ashitaPath, addonName, repo, subdir) => ipcRenderer.invoke('install-addon', ashitaPath, addonName, repo, subdir),
   onAddonProgress: (callback) => {
