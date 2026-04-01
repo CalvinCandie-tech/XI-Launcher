@@ -1,0 +1,52 @@
+{
+  "name": "xi-launcher",
+  "version": "1.0.0",
+  "main": "electron/main.js",
+  "homepage": "./",
+  "scripts": {
+    "start": "concurrently \"npm run react-start\" \"wait-on http://localhost:3000 && electron .\"",
+    "react-start": "react-scripts start",
+    "build": "react-scripts build",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1"
+  },
+  "devDependencies": {
+    "@electron/packager": "^19.1.0",
+    "concurrently": "^8.0.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0",
+    "wait-on": "^7.0.0"
+  },
+  "build": {
+    "appId": "com.ffxi.xi-launcher",
+    "productName": "XI Launcher",
+    "files": [
+      "build/**/*",
+      "electron/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      "resources/xiloader.exe"
+    ],
+    "extends": null,
+    "forceCodeSigning": false,
+    "win": {
+      "target": "dir",
+      "signingHashAlgorithms": []
+    }
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%"
+    ],
+    "development": [
+      "last 1 chrome version"
+    ]
+  }
+}

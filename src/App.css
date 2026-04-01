@@ -1,0 +1,66 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg-deep);
+  position: relative;
+  overflow: hidden;
+}
+
+.app-bg-video {
+  position: absolute;
+  top: -5%;
+  left: -2.5%;
+  width: 105%;
+  height: 110%;
+  object-fit: cover;
+  opacity: 0.75;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.app-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.app-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  position: relative;
+  z-index: 1;
+}
+
+.no-electron {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 12px;
+  color: var(--text-secondary);
+}
+.no-electron-icon {
+  font-size: 48px;
+  color: var(--gold);
+  text-shadow: 0 0 30px var(--gold-glow);
+}
+.no-electron h2 {
+  font-family: 'Cinzel', serif;
+  color: var(--text-primary);
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  font-family: 'Cinzel', serif;
+  color: var(--gold);
+  font-size: 18px;
+}

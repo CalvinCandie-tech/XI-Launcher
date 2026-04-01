@@ -1,0 +1,334 @@
+.xipivot-tab {
+  max-width: 100%;
+}
+
+.xipivot-status-bar {
+  display: flex;
+  align-items: center;
+}
+
+.xipivot-status-items {
+  display: flex;
+  gap: 10px;
+}
+
+.xipivot-warning {
+  background: rgba(200, 64, 64, 0.06);
+  border-color: rgba(200, 64, 64, 0.25);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.xipivot-warning strong {
+  color: var(--red);
+  display: block;
+  margin-bottom: 6px;
+}
+.xipivot-warning code {
+  background: var(--bg-deepest);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
+.xipivot-install-panel {
+  border-color: var(--teal-dim);
+  background: rgba(58, 184, 200, 0.04);
+}
+.xipivot-install-info strong {
+  color: var(--teal);
+  display: block;
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+.xipivot-install-info p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+.xipivot-install-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.xipivot-hint {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.xipivot-path-row {
+  display: flex;
+  gap: 8px;
+}
+
+.xipivot-empty {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.xipivot-overlay-list {
+  margin-bottom: 12px;
+}
+
+.xipivot-overlay-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.xipivot-overlay-row:last-child {
+  border-bottom: none;
+}
+
+.xipivot-overlay-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cinzel', serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold);
+  background: rgba(200, 146, 42, 0.1);
+  border: 1px solid var(--gold-dim);
+  flex-shrink: 0;
+}
+
+.xipivot-overlay-name {
+  flex: 1;
+  font-size: 15px;
+  color: var(--text-bright);
+}
+
+.xipivot-overlay-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.xipivot-add-row {
+  display: flex;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.hdpacks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.hdpack-card {
+  transition: all 0.2s;
+}
+.hdpack-card:hover {
+  border-color: var(--border-bright);
+}
+
+.hdpack-name {
+  font-size: 16px;
+  color: var(--gold);
+  margin-bottom: 6px;
+}
+
+.hdpack-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-bottom: 12px;
+}
+
+.hdpack-resolution {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.hdpack-res-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-right: 2px;
+}
+.hdpack-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cache-setting-block {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.cache-setting-block .setting-hint-inline {
+  display: block;
+  margin-top: 4px;
+}
+
+.cache-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.cache-option-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-deepest-alpha);
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 80px;
+}
+.cache-option-btn:hover {
+  border-color: var(--border-bright);
+  background: var(--bg-hover);
+}
+.cache-option-btn.active {
+  border-color: transparent;
+  background: linear-gradient(135deg, rgba(58, 184, 200, 0.1), rgba(200, 146, 42, 0.1));
+  box-shadow: 0 0 8px rgba(58, 184, 200, 0.1), 0 0 8px rgba(200, 146, 42, 0.1);
+  position: relative;
+}
+.cache-option-btn.active::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 7px;
+  padding: 2px;
+  background: linear-gradient(135deg, var(--teal), var(--gold));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.cache-option-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.cache-option-btn.active .cache-option-value {
+  color: var(--text-bright);
+}
+
+.cache-option-tag {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+.cache-option-btn.active .cache-option-tag {
+  background: linear-gradient(90deg, var(--teal), var(--gold));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 700;
+}
+
+.laa-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.laa-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.laa-feedback {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  animation: laa-fade-in 0.3s ease;
+}
+.laa-feedback.success {
+  background: rgba(72, 184, 104, 0.08);
+  border: 1px solid rgba(72, 184, 104, 0.25);
+  color: var(--green);
+}
+.laa-feedback.error {
+  background: rgba(200, 64, 64, 0.08);
+  border: 1px solid rgba(200, 64, 64, 0.25);
+  color: var(--red);
+}
+
+@keyframes laa-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hdpack-installed {
+  border-color: rgba(72, 184, 104, 0.25);
+}
+
+.hdpack-progress-area {
+  margin-top: 10px;
+}
+
+.hdpack-progress-bar {
+  height: 6px;
+  background: var(--bg-deepest);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+}
+
+.hdpack-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--teal), var(--gold));
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.hdpack-status-msg {
+  padding: 8px 10px;
+  border-radius: 5px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  background: var(--bg-deepest);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.hdpack-status-msg.success {
+  background: rgba(72, 184, 104, 0.06);
+  border-color: rgba(72, 184, 104, 0.2);
+  color: var(--green);
+}
+.hdpack-status-msg.error {
+  background: rgba(200, 64, 64, 0.06);
+  border-color: rgba(200, 64, 64, 0.2);
+  color: var(--red);
+}
+
+.xipivot-code {
+  background: var(--bg-deepest);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  font-size: 13px;
+  color: var(--teal);
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+}

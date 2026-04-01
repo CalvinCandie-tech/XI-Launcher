@@ -1,0 +1,11 @@
+.bgwiki-tab {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.bgwiki-webview {
+  flex: 1;
+  border: none;
+  border-radius: 8px;
+}

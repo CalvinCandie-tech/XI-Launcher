@@ -1,0 +1,39 @@
+.launchbar {
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.launchbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.launchbar-profile {
+  font-size: 16px;
+  color: var(--gold);
+  letter-spacing: 0.05em;
+}
+
+.launchbar-warning {
+  font-size: 15px;
+  color: var(--red);
+}
+
+.launchbar-time {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-family: 'Share Tech Mono', monospace;
+}
+
+.launchbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

@@ -1,0 +1,267 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 130">
+  <defs>
+    <linearGradient id="faceL" x1="0" y1="0" x2="1" y2="0.8">
+      <stop offset="0%"><animate attributeName="stop-color" values="#c8e8ff;#e0c0ff;#a0d8ff;#d4b0ff;#c8e8ff" dur="6s" repeatCount="indefinite"/></stop>
+      <stop offset="50%"><animate attributeName="stop-color" values="#4a9ad4;#8a5ad4;#5aaae4;#7a4ac4;#4a9ad4" dur="6s" repeatCount="indefinite"/></stop>
+      <stop offset="100%"><animate attributeName="stop-color" values="#1a5080;#3a2080;#1a6090;#2a1870;#1a5080" dur="6s" repeatCount="indefinite"/></stop>
+    </linearGradient>
+    <linearGradient id="faceR" x1="1" y1="0" x2="0" y2="0.8">
+      <stop offset="0%"><animate attributeName="stop-color" values="#7ac0ec;#b87aec;#6ad0f0;#a868e8;#7ac0ec" dur="7s" repeatCount="indefinite"/></stop>
+      <stop offset="50%"><animate attributeName="stop-color" values="#2868a0;#5028a0;#2878b0;#4020a0;#2868a0" dur="7s" repeatCount="indefinite"/></stop>
+      <stop offset="100%"><animate attributeName="stop-color" values="#0c2e50;#200e50;#0c3860;#180840;#0c2e50" dur="7s" repeatCount="indefinite"/></stop>
+    </linearGradient>
+    <linearGradient id="faceT" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%"><animate attributeName="stop-color" values="#f0f8ff;#fff0ff;#e8f4ff;#ffe8ff;#f0f8ff" dur="4s" repeatCount="indefinite"/></stop>
+      <stop offset="100%"><animate attributeName="stop-color" values="#60a8d8;#9060d8;#50b8e0;#8050d0;#60a8d8" dur="4s" repeatCount="indefinite"/></stop>
+    </linearGradient>
+    <linearGradient id="faceBL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"><animate attributeName="stop-color" values="#2a6898;#4a2a98;#2a7898;#3a2090;#2a6898" dur="5.5s" repeatCount="indefinite"/></stop>
+      <stop offset="100%"><animate attributeName="stop-color" values="#081830;#180838;#081e38;#140630;#081830" dur="5.5s" repeatCount="indefinite"/></stop>
+    </linearGradient>
+    <linearGradient id="faceBR" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%"><animate attributeName="stop-color" values="#1a4a78;#3a1a78;#1a5a88;#301070;#1a4a78" dur="6.5s" repeatCount="indefinite"/></stop>
+      <stop offset="100%"><animate attributeName="stop-color" values="#040e20;#0c0420;#041428;#080218;#040e20" dur="6.5s" repeatCount="indefinite"/></stop>
+    </linearGradient>
+    <linearGradient id="innerL" x1="0" y1="0" x2="0.5" y2="1">
+      <stop offset="0%"><animate attributeName="stop-color" values="#90d0f0;#c090f0;#80e0ff;#b080f0;#90d0f0" dur="5s" repeatCount="indefinite"/></stop>
+      <stop offset="100%"><animate attributeName="stop-color" values="#3080b8;#6030b8;#2890c0;#5028b0;#3080b8" dur="5s" repeatCount="indefinite"/></stop>
+    </linearGradient>
+    <linearGradient id="innerR" x1="1" y1="0" x2="0.5" y2="1">
+      <stop offset="0%"><animate attributeName="stop-color" values="#68b4dc;#9868dc;#58c4e8;#8858d4;#68b4dc" dur="5.8s" repeatCount="indefinite"/></stop>
+      <stop offset="100%"><animate attributeName="stop-color" values="#1a5888;#3a1a88;#1a6898;#301080;#1a5888" dur="5.8s" repeatCount="indefinite"/></stop>
+    </linearGradient>
+    <!-- Sub-crystal gradients -->
+    <linearGradient id="subL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"><animate attributeName="stop-color" values="#a0d8ff;#c8a0ff;#a0d8ff" dur="5s" repeatCount="indefinite"/></stop>
+      <stop offset="100%"><animate attributeName="stop-color" values="#1a4a78;#3a1a78;#1a4a78" dur="5s" repeatCount="indefinite"/></stop>
+    </linearGradient>
+    <linearGradient id="subR" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%"><animate attributeName="stop-color" values="#80c0e8;#a880e8;#80c0e8" dur="6s" repeatCount="indefinite"/></stop>
+      <stop offset="100%"><animate attributeName="stop-color" values="#0c2e50;#200e50;#0c2e50" dur="6s" repeatCount="indefinite"/></stop>
+    </linearGradient>
+    <linearGradient id="subDark" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%"><animate attributeName="stop-color" values="#2a5a88;#4a2a88;#2a5a88" dur="4s" repeatCount="indefinite"/></stop>
+      <stop offset="100%"><animate attributeName="stop-color" values="#061020;#100620;#061020" dur="4s" repeatCount="indefinite"/></stop>
+    </linearGradient>
+    <filter id="outerGlow">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feComposite in="blur" in2="SourceGraphic" operator="over"/>
+    </filter>
+    <filter id="sparkleGlow">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="smallGlow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feComposite in="blur" in2="SourceGraphic" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- ===== SLOW ROTATION via simulated 3D sway ===== -->
+  <g>
+    <animateTransform attributeName="transform" type="rotate" values="-2,50,65;2,50,65;-2,50,65" dur="8s" repeatCount="indefinite"/>
+
+    <!-- Ambient glow -->
+    <ellipse cx="50" cy="68" rx="34" ry="48" filter="url(#outerGlow)">
+      <animate attributeName="fill" values="rgba(60,140,220,0.12);rgba(120,60,220,0.16);rgba(80,100,240,0.14);rgba(60,140,220,0.12)" dur="5s" repeatCount="indefinite"/>
+      <animate attributeName="rx" values="32;36;32" dur="4s" repeatCount="indefinite"/>
+    </ellipse>
+
+    <!-- Ground reflection -->
+    <ellipse cx="50" cy="120" rx="22" ry="5" opacity="0.25">
+      <animate attributeName="fill" values="rgba(60,140,220,0.3);rgba(120,60,220,0.3);rgba(60,140,220,0.3)" dur="5s" repeatCount="indefinite"/>
+      <animate attributeName="rx" values="20;24;20" dur="4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.15;0.35;0.15" dur="4s" repeatCount="indefinite"/>
+    </ellipse>
+
+    <!-- ===== SUB-CRYSTAL: Bottom-left sprouting out ===== -->
+    <g>
+      <animateTransform attributeName="transform" type="rotate" values="1,32,95;-1,32,95;1,32,95" dur="6s" repeatCount="indefinite"/>
+      <!-- Left sub-crystal -->
+      <polygon points="26,68 18,82 24,88 30,80" fill="url(#subL)"/>
+      <polygon points="26,68 30,80 34,84 32,72" fill="url(#subR)"/>
+      <polygon points="24,88 30,80 34,84" fill="url(#subDark)"/>
+      <line x1="26" y1="68" x2="30" y2="80" stroke="rgba(200,220,255,0.3)" stroke-width="0.5"/>
+      <!-- Sparkle on sub -->
+      <circle cx="26" cy="76" r="1" fill="white" filter="url(#sparkleGlow)">
+        <animate attributeName="opacity" values="0.1;0.7;0.1" dur="2.4s" repeatCount="indefinite"/>
+        <animate attributeName="r" values="0.5;1.5;0.5" dur="2.4s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+
+    <!-- ===== SUB-CRYSTAL: Bottom-right sprouting out ===== -->
+    <g>
+      <animateTransform attributeName="transform" type="rotate" values="-1,68,90;1,68,90;-1,68,90" dur="7s" repeatCount="indefinite"/>
+      <polygon points="74,65 80,78 74,86 68,76" fill="url(#subR)"/>
+      <polygon points="74,65 68,76 64,82 66,70" fill="url(#subL)"/>
+      <polygon points="74,86 68,76 64,82" fill="url(#subDark)"/>
+      <line x1="74" y1="65" x2="68" y2="76" stroke="rgba(180,200,255,0.3)" stroke-width="0.5"/>
+      <circle cx="72" cy="74" r="0.8" fill="white" filter="url(#sparkleGlow)">
+        <animate attributeName="opacity" values="0.6;0.1;0.6" dur="3s" repeatCount="indefinite"/>
+        <animate attributeName="r" values="0.4;1.3;0.4" dur="3s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+
+    <!-- ===== SUB-CRYSTAL: Upper-left small shard ===== -->
+    <g>
+      <animateTransform attributeName="transform" type="rotate" values="0.5,28,50;-0.5,28,50;0.5,28,50" dur="5s" repeatCount="indefinite"/>
+      <polygon points="22,42 16,54 22,58 26,50" fill="url(#subL)" opacity="0.9"/>
+      <polygon points="22,42 26,50 28,54 26,44" fill="url(#subR)" opacity="0.9"/>
+      <polygon points="22,58 26,50 28,54" fill="url(#subDark)" opacity="0.8"/>
+      <circle cx="23" cy="50" r="0.7" fill="rgba(200,180,255,0.9)">
+        <animate attributeName="opacity" values="0.2;0.8;0.2" dur="1.8s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+
+    <!-- ===== SUB-CRYSTAL: Upper-right tiny shard ===== -->
+    <g>
+      <animateTransform attributeName="transform" type="rotate" values="-0.5,72,48;0.5,72,48;-0.5,72,48" dur="5.5s" repeatCount="indefinite"/>
+      <polygon points="76,40 80,50 76,54 72,48" fill="url(#subR)" opacity="0.85"/>
+      <polygon points="76,40 72,48 70,52 72,42" fill="url(#subL)" opacity="0.85"/>
+      <polygon points="76,54 72,48 70,52" fill="url(#subDark)" opacity="0.75"/>
+      <circle cx="75" cy="48" r="0.6" fill="white">
+        <animate attributeName="opacity" values="0.7;0.1;0.7" dur="2.6s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+
+    <!-- ===== SUB-CRYSTAL: Front-bottom small ===== -->
+    <g>
+      <animateTransform attributeName="transform" type="rotate" values="0.8,50,100;-0.8,50,100;0.8,50,100" dur="6.5s" repeatCount="indefinite"/>
+      <polygon points="44,92 40,102 46,106 48,98" fill="url(#subL)" opacity="0.8"/>
+      <polygon points="44,92 48,98 52,104 50,94" fill="url(#subR)" opacity="0.8"/>
+      <polygon points="46,106 48,98 52,104" fill="url(#subDark)" opacity="0.7"/>
+      <circle cx="47" cy="98" r="0.6" fill="rgba(180,200,255,0.8)">
+        <animate attributeName="opacity" values="0.3;0.9;0.3" dur="2s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+
+    <!-- ===== MAIN CRYSTAL BODY ===== -->
+    <!-- Simulated width breathing for 3D rotation feel -->
+    <g>
+      <animateTransform attributeName="transform" type="scale" values="1,1;1.02,1;0.98,1;1,1" dur="8s" repeatCount="indefinite" additive="sum"/>
+
+      <!-- Bottom faces -->
+      <polygon points="50,112 22,58 34,62 50,74" fill="url(#faceBL)"/>
+      <polygon points="50,112 78,58 66,62 50,74" fill="url(#faceBR)"/>
+      <!-- Left main face -->
+      <polygon points="50,10 22,58 34,62 50,74" fill="url(#faceL)"/>
+      <!-- Right main face -->
+      <polygon points="50,10 78,58 66,62 50,74" fill="url(#faceR)"/>
+      <!-- Top cap -->
+      <polygon points="50,10 36,30 50,26 64,30" fill="url(#faceT)"/>
+      <!-- Inner facets -->
+      <polygon points="34,62 50,74 36,30 22,58" fill="url(#innerL)" opacity="0.35"/>
+      <polygon points="66,62 50,74 64,30 78,58" fill="url(#innerR)" opacity="0.25"/>
+      <!-- Mid facet band -->
+      <polygon points="22,58 34,62 50,56 66,62 78,58 50,52" fill="white" opacity="0.06">
+        <animate attributeName="opacity" values="0.04;0.1;0.04" dur="3s" repeatCount="indefinite"/>
+      </polygon>
+
+      <!-- Internal refraction -->
+      <line x1="50" y1="10" x2="50" y2="74" stroke="rgba(200,220,255,0.15)" stroke-width="0.5"/>
+      <line x1="36" y1="30" x2="66" y2="62" stroke="rgba(180,200,255,0.08)" stroke-width="0.4"/>
+      <line x1="64" y1="30" x2="34" y2="62" stroke="rgba(180,200,255,0.08)" stroke-width="0.4"/>
+
+      <!-- Edge highlights -->
+      <polyline points="50,10 22,58 50,112" fill="none" stroke="rgba(180,220,255,0.35)" stroke-width="0.8">
+        <animate attributeName="stroke" values="rgba(180,220,255,0.35);rgba(200,180,255,0.45);rgba(180,220,255,0.35)" dur="4s" repeatCount="indefinite"/>
+      </polyline>
+      <polyline points="50,10 78,58 50,112" fill="none" stroke="rgba(140,190,240,0.2)" stroke-width="0.6">
+        <animate attributeName="stroke" values="rgba(140,190,240,0.2);rgba(170,140,240,0.28);rgba(140,190,240,0.2)" dur="5s" repeatCount="indefinite"/>
+      </polyline>
+
+      <!-- Specular reflections -->
+      <polygon points="40,18 50,12 54,26 46,34" fill="white" opacity="0.5">
+        <animate attributeName="opacity" values="0.5;0.15;0.6;0.2;0.5" dur="4s" repeatCount="indefinite"/>
+      </polygon>
+      <polygon points="26,46 32,36 36,50 30,56" fill="rgba(220,230,255,0.3)">
+        <animate attributeName="opacity" values="0.1;0.4;0.1" dur="5s" repeatCount="indefinite"/>
+      </polygon>
+      <polygon points="62,38 68,46 64,54 58,44" fill="rgba(200,180,255,0.2)">
+        <animate attributeName="opacity" values="0.05;0.3;0.05" dur="6s" repeatCount="indefinite"/>
+      </polygon>
+      <polygon points="44,80 50,74 54,84 50,92" fill="rgba(160,180,255,0.12)">
+        <animate attributeName="opacity" values="0.05;0.2;0.05" dur="4.5s" repeatCount="indefinite"/>
+      </polygon>
+
+      <!-- Light sweep -->
+      <polygon points="28,38 50,26 62,56 40,66" fill="white" opacity="0">
+        <animate attributeName="opacity" values="0;0.06;0.1;0.03;0" dur="3.5s" repeatCount="indefinite"/>
+      </polygon>
+
+      <!-- Rainbow refraction -->
+      <line x1="36" y1="44" x2="56" y2="52" stroke="rgba(255,100,100,0.1)" stroke-width="1.5">
+        <animate attributeName="opacity" values="0;0.12;0;0" dur="5s" repeatCount="indefinite"/>
+      </line>
+      <line x1="36" y1="46" x2="56" y2="54" stroke="rgba(100,255,100,0.08)" stroke-width="1.2">
+        <animate attributeName="opacity" values="0;0;0.1;0" dur="5s" repeatCount="indefinite"/>
+      </line>
+      <line x1="36" y1="48" x2="56" y2="56" stroke="rgba(100,100,255,0.1)" stroke-width="1.2">
+        <animate attributeName="opacity" values="0;0;0;0.12" dur="5s" repeatCount="indefinite"/>
+      </line>
+    </g>
+
+    <!-- ===== SPARKLES (outside rotation group for extra life) ===== -->
+    <!-- Star 1 -->
+    <g transform="translate(58,18)" filter="url(#sparkleGlow)">
+      <animate attributeName="opacity" values="0;0.9;0;0;0" dur="3s" repeatCount="indefinite"/>
+      <line x1="-4" y1="0" x2="4" y2="0" stroke="white" stroke-width="1.2"/>
+      <line x1="0" y1="-4" x2="0" y2="4" stroke="white" stroke-width="1.2"/>
+      <line x1="-2.5" y1="-2.5" x2="2.5" y2="2.5" stroke="white" stroke-width="0.7"/>
+      <line x1="2.5" y1="-2.5" x2="-2.5" y2="2.5" stroke="white" stroke-width="0.7"/>
+    </g>
+    <!-- Star 2 -->
+    <g transform="translate(28,52)" filter="url(#sparkleGlow)">
+      <animate attributeName="opacity" values="0;0;0.8;0;0" dur="3.5s" repeatCount="indefinite"/>
+      <line x1="-3" y1="0" x2="3" y2="0" stroke="rgba(200,180,255,1)" stroke-width="1"/>
+      <line x1="0" y1="-3" x2="0" y2="3" stroke="rgba(200,180,255,1)" stroke-width="1"/>
+      <line x1="-2" y1="-2" x2="2" y2="2" stroke="rgba(200,180,255,1)" stroke-width="0.6"/>
+      <line x1="2" y1="-2" x2="-2" y2="2" stroke="rgba(200,180,255,1)" stroke-width="0.6"/>
+    </g>
+    <!-- Star 3 -->
+    <g transform="translate(70,50)" filter="url(#sparkleGlow)">
+      <animate attributeName="opacity" values="0;0;0;0.7;0" dur="2.8s" repeatCount="indefinite"/>
+      <line x1="-3.5" y1="0" x2="3.5" y2="0" stroke="rgba(180,200,255,1)" stroke-width="1"/>
+      <line x1="0" y1="-3.5" x2="0" y2="3.5" stroke="rgba(180,200,255,1)" stroke-width="1"/>
+      <line x1="-2" y1="-2" x2="2" y2="2" stroke="rgba(180,200,255,1)" stroke-width="0.5"/>
+      <line x1="2" y1="-2" x2="-2" y2="2" stroke="rgba(180,200,255,1)" stroke-width="0.5"/>
+    </g>
+    <!-- Star 4 on sub-crystal -->
+    <g transform="translate(18,86)" filter="url(#sparkleGlow)">
+      <animate attributeName="opacity" values="0.7;0;0;0.7" dur="4s" repeatCount="indefinite"/>
+      <line x1="-2.5" y1="0" x2="2.5" y2="0" stroke="white" stroke-width="0.8"/>
+      <line x1="0" y1="-2.5" x2="0" y2="2.5" stroke="white" stroke-width="0.8"/>
+    </g>
+    <!-- Star 5 on right sub -->
+    <g transform="translate(82,76)" filter="url(#sparkleGlow)">
+      <animate attributeName="opacity" values="0;0.6;0;0" dur="3.2s" repeatCount="indefinite"/>
+      <line x1="-2" y1="0" x2="2" y2="0" stroke="rgba(200,180,255,0.9)" stroke-width="0.7"/>
+      <line x1="0" y1="-2" x2="0" y2="2" stroke="rgba(200,180,255,0.9)" stroke-width="0.7"/>
+    </g>
+
+    <!-- Floating sparkle dots -->
+    <circle cx="42" cy="40" r="1.5" fill="white" filter="url(#sparkleGlow)">
+      <animate attributeName="opacity" values="0.1;0.8;0.1" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="r" values="0.8;2;0.8" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="58" cy="36" r="1" fill="white" filter="url(#sparkleGlow)">
+      <animate attributeName="opacity" values="0.7;0.1;0.7" dur="2.5s" repeatCount="indefinite"/>
+      <animate attributeName="r" values="0.6;1.8;0.6" dur="2.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="32" cy="62" r="1" fill="rgba(200,180,255,0.9)" filter="url(#sparkleGlow)">
+      <animate attributeName="opacity" values="0.2;0.7;0.2" dur="3.2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="64" cy="66" r="0.8" fill="rgba(160,200,255,0.8)">
+      <animate attributeName="opacity" values="0.5;0.1;0.5" dur="1.8s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="50" cy="82" r="0.8" fill="rgba(180,160,255,0.7)">
+      <animate attributeName="opacity" values="0.1;0.6;0.1" dur="3.8s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="46" cy="28" r="0.6" fill="white">
+      <animate attributeName="opacity" values="0.3;0.9;0.3" dur="1.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="56" cy="56" r="0.7" fill="rgba(220,200,255,0.8)">
+      <animate attributeName="opacity" values="0.6;0;0.6" dur="2.2s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>
