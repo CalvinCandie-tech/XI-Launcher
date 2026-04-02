@@ -439,7 +439,7 @@ function DgVoodooTab({ config, updateConfig }) {
           Config {dgvStatus.confExists ? 'Present' : 'Missing'}
         </span>
         {dgvStatus.d3d8Exists && (
-          <button className="btn btn-ghost btn-sm dgv-remove-btn" onClick={removeDgVoodoo}>
+          <button className="btn btn-sm dgv-remove-btn" onClick={removeDgVoodoo}>
             Remove dgVoodoo2
           </button>
         )}

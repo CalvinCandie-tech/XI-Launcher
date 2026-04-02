@@ -178,6 +178,7 @@ function AddonsTab({ config, updateConfig }) {
   const [bundleName, setBundleName] = useState('');
   const [bundleAddons, setBundleAddons] = useState([]);
   const [showHelp, setShowHelp] = useState(false);
+  const [pendingBundle, setPendingBundle] = useState(null);
   const savePendingRef = useRef(null);
   const saveInProgressRef = useRef(false);
   const customBundles = config.customBundles || [];
@@ -560,6 +561,7 @@ function AddonsTab({ config, updateConfig }) {
           <div className="addons-toolbar-labels">
             <span className="addon-active-label">Active</span>
           </div>
+          <button className="btn btn-primary addon-help-btn" onClick={() => setShowHelp(true)}>Active Addon Help</button>
           {!config.activeProfile && (
             <span className="pill pill-red addon-no-profile-pill">No profile selected</span>
           )}
@@ -572,7 +574,6 @@ function AddonsTab({ config, updateConfig }) {
             onChange={e => setSearch(e.target.value)}
             className="addons-search"
           />
-          <button className="btn btn-primary btn-sm" onClick={() => setShowHelp(true)}>? Active Addon Help</button>
           <button className="btn btn-ghost btn-sm" onClick={loadAddons}>↻</button>
           <button className="btn btn-ghost btn-sm" onClick={installAllCommunity} disabled={batchInstalling}>
             {batchInstalling ? '◌ Installing...' : '↓ Install All'}
@@ -632,7 +633,7 @@ function AddonsTab({ config, updateConfig }) {
               </div>
               <button
                 className="btn btn-primary btn-sm addon-bundle-btn"
-                onClick={() => applyBundle(bundle)}
+                onClick={() => setPendingBundle(bundle)}
                 disabled={batchInstalling || !config.activeProfile}
               >
                 {batchInstalling ? '◌ Installing...' : 'Apply Bundle'}
@@ -654,7 +655,7 @@ function AddonsTab({ config, updateConfig }) {
               </div>
               <button
                 className="btn btn-primary btn-sm addon-bundle-btn"
-                onClick={() => applyBundle(bundle)}
+                onClick={() => setPendingBundle(bundle)}
                 disabled={batchInstalling || !config.activeProfile}
               >
                 {batchInstalling ? '◌ Installing...' : 'Apply Bundle'}
@@ -669,6 +670,43 @@ function AddonsTab({ config, updateConfig }) {
           </div>
         </div>
       </div>
+
+      {pendingBundle && (
+        <Modal onClose={() => setPendingBundle(null)} ariaLabel="Bundle Confirmation">
+          <div className="bundle-confirm panel">
+            <h3 className="cinzel addon-modal-title">Apply "{pendingBundle.name}"?</h3>
+            <p className="bundle-confirm-desc">
+              This will install and activate the following <strong>{pendingBundle.addons.length} addons</strong> on your profile:
+            </p>
+            <div className="bundle-confirm-list">
+              {pendingBundle.addons.map(name => {
+                const cat = ADDON_CATALOGUE.find(a => a.name.toLowerCase() === name.toLowerCase());
+                const help = ADDON_HELP[name];
+                return (
+                  <div key={name} className="bundle-confirm-item">
+                    <div className="bundle-confirm-item-header">
+                      <span className="bundle-confirm-item-name">{name}</span>
+                      {cat?.category && <span className="bundle-confirm-item-cat">{cat.category}</span>}
+                    </div>
+                    <p className="bundle-confirm-item-desc">
+                      {cat?.description || 'No description available'}
+                    </p>
+                    {help?.commands?.length > 0 && (
+                      <span className="bundle-confirm-item-cmds">Commands: {help.commands.join(', ')}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="bundle-confirm-actions">
+              <button className="btn btn-ghost" onClick={() => setPendingBundle(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={() => { applyBundle(pendingBundle); setPendingBundle(null); }}>
+                Apply Bundle
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {showBundleEditor && (
         <Modal onClose={() => setShowBundleEditor(false)} ariaLabel="Bundle Editor">

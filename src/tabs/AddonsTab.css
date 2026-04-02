@@ -32,9 +32,16 @@
 }
 
 .addons-search {
-  width: clamp(140px, 20%, 220px);
+  width: clamp(180px, 25%, 300px);
   font-size: 13px !important;
   padding: 6px 10px !important;
+}
+
+.addon-help-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .addons-filters {
@@ -655,4 +662,73 @@
 
 .addon-modal-title-flush {
   margin: 0;
+}
+
+/* Bundle confirmation modal */
+.bundle-confirm {
+  width: 500px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px;
+}
+.bundle-confirm-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 4px 0 12px;
+}
+.bundle-confirm-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 45vh;
+  padding-right: 4px;
+}
+.bundle-confirm-item {
+  padding: 10px 12px;
+  background: var(--bg-deepest);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.bundle-confirm-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.bundle-confirm-item-name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--teal);
+  font-weight: 600;
+}
+.bundle-confirm-item-cat {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.bundle-confirm-item-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+.bundle-confirm-item-cmds {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--gold);
+}
+.bundle-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
 }

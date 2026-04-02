@@ -28,9 +28,20 @@
 }
 .dgv-remove-btn {
   margin-left: auto;
-  font-size: 11px !important;
-  color: var(--red) !important;
-  border-color: var(--red-border) !important;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--red);
+  border: 1px solid var(--red);
+  padding: 6px 16px;
+  border-radius: 6px;
+  letter-spacing: 0.02em;
+  transition: all 0.15s;
+}
+.dgv-remove-btn:hover {
+  background: #c04040;
+  border-color: #c04040;
+  box-shadow: 0 0 12px rgba(200, 64, 64, 0.4);
 }
 
 /* Step progress */
