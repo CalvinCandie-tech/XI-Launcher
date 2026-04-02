@@ -10,6 +10,7 @@ const tabs = [
   { id: 'plugins', label: 'Plugins', icon: '⬡' },
   { id: 'xipivot', label: 'XIPivot', icon: '◎' },
   { id: 'dgvoodoo', label: 'dgVoodoo', icon: '◆' },
+  { id: 'reshade', label: 'ReShade', icon: '✦' },
   { id: 'settings', label: 'Settings', icon: '⚙' }
 ];
 
