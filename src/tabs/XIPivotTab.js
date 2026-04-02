@@ -6,13 +6,15 @@ const api = window.xiAPI;
 const HD_PACKS = [
   { name: 'XiView', desc: 'HD UI overhaul — status icons, fonts, GUI elements, and menu skins for modern resolutions', url: 'https://github.com/KenshiDRK/XiView', variants: ['Normal', 'Widescreen'] },
   { name: 'FFXI-Vision', desc: 'Cleaner, more detailed zone maps — an overhaul of the stock in-game map files', url: 'https://github.com/Drauku/FFXI-Vision', conflictGroup: 'maps' },
-  { name: 'Remapster', desc: 'Hand-drawn zone maps with fine detail — cities, dungeons, open world. Available in 1024 or 2048 resolution', url: 'https://github.com/AkadenTK/remapster_maps', releaseAsset: true, conflictGroup: 'maps' },
+  { name: 'Remapster', desc: 'Hand-drawn zone maps with fine detail — cities, dungeons, open world. Available in 1024 or 2048 resolution', url: 'https://github.com/AkadenTK/remapster_maps', releaseAsset: true, resolutions: true, conflictGroup: 'maps' },
   { name: 'AshenbubsHD', desc: 'Massive HD upscale project — 232,000+ textures covering armor, enemies, NPCs, magic effects, and more', url: 'https://github.com/Exarie/AshenbubsHD-Beta' },
-  { name: 'LoFi-FFXI', desc: 'Lo-fi music replacements for FFXI — chill, relaxed versions of in-game BGM tracks', url: 'https://github.com/CatsAndBoats/LoFi-FFXI' }
+  { name: 'LoFi-FFXI', desc: 'Lo-fi music replacements for FFXI — chill, relaxed versions of in-game BGM tracks', url: 'https://github.com/CatsAndBoats/LoFi-FFXI', conflictGroup: 'music' },
+  { name: 'SkyrimXI', desc: 'Skyrim OST mood-matched to FFXI zones — epic orchestral music for towns, fields, dungeons, and battles', url: 'https://github.com/CalvinCandie-tech/SkyrimXI-Music-Pack', releaseAsset: true, conflictGroup: 'music' }
 ];
 
 const CONFLICT_GROUP_LABELS = {
-  maps: 'Map Pack'
+  maps: 'Map Pack',
+  music: 'Music Pack'
 };
 
 function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
@@ -493,7 +495,7 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
                     <div className="hdpack-card-body">
                       <h3 className="hdpack-name cinzel">{pack.name}</h3>
                       <p className="hdpack-desc">{pack.desc}</p>
-                      {pack.releaseAsset && (
+                      {pack.releaseAsset && pack.resolutions && (
                         <div className="hdpack-resolution">
                           <span className="hdpack-res-label">Resolution:</span>
                           <button className={`btn btn-sm ${remapsterRes === '1024' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setRemapsterRes('1024'); updateConfig('remapsterRes', '1024'); }}>1024</button>

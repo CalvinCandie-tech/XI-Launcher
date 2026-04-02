@@ -4,6 +4,54 @@ const fs = require('fs');
 const os = require('os');
 const https = require('https');
 const { execSync, spawn, exec } = require('child_process');
+const yauzl = require('yauzl');
+
+/**
+ * Extract a zip file using yauzl (streaming, handles large files, reports progress).
+ * @param {string} zipPath - Path to the zip file
+ * @param {string} destDir - Directory to extract into
+ * @param {function} onProgress - Called with (percent, filename) during extraction
+ * @returns {Promise<number>} Number of files extracted
+ */
+function extractZip(zipPath, destDir, onProgress) {
+  return new Promise((resolve, reject) => {
+    yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
+      if (err) return reject(err);
+
+      let extracted = 0;
+      const total = zipfile.entryCount;
+
+      zipfile.readEntry();
+      zipfile.on('entry', (entry) => {
+        const entryPath = path.join(destDir, entry.fileName);
+
+        if (/\/$/.test(entry.fileName)) {
+          // Directory entry
+          fs.mkdirSync(entryPath, { recursive: true });
+          extracted++;
+          if (onProgress) onProgress(Math.round((extracted / total) * 100), entry.fileName);
+          zipfile.readEntry();
+        } else {
+          // File entry — ensure parent dir exists
+          fs.mkdirSync(path.dirname(entryPath), { recursive: true });
+          zipfile.openReadStream(entry, (err, readStream) => {
+            if (err) return reject(err);
+            const writeStream = fs.createWriteStream(entryPath);
+            readStream.on('end', () => {
+              extracted++;
+              if (onProgress) onProgress(Math.round((extracted / total) * 100), entry.fileName);
+              zipfile.readEntry();
+            });
+            readStream.pipe(writeStream);
+          });
+        }
+      });
+
+      zipfile.on('end', () => resolve(extracted));
+      zipfile.on('error', reject);
+    });
+  });
+}
 
 // electron-store ESM workaround
 let Store;
@@ -658,7 +706,7 @@ function registerIPC() {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
       fs.mkdirSync(tmpExtract, { recursive: true });
-      execSync(`tar -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 300000 });
+      execSync(`tar --force-local -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 300000 });
 
       // GitHub ZIP has a top-level folder like "Ashita-v4beta-main/"
       const extracted = fs.readdirSync(tmpExtract);
@@ -1214,7 +1262,7 @@ function registerIPC() {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
       fs.mkdirSync(tmpExtract, { recursive: true });
-      execSync(`tar -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 120000 });
+      execSync(`tar --force-local -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 120000 });
 
       // Step 5: Copy extracted contents into Ashita directory
       copyRecursive(tmpExtract, ashitaPath);
@@ -1479,7 +1527,7 @@ function registerIPC() {
       }
       fs.mkdirSync(tmpExtract, { recursive: true });
       // Use tar — much faster than PowerShell Expand-Archive for large zips (e.g. AshenbubsHD 232K+ files)
-      execSync(`tar -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 600000 });
+      execSync(`tar --force-local -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 600000 });
 
       // GitHub ZIPs extract to a folder like "RepoName-main/" — find it
       const extracted = fs.readdirSync(tmpExtract);
@@ -1511,13 +1559,37 @@ function registerIPC() {
         innerDir = subPath;
       }
 
-      sendProgress('copy', 85, 'Copying files to DATs folder...');
+      sendProgress('copy', 85, 'Moving files to DATs folder...');
 
-      // Copy to DATs/[packName]
+      // Move to DATs/[packName] — avoid file-by-file copy which crashes on 232K+ files
       const destDir = path.join(datsRoot, packName);
-      if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+      if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true });
+      if (!fs.existsSync(datsRoot)) fs.mkdirSync(datsRoot, { recursive: true });
 
-      copyRecursive(innerDir, destDir);
+      let moved = false;
+      // Try instant rename first (works if same volume)
+      try {
+        fs.renameSync(innerDir, destDir);
+        moved = true;
+      } catch {}
+
+      if (!moved) {
+        // Fall back to robocopy (native Windows bulk move — handles cross-drive, much faster than Node)
+        try {
+          execSync(`robocopy "${innerDir}" "${destDir}" /E /MOVE /NFL /NDL /NJH /NJS /NS /NC /R:1 /W:0`, { timeout: 600000 });
+          moved = true;
+        } catch (e) {
+          // robocopy returns exit code 1 for success with files copied — only 8+ is a real error
+          if (e.status < 8) moved = true;
+        }
+      }
+
+      if (!moved) {
+        // Last resort: file-by-file copy
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+        copyRecursive(innerDir, destDir);
+      }
+
       const fileCount = countFiles(destDir);
 
       sendProgress('done', 100, `Installed — ${fileCount} files`);
@@ -1581,10 +1653,14 @@ function registerIPC() {
 
       // Find the dats asset matching the resolution (e.g. remapster-dats-pack-1-2-2048.zip)
       const resStr = resolution || '2048';
-      const asset = release.assets.find(a => a.name.includes('dats') && a.name.includes(resStr) && a.name.endsWith('.zip'));
+      let asset = release.assets.find(a => a.name.includes('dats') && a.name.includes(resStr) && a.name.endsWith('.zip'));
+      // Fallback: if no resolution-specific asset, grab the first .zip asset
+      if (!asset) {
+        asset = release.assets.find(a => a.name.endsWith('.zip'));
+      }
       if (!asset) {
         const available = release.assets.map(a => a.name).join(', ');
-        return { success: false, error: `No DAT asset found for resolution ${resStr}. Available: ${available}` };
+        return { success: false, error: `No downloadable asset found. Available: ${available}` };
       }
 
       sendProgress('download', 5, `Downloading ${asset.name} (${(asset.size / 1048576).toFixed(1)} MB)...`);
@@ -1631,7 +1707,9 @@ function registerIPC() {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
       fs.mkdirSync(tmpExtract, { recursive: true });
-      execSync(`tar -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 600000 });
+      await extractZip(tmpZip, tmpExtract, (pct, file) => {
+        sendProgress('extract', 75 + Math.round(pct * 0.15), `Extracting... ${pct}% — ${path.basename(file)}`);
+      });
 
       // Look for a 'dats' subfolder inside the extracted content — that's what XIPivot needs
       const extracted = fs.readdirSync(tmpExtract);
@@ -1646,12 +1724,32 @@ function registerIPC() {
         sourceDir = datsSubfolder;
       }
 
-      sendProgress('copy', 85, 'Copying files to DATs folder...');
+      sendProgress('copy', 85, 'Moving files to DATs folder...');
 
       const destDir = path.join(datsRoot, packName);
-      if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+      if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true });
+      if (!fs.existsSync(datsRoot)) fs.mkdirSync(datsRoot, { recursive: true });
 
-      copyRecursive(sourceDir, destDir);
+      let moved = false;
+      try {
+        fs.renameSync(sourceDir, destDir);
+        moved = true;
+      } catch {}
+
+      if (!moved) {
+        try {
+          execSync(`robocopy "${sourceDir}" "${destDir}" /E /MOVE /NFL /NDL /NJH /NJS /NS /NC /R:1 /W:0`, { timeout: 600000 });
+          moved = true;
+        } catch (e) {
+          if (e.status < 8) moved = true;
+        }
+      }
+
+      if (!moved) {
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+        copyRecursive(sourceDir, destDir);
+      }
+
       const fileCount = countFiles(destDir);
 
       sendProgress('done', 100, `Installed — ${fileCount} files`);
@@ -1769,7 +1867,7 @@ function registerIPC() {
       if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true });
       fs.mkdirSync(destDir, { recursive: true });
 
-      execSync(`tar -xf "${tmpZip.replace(/\\/g, '/')}" -C "${destDir.replace(/\\/g, '/')}"`, { timeout: 120000 });
+      execSync(`tar --force-local -xf "${tmpZip.replace(/\\/g, '/')}" -C "${destDir.replace(/\\/g, '/')}"`, { timeout: 120000 });
 
       sendProgress(90, 'Cleaning up...');
       try { fs.unlinkSync(tmpZip); } catch {}
@@ -2196,7 +2294,7 @@ function registerIPC() {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
       fs.mkdirSync(tmpExtract, { recursive: true });
-      execSync(`tar -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 120000 });
+      execSync(`tar --force-local -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 120000 });
 
       // GitHub ZIPs have a top-level folder like "RepoName-main/"
       const extracted = fs.readdirSync(tmpExtract);
@@ -2488,7 +2586,7 @@ function registerIPC() {
       fs.mkdirSync(tmpDir, { recursive: true });
 
       // Extract ZIP
-      execSync(`tar -xf "${zipPath.replace(/\\/g, '/')}" -C "${tmpDir.replace(/\\/g, '/')}"`, { timeout: 120000 });
+      execSync(`tar --force-local -xf "${zipPath.replace(/\\/g, '/')}" -C "${tmpDir.replace(/\\/g, '/')}"`, { timeout: 120000 });
 
       // Copy config dirs back
       const configBoot = path.join(tmpDir, 'config', 'boot');

@@ -1,6 +1,6 @@
 {
   "name": "xi-launcher",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "main": "electron/main.js",
   "homepage": "./",
   "scripts": {
@@ -13,7 +13,8 @@
     "electron-store": "^8.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1"
+    "react-scripts": "5.0.1",
+    "yauzl": "^3.3.0"
   },
   "devDependencies": {
     "@electron/packager": "^19.1.0",
