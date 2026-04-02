@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import './UpdateModal.css';
+import Modal from './Modal';
 
 const api = window.xiAPI;
 
@@ -25,7 +26,7 @@ function UpdateModal({ updates, ashitaPath, onClose }) {
     for (let i = 0; i < selected.length; i++) {
       const addon = selected[i];
       setProgress({ current: i + 1, total: selected.length, name: addon.name });
-      await api.installAddon(ashitaPath, addon.name, addon.repo, addon.subdir);
+      await api.installAddon(ashitaPath, addon.installAs || addon.name, addon.repo, addon.subdir, addon.useRelease, addon.releaseFolder, addon.isPlugin);
     }
 
     setUpdating(false);
@@ -33,7 +34,7 @@ function UpdateModal({ updates, ashitaPath, onClose }) {
   };
 
   return (
-    <div className="update-overlay">
+    <Modal onClose={updating ? undefined : onClose}>
       <div className="update-dialog">
         <div className="update-header">
           <h3>Addon Updates Available</h3>
@@ -79,7 +80,7 @@ function UpdateModal({ updates, ashitaPath, onClose }) {
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }
 

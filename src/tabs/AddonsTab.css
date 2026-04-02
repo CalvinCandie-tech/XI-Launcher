@@ -80,15 +80,34 @@
   border-color: var(--border-bright);
 }
 .addons-filter-pill.active {
-  border-color: var(--gold);
+  border-color: transparent;
   color: var(--gold);
-  background: linear-gradient(135deg, rgba(58, 184, 200, 0.06), rgba(200, 146, 42, 0.08));
+  background: var(--active-bg);
+  box-shadow: var(--active-glow);
 }
 
 .addons-filter-count {
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-dim);
+}
+
+/* Welcome banner */
+.addons-welcome {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, var(--gold-alpha), var(--teal-alpha));
+  border-color: var(--gold-dim);
+}
+.addons-welcome-icon {
+  font-size: 36px;
+  color: var(--gold);
+  line-height: 1;
+  flex-shrink: 0;
+}
+.addons-welcome-text {
+  flex: 1;
 }
 
 .addons-bundles {
@@ -118,7 +137,7 @@
 }
 
 .addon-card {
-  background: linear-gradient(135deg, rgba(58, 184, 200, 0.05), var(--bg-card-alpha) 30%, var(--bg-card-alpha) 70%, rgba(200, 146, 42, 0.05));
+  background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
@@ -146,8 +165,14 @@
   opacity: 1;
 }
 .addon-card.enabled {
-  border-image: linear-gradient(135deg, var(--teal-dim), var(--gold-dim)) 1;
-  background: linear-gradient(135deg, rgba(58, 184, 200, 0.03) 0%, rgba(200, 146, 42, 0.04) 50%, var(--bg-card-alpha) 100%);
+  border-color: transparent;
+  background: var(--active-bg);
+  box-shadow: var(--active-glow);
+  position: relative;
+}
+.addon-card.enabled::before {
+  opacity: 1;
+  background: linear-gradient(135deg, var(--teal), var(--gold));
 }
 
 .addon-card-header {
@@ -179,15 +204,15 @@
   letter-spacing: 0.05em;
 }
 .addon-category-tag.built-in {
-  background: rgba(58, 184, 200, 0.12);
+  background: var(--teal-alpha);
   color: var(--teal);
 }
 .addon-category-tag.community {
-  background: rgba(200, 146, 42, 0.12);
+  background: var(--gold-alpha);
   color: var(--gold);
 }
 .addon-installed-tag {
-  background: rgba(72, 184, 104, 0.12);
+  background: var(--green-alpha);
   color: var(--green);
 }
 
@@ -241,7 +266,7 @@
 .addon-progress-text {
   font-size: 13px;
   color: var(--text-dim);
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .addon-install-msg {
@@ -253,12 +278,381 @@
   overflow: hidden;
 }
 .addon-install-msg.success {
-  background: rgba(72, 184, 104, 0.1);
+  background: var(--green-alpha);
   color: var(--green);
-  border: 1px solid rgba(72, 184, 104, 0.2);
+  border: 1px solid var(--green-alpha);
 }
 .addon-install-msg.error {
-  background: rgba(200, 64, 64, 0.1);
+  background: var(--red-alpha);
   color: var(--red);
-  border: 1px solid rgba(200, 64, 64, 0.2);
+  border: 1px solid var(--red-alpha);
+}
+
+/* Custom bundle card */
+.addon-bundle-custom {
+  border-color: var(--teal-dim) !important;
+}
+
+.addon-bundle-create {
+  cursor: pointer;
+  border: 1px dashed var(--border) !important;
+  background: transparent !important;
+  transition: all 0.15s;
+  min-height: 140px;
+}
+.addon-bundle-create:hover {
+  border-color: var(--teal) !important;
+  background: var(--teal-alpha) !important;
+}
+
+.addon-bundle-create-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  flex: 1;
+}
+
+/* Bundle editor modal */
+.bundle-editor-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.bundle-editor {
+  width: 480px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px !important;
+}
+
+.bundle-editor-name {
+  width: 100%;
+  font-size: 14px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.bundle-editor-list {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.bundle-editor-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.bundle-editor-item:hover {
+  background: var(--bg-hover);
+}
+.bundle-editor-item.selected {
+  background: var(--teal-alpha);
+  color: var(--text-primary);
+}
+
+.bundle-editor-addon-name {
+  flex: 1;
+  font-family: var(--font-mono);
+}
+
+.bundle-editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Addon Help Modal */
+.addon-help-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.addon-help-modal {
+  width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px !important;
+}
+.addon-help-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.addon-help-list {
+  overflow-y: auto;
+  flex: 1;
+}
+.addon-help-item {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.addon-help-item:last-child {
+  border-bottom: none;
+}
+.addon-help-item-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.addon-help-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-bright);
+}
+.addon-help-commands {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.addon-help-cmd {
+  background: var(--bg-deepest);
+  color: var(--teal);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+.addon-help-usage {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.addon-install-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.addon-deps-note {
+  font-size: 11px;
+  color: var(--teal-dim);
+  margin-bottom: 4px;
+}
+
+.addons-recommendations {
+  margin-bottom: 8px;
+}
+.addons-rec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.addon-rec-card {
+  border-left: 2px solid var(--teal) !important;
+}
+
+/* btn-danger-outline: ghost variant for inline destructive actions */
+.btn-danger-outline {
+  color: var(--red);
+  background: transparent;
+  border: 1px solid var(--red-border);
+}
+.btn-danger-outline:hover:not(:disabled) {
+  background: var(--red-alpha);
+  border-color: var(--red);
+}
+
+/* Extracted inline styles */
+.addon-active-label {
+  color: var(--gold);
+  font-size: 12px;
+}
+
+.addon-no-profile-pill {
+  margin-left: 12px;
+}
+
+.addon-conflicts-panel {
+  background: var(--gold-alpha);
+  border-color: var(--gold-dim);
+}
+
+.addon-conflicts-title {
+  font-size: 13px;
+  color: var(--gold);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.addon-conflicts-item {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.addon-welcome-title {
+  color: var(--gold);
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+.addon-welcome-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.addon-bundle-title {
+  color: var(--gold);
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.addon-bundle-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.addon-bundle-addons-list {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.addon-bundle-btn {
+  width: 100%;
+}
+
+.addon-custom-bundle-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
+.addon-custom-bundle-title {
+  color: var(--teal);
+  font-size: 14px;
+}
+
+.addon-custom-bundle-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.addon-custom-bundle-action-btn {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.addon-custom-bundle-delete-btn {
+  color: var(--red);
+}
+
+.addon-bundle-create-icon {
+  font-size: 28px;
+  color: var(--teal);
+  line-height: 1;
+}
+
+.addon-bundle-create-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.addon-modal-title {
+  color: var(--gold);
+  margin-bottom: 12px;
+}
+
+.addon-category-tag-sm {
+  font-size: 10px;
+  padding: 1px 4px;
+}
+
+.addon-editor-count {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.addon-editor-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.addon-help-subtitle {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+
+.addon-help-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.addon-rec-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.addon-rec-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-bright);
+}
+
+.addon-rec-installed-pill {
+  font-size: 9px;
+}
+
+.addon-rec-reason {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.addon-rec-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.addon-rec-btn {
+  flex: 1;
+}
+
+.addon-card-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.addon-modal-title-flush {
+  margin: 0;
 }

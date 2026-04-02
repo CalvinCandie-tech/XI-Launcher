@@ -29,7 +29,7 @@
 .launchbar-time {
   font-size: 13px;
   color: var(--text-dim);
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .launchbar-right {

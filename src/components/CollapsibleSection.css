@@ -1,0 +1,19 @@
+.section-header.collapsible {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.section-header.collapsible:hover {
+  color: var(--gold-bright);
+}
+.collapse-chevron {
+  font-size: 16px;
+  color: var(--gold);
+  transition: transform 0.2s ease;
+  filter: drop-shadow(0 0 3px rgba(200, 146, 42, 0.4));
+}
+.collapse-chevron.open {
+  transform: rotate(180deg);
+}

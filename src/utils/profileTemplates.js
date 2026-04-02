@@ -11,7 +11,7 @@ gamemodule   = ffximain.dll
 script       = default.txt
 args         =`;
   }
-  const xiloaderExe = xiloaderPath ? xiloaderPath.replace(/\//g, '\\\\') + '\\\\xiloader.exe' : '.\\\\xiloader\\\\xiloader.exe';
+  const xiloaderExe = xiloaderPath ? xiloaderPath.replace(/\//g, '\\') + '\\xiloader.exe' : '.\\xiloader\\xiloader.exe';
   const args = ['--server', serverHost || '127.0.0.1'];
   if (serverPort) args.push('--port', serverPort);
   if (loginUser) args.push('--user', loginUser);
@@ -62,6 +62,7 @@ plugins.silent = 0
 [ashita.addons]
 
 [ashita.polplugins]
+pivot = 1
 
 [ashita.polplugins.args]
 
@@ -78,4 +79,7 @@ x            = -1
 y            = -1
 
 [ffxi.registry]
+0030 = 0
+0037 = 1920
+0038 = 1080
 `;

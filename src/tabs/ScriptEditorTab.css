@@ -1,0 +1,362 @@
+.script-editor-tab {
+  max-width: 100%;
+  padding-bottom: 80px;
+}
+
+.script-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--text-dim);
+}
+
+.script-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.script-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.script-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.script-select {
+  min-width: 160px;
+}
+
+.script-view-toggle {
+  display: flex;
+  gap: 2px;
+}
+
+.script-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+}
+
+.script-legend {
+  display: flex;
+  gap: 12px;
+}
+.script-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: capitalize;
+}
+.script-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Raw editor */
+.script-raw-panel {
+  padding: 0;
+}
+.script-raw-editor {
+  width: 100%;
+  min-height: 500px;
+  background: var(--bg-deepest);
+  color: var(--teal);
+  border: none;
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.7;
+  resize: vertical;
+  border-radius: 8px;
+  outline: none;
+}
+
+/* Visual editor */
+.script-visual {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.script-section {
+  overflow: hidden;
+}
+.script-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.script-section-title {
+  font-size: 14px;
+  color: var(--gold);
+}
+.script-section-count {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.script-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.script-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.script-line:hover {
+  background: var(--bg-hover);
+}
+.script-line:hover .script-line-del {
+  opacity: 1;
+}
+
+.script-line-num {
+  width: 28px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.script-line-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  min-width: 52px;
+  text-align: center;
+}
+
+.script-line-text {
+  font-size: 13px;
+  flex: 1;
+  white-space: pre;
+}
+
+.script-line-del {
+  opacity: 0;
+  background: none;
+  border: none;
+  color: var(--red);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+.script-line-del:hover {
+  background: rgba(200, 64, 64, 0.15);
+}
+
+/* Add command */
+.script-add-panel {
+  padding: 16px;
+}
+.script-add-row {
+  display: flex;
+  gap: 8px;
+}
+.script-add-input {
+  flex: 1;
+  font-size: 13px;
+}
+
+/* Hints & empty states */
+.script-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+.script-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+/* Keybind / Alias tables */
+.keybind-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.keybind-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+.keybind-row {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.keybind-row:hover {
+  background: var(--bg-hover);
+}
+.keybind-row:hover .keybind-col-del button {
+  opacity: 1;
+}
+
+.keybind-col-mods {
+  width: 140px;
+  flex-shrink: 0;
+  font-size: 12px;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.keybind-col-mods span {
+  background: rgba(200, 146, 42, 0.15);
+  color: var(--gold);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.keybind-col-key {
+  width: 100px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--teal);
+  font-weight: 600;
+}
+.keybind-col-cmd {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.keybind-col-del {
+  width: 32px;
+  flex-shrink: 0;
+  text-align: center;
+}
+.keybind-col-del button {
+  opacity: 0;
+  background: none;
+  border: none;
+  color: var(--red);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+.keybind-col-del button:hover {
+  background: rgba(200, 64, 64, 0.15);
+}
+
+/* Add keybind / alias form */
+.keybind-add {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.keybind-add-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.keybind-mod-toggles {
+  display: flex;
+  gap: 4px;
+}
+.keybind-mod-toggles button {
+  padding: 4px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-deepest);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+.keybind-mod-toggles button.active {
+  background: var(--active-bg);
+  border-color: transparent;
+  color: var(--gold);
+  box-shadow: var(--active-glow);
+  position: relative;
+}
+.keybind-mod-toggles button.active::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 5px;
+  padding: 2px;
+  background: linear-gradient(135deg, var(--teal), var(--gold));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.keybind-input-key {
+  width: 100px;
+}
+.keybind-input-cmd {
+  flex: 1;
+}
+
+/* Alias-specific */
+.alias-trigger-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.alias-slash {
+  color: var(--text-dim);
+  font-size: 13px;
+  padding-right: 2px;
+  user-select: none;
+}
+
+/* Sticky save bar */
+.script-sticky-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 24px;
+  background: linear-gradient(135deg, var(--gold-alpha-strong), var(--teal-alpha));
+  border-top: 1px solid var(--gold-dim);
+  backdrop-filter: blur(12px);
+  z-index: 100;
+  font-size: 13px;
+  color: var(--gold);
+}

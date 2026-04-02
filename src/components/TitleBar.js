@@ -10,11 +10,13 @@ function TitleBar() {
       <div className="titlebar-left">
         <img className="titlebar-crystal-img" src="./crystal.svg" alt="" />
         <span className="titlebar-title">XI LAUNCHER</span>
+        <span className="titlebar-version">V1.0 BETA</span>
       </div>
+      <div className="titlebar-center" />
       <div className="titlebar-controls">
-        <button className="tb-btn tb-minimize" onClick={() => api?.minimize()}>─</button>
-        <button className="tb-btn tb-maximize" onClick={() => api?.maximize()}>□</button>
-        <button className="tb-btn tb-close" onClick={() => api?.close()}>✕</button>
+        <button className="tb-btn tb-minimize" onClick={() => api?.minimize()} aria-label="Minimize window">─</button>
+        <button className="tb-btn tb-maximize" onClick={() => api?.maximize()} aria-label="Maximize window">□</button>
+        <button className="tb-btn tb-close" onClick={() => api?.close()} aria-label="Close window">✕</button>
       </div>
     </div>
   );

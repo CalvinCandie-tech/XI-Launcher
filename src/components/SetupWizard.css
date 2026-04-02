@@ -32,7 +32,7 @@
 }
 
 .wizard-header h2 {
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: 22px;
   background: linear-gradient(135deg, var(--teal), var(--gold));
   -webkit-background-clip: text;
@@ -77,7 +77,7 @@
 }
 
 .wizard-step-title {
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: 16px;
   color: var(--gold);
   margin-bottom: 8px;
@@ -141,7 +141,7 @@
 }
 
 .wizard-success h3 {
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: 18px;
   color: var(--gold);
   margin-bottom: 8px;
@@ -150,4 +150,115 @@
 .wizard-success p {
   font-size: 14px;
   color: var(--text-secondary);
+}
+
+/* Requirements list on welcome step */
+.wizard-requirements-list {
+  font-size: 14px;
+  color: var(--text-secondary);
+  padding-left: 20px;
+  line-height: 2;
+}
+
+/* Small status pills (Found / Not Found) */
+.wizard-status-pill {
+  font-size: 10px;
+}
+
+.wizard-status-pill-block {
+  margin-top: 4px;
+  display: inline-block;
+}
+
+/* Action buttons with top margin (Install / Download) */
+.wizard-action-btn {
+  margin-top: 8px;
+}
+
+/* Progress bar shared styles */
+.wizard-progress-wrapper {
+  margin-top: 8px;
+}
+
+.wizard-progress-track {
+  height: 5px;
+  background: var(--bg-deepest);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.wizard-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--teal), var(--gold));
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.wizard-progress-detail {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+
+/* FFXI install hint text */
+.wizard-install-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  line-height: 1.6;
+}
+
+/* Clickable link styling */
+.wizard-link {
+  color: var(--teal);
+  cursor: pointer;
+}
+
+/* Server type toggle button group */
+.wizard-toggle-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* xiloader status message */
+.wizard-status-msg {
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.wizard-status-msg-success {
+  color: var(--green);
+}
+
+.wizard-status-msg-error {
+  color: var(--red);
+}
+
+/* Finish step summary panel */
+.wizard-summary-panel {
+  margin-top: 16px;
+  text-align: left;
+  padding: 12px 16px;
+  background: var(--bg-deepest);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.wizard-summary-label {
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.wizard-summary-ok {
+  color: var(--green);
+}
+
+.wizard-summary-info {
+  color: var(--teal);
+}
+
+.wizard-summary-warn {
+  color: var(--text-dim);
 }

@@ -7,9 +7,13 @@ import ProfileTab from './tabs/ProfileTab';
 import AddonsTab from './tabs/AddonsTab';
 import SettingsTab from './tabs/SettingsTab';
 import XIPivotTab from './tabs/XIPivotTab';
+import DgVoodooTab from './tabs/DgVoodooTab';
+import PluginsTab from './tabs/PluginsTab';
+// ScriptEditorTab is now embedded in ProfileTab
 import SetupWizard from './components/SetupWizard';
 import UpdateModal from './components/UpdateModal';
 import ErrorBoundary from './components/ErrorBoundary';
+import Modal from './components/Modal';
 import { ADDON_CATALOGUE } from './tabs/AddonsTab';
 
 const api = window.xiAPI;
@@ -22,12 +26,16 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [showWizard, setShowWizard] = useState(false);
   const [addonUpdates, setAddonUpdates] = useState([]);
+  const [launchWarning, setLaunchWarning] = useState(null);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicTracks, setMusicTracks] = useState([]);
   const [musicIndex, setMusicIndex] = useState(0);
-  const [musicVolume, setMusicVolume] = useState(0.1);
+  const [musicVolume, setMusicVolume] = useState(0.05);
   const [musicShuffle, setMusicShuffle] = useState(false);
   const [musicLoop, setMusicLoop] = useState('none'); // 'none' | 'all' | 'one'
+  const [profiles, setProfiles] = useState([]);
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [dirtyConfirm, setDirtyConfirm] = useState(null); // { message, onConfirm }
   const audioRef = useRef(null);
   const shuffleOrderRef = useRef([]);
 
@@ -134,6 +142,12 @@ function App() {
     });
   }, []);
 
+  // Load profiles list
+  useEffect(() => {
+    if (!api || !config?.ashitaPath) return;
+    api.listProfiles(config.ashitaPath).then(setProfiles).catch(() => {});
+  }, [config?.ashitaPath, config?.activeProfile]);
+
   // Check for updates on startup
   useEffect(() => {
     if (!api?.checkForUpdates) return;
@@ -174,8 +188,9 @@ function App() {
   }, [musicTracks, musicShuffle]);
 
   const getTrackIndex = useCallback((idx) => {
-    if (shuffleOrderRef.current.length === 0) return 0;
-    return shuffleOrderRef.current[idx % shuffleOrderRef.current.length];
+    const len = shuffleOrderRef.current.length;
+    if (len === 0) return 0;
+    return shuffleOrderRef.current[((idx % len) + len) % len];
   }, []);
 
   const currentTrackName = musicTracks.length > 0
@@ -222,6 +237,7 @@ function App() {
       const dataUrl = await api.getMusicPath(track);
       if (dataUrl) {
         audioRef.current.src = dataUrl;
+        audioRef.current.volume = musicVolume;
         audioRef.current.play().catch(() => {});
         setMusicPlaying(true);
       }
@@ -251,11 +267,15 @@ function App() {
     setMusicLoop(prev => prev === 'none' ? 'all' : prev === 'all' ? 'one' : 'none');
   }, []);
 
+  // Keep a ref to toggleMusic for auto-play so we don't capture a stale closure
+  const toggleMusicRef = useRef(toggleMusic);
+  useEffect(() => { toggleMusicRef.current = toggleMusic; }, [toggleMusic]);
+
   // Auto-play music on startup once tracks are loaded
   useEffect(() => {
     if (autoPlayedRef.current || musicTracks.length === 0 || musicPlaying) return;
     autoPlayedRef.current = true;
-    toggleMusic();
+    toggleMusicRef.current();
   // eslint-disable-next-line
   }, [musicTracks]);
 
@@ -324,23 +344,48 @@ function App() {
     setConfig(prev => ({ ...prev, ...updates }));
   }, []);
 
-  const updateConfig = useCallback((key, value) => {
-    setConfig(prev => {
-      if (!prev) return prev;
-      const next = { ...prev, [key]: value };
-      // When activating a profile, save current then load new
-      if (key === 'activeProfile' && prev.activeProfile && prev.activeProfile !== value) {
-        saveCurrentProfileSettings(prev);
-        loadProfileSettings(value, next);
-      }
-      // Auto-save per-profile keys when they change
-      if (PROFILE_KEYS.includes(key) && next.activeProfile) {
-        saveCurrentProfileSettings(next);
-      }
-      return next;
+  const configRef = useRef(config);
+  useEffect(() => { configRef.current = config; }, [config]);
+
+  const doUpdateConfig = useCallback((key, value) => {
+    const prev = configRef.current;
+    setConfig(prevState => {
+      if (!prevState) return prevState;
+      return { ...prevState, [key]: value };
     });
+    if (prev) {
+      if (key === 'activeProfile' && prev.activeProfile && prev.activeProfile !== value) {
+        saveCurrentProfileSettings(prev).then(() =>
+          loadProfileSettings(value, { ...prev, [key]: value })
+        );
+      } else if (PROFILE_KEYS.includes(key) && prev.activeProfile) {
+        saveCurrentProfileSettings({ ...prev, [key]: value });
+      }
+    }
     if (api) api.storeSet(key, value);
   }, [saveCurrentProfileSettings, loadProfileSettings]);
+
+  const updateConfig = useCallback((key, value) => {
+    if (key === 'activeProfile' && settingsDirty) {
+      setDirtyConfirm({
+        message: 'You have unsaved settings changes. Switch profile without applying?',
+        onConfirm: () => { setSettingsDirty(false); setDirtyConfirm(null); doUpdateConfig(key, value); }
+      });
+      return;
+    }
+    doUpdateConfig(key, value);
+  }, [settingsDirty, doUpdateConfig]);
+
+  const guardedSetActiveTab = useCallback((tab) => {
+    if (settingsDirty && activeTab === 'settings' && tab !== 'settings') {
+      setDirtyConfirm({
+        message: 'You have unsaved settings changes. Leave without applying?',
+        onConfirm: () => { setSettingsDirty(false); setDirtyConfirm(null); setActiveTab(tab); }
+      });
+      return;
+    }
+    setActiveTab(tab);
+  }, [settingsDirty, activeTab]);
 
   const fadeOutMusic = useCallback(() => {
     if (!audioRef.current || audioRef.current.paused) return;
@@ -355,54 +400,13 @@ function App() {
       if (step >= steps) {
         clearInterval(fade);
         audio.pause();
-        audio.volume = startVol;
+        audio.volume = 0;
         setMusicPlaying(false);
       }
     }, interval);
   }, []);
 
-  const fadeInMusic = useCallback(async () => {
-    if (!audioRef.current || musicTracks.length === 0) return;
-    const audio = audioRef.current;
-    const targetVol = musicVolume;
-    audio.volume = 0;
-    // Resume from where we left off, or start current track
-    if (audio.src) {
-      audio.play().catch(() => {});
-    } else {
-      const trackIdx = getTrackIndex(musicIndex);
-      const track = musicTracks[trackIdx];
-      if (!track) return;
-      const dataUrl = await api.getMusicPath(track);
-      if (dataUrl) {
-        audio.src = dataUrl;
-        audio.play().catch(() => {});
-      }
-    }
-    setMusicPlaying(true);
-    const steps = 60;
-    const interval = 120; // ~7s fade in
-    let step = 0;
-    const fade = setInterval(() => {
-      step++;
-      audio.volume = Math.min(targetVol, targetVol * (step / steps));
-      if (step >= steps) {
-        clearInterval(fade);
-        audio.volume = targetVol;
-      }
-    }, interval);
-  }, [musicVolume, musicTracks, musicIndex, getTrackIndex]);
-
-  // Fade music back in when game exits
-  useEffect(() => {
-    if (!api?.onGameExited) return;
-    return api.onGameExited(() => {
-      fadeInMusic();
-    });
-  }, [fadeInMusic]);
-
-  const handleLaunch = useCallback(async (useXiloader) => {
-    if (!api || !config) return;
+  const doLaunch = useCallback(async (useXiloader) => {
     fadeOutMusic();
     setIsLaunching(true);
     setLaunchLog('');
@@ -423,6 +427,10 @@ function App() {
       } else {
         setLaunchLog(result.message);
         updateConfig('lastLaunched', new Date().toISOString());
+        // Append to launch history
+        const history = config.launchHistory || [];
+        const entry = { profile: config.activeProfile, time: new Date().toISOString(), method: useXiloader ? 'xiloader' : 'ashita' };
+        updateConfig('launchHistory', [entry, ...history].slice(0, 20));
       }
     } catch (e) {
       setLaunchLog(`Error: ${e.message}`);
@@ -430,6 +438,49 @@ function App() {
       setTimeout(() => setIsLaunching(false), 2000);
     }
   }, [config, updateConfig, fadeOutMusic]);
+
+  const handleLaunch = useCallback(async (useXiloader) => {
+    if (!api || !config) return;
+    // Pre-launch check: verify enabled addons/plugins exist on disk
+    try {
+      const profile = await api.readProfile(config.ashitaPath, config.activeProfile);
+      if (profile?.exists) {
+        let scriptName = 'default.txt';
+        for (const line of profile.content.split('\n')) {
+          const m = line.match(/^\s*script\s*=\s*(.+)/i);
+          if (m && m[1].trim()) { scriptName = m[1].trim(); break; }
+        }
+        const scriptResult = await api.readFile(config.ashitaPath + '\\scripts\\' + scriptName);
+        if (scriptResult?.content) {
+          const missing = [];
+          const checks = [];
+          for (const line of scriptResult.content.split('\n')) {
+            const pluginMatch = line.trim().match(/^\/load\s+(\S+)/i);
+            if (pluginMatch) {
+              const name = pluginMatch[1];
+              checks.push(api.pathExists(config.ashitaPath + '\\plugins\\' + name + '.dll').then(exists => { if (!exists) missing.push({ name, type: 'plugin' }); }));
+            }
+            const addonMatch = line.trim().match(/^\/addon\s+load\s+(\S+)/i);
+            if (addonMatch) {
+              const name = addonMatch[1];
+              const isBuiltIn = ADDON_CATALOGUE.some(a => (a.installAs || a.name).toLowerCase() === name.toLowerCase() && !a.repo);
+              if (!isBuiltIn) {
+                checks.push(api.pathExists(config.ashitaPath + '\\addons\\' + name).then(exists => { if (!exists) missing.push({ name, type: 'addon' }); }));
+              }
+            }
+          }
+          await Promise.all(checks);
+          if (missing.length > 0) {
+            setLaunchWarning({ missing, useXiloader });
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Pre-launch check failed:', e);
+    }
+    doLaunch(useXiloader);
+  }, [config, doLaunch]);
 
   if (!api) {
     return (
@@ -448,11 +499,14 @@ function App() {
   const renderTab = () => {
     const tabProps = { config, updateConfig };
     switch (activeTab) {
-      case 'home': return <HomeTab {...tabProps} onNavigate={setActiveTab} onLaunch={handleLaunch} isLaunching={isLaunching} launchLog={launchLog} updateInfo={updateInfo} onShowWizard={() => setShowWizard(true)} />;
+      case 'home': return <HomeTab {...tabProps} onNavigate={guardedSetActiveTab} onLaunch={handleLaunch} isLaunching={isLaunching} launchLog={launchLog} updateInfo={updateInfo} onShowWizard={() => setShowWizard(true)} />;
       case 'profiles': return <ProfileTab {...tabProps} />;
       case 'addons': return <AddonsTab {...tabProps} />;
-      case 'settings': return <SettingsTab {...tabProps} config={config} onSettingsSaved={() => saveCurrentProfileSettings(config)} />;
+      case 'plugins': return <PluginsTab {...tabProps} />;
+      // Script editor is now embedded in ProfileTab
+      case 'settings': return <SettingsTab {...tabProps} config={config} onSettingsSaved={() => saveCurrentProfileSettings(config)} onDirtyChange={setSettingsDirty} />;
       case 'xipivot': return <XIPivotTab {...tabProps} onSettingsSaved={() => saveCurrentProfileSettings(config)} />;
+      case 'dgvoodoo': return <DgVoodooTab {...tabProps} />;
       default: return null;
     }
   };
@@ -483,10 +537,148 @@ function App() {
           onClose={() => setAddonUpdates([])}
         />
       )}
+      {launchWarning && (
+        <Modal onClose={() => setLaunchWarning(null)} ariaLabel="Missing addons and plugins">
+          <div className="launch-warning-modal panel">
+            <h3 className="cinzel modal-title">Missing Addons / Plugins</h3>
+            <p className="modal-desc">
+              The following are enabled in your script but not found on disk. They will cause errors at startup.
+              Resolve each item or launch anyway.
+            </p>
+            <div className="launch-warning-list">
+              {launchWarning.missing.map(m => {
+                const catalogueEntry = ADDON_CATALOGUE.find(a =>
+                  (a.installAs || a.name).toLowerCase() === m.name.toLowerCase() ||
+                  a.name.toLowerCase() === m.name.toLowerCase()
+                );
+                const canInstall = catalogueEntry && catalogueEntry.repo;
+                return (
+                  <div key={m.name} className="launch-warning-item">
+                    <div className="launch-warning-item-info">
+                      <span className="mono text-bright">{m.name}</span>
+                      <span className={`pill pill-xs ${m.type === 'plugin' ? 'pill-teal' : 'pill-gold'}`}>{m.type}</span>
+                    </div>
+                    <div className="launch-warning-item-actions">
+                      {m.status === 'installing' && (
+                        <span className="launch-status launch-status-teal">Installing...</span>
+                      )}
+                      {m.status === 'installed' && (
+                        <span className="launch-status launch-status-green">Installed</span>
+                      )}
+                      {m.status === 'removed' && (
+                        <span className="launch-status launch-status-dim">Removed from script</span>
+                      )}
+                      {m.status === 'error' && (
+                        <span className="launch-status launch-status-red">Failed</span>
+                      )}
+                      {!m.status && (
+                        <>
+                          {!canInstall && catalogueEntry && !catalogueEntry.repo && (
+                            <span className="launch-status launch-status-dim" title="Built-in Ashita addon — reinstall or update Ashita to restore it">Built-in (reinstall Ashita)</span>
+                          )}
+                          {canInstall && (
+                            <button className="btn btn-ghost btn-xs" onClick={async () => {
+                              setLaunchWarning(prev => ({
+                                ...prev,
+                                missing: prev.missing.map(x => x.name === m.name ? { ...x, status: 'installing' } : x)
+                              }));
+                              try {
+                                const result = await api.installAddon(
+                                  config.ashitaPath,
+                                  catalogueEntry.installAs || catalogueEntry.name,
+                                  catalogueEntry.repo,
+                                  catalogueEntry.subdir,
+                                  catalogueEntry.useRelease,
+                                  catalogueEntry.releaseFolder,
+                                  catalogueEntry.isPlugin
+                                );
+                                setLaunchWarning(prev => ({
+                                  ...prev,
+                                  missing: prev.missing.map(x => x.name === m.name ? { ...x, status: result.success ? 'installed' : 'error' } : x)
+                                }));
+                              } catch {
+                                setLaunchWarning(prev => ({
+                                  ...prev,
+                                  missing: prev.missing.map(x => x.name === m.name ? { ...x, status: 'error' } : x)
+                                }));
+                              }
+                            }}>
+                              Install
+                            </button>
+                          )}
+                          <button className="btn btn-ghost btn-xs" onClick={async () => {
+                            try {
+                              const profile = await api.readProfile(config.ashitaPath, config.activeProfile);
+                              if (!profile?.exists) return;
+                              let scriptName = 'default.txt';
+                              for (const line of profile.content.split('\n')) {
+                                const match = line.match(/^\s*script\s*=\s*(.+)/i);
+                                if (match && match[1].trim()) { scriptName = match[1].trim(); break; }
+                              }
+                              const scriptPath = config.ashitaPath + '\\scripts\\' + scriptName;
+                              const scriptResult = await api.readFile(scriptPath);
+                              if (scriptResult?.content) {
+                                const lines = scriptResult.content.split('\n');
+                                const filtered = lines.filter(l => {
+                                  const trimmed = l.trim().toLowerCase();
+                                  if (m.type === 'addon') return trimmed !== '/addon load ' + m.name.toLowerCase();
+                                  return trimmed !== '/load ' + m.name.toLowerCase();
+                                });
+                                await api.writeFile(scriptPath, filtered.join('\n'));
+                              }
+                              setLaunchWarning(prev => ({
+                                ...prev,
+                                missing: prev.missing.map(x => x.name === m.name ? { ...x, status: 'removed' } : x)
+                              }));
+                            } catch {
+                              setLaunchWarning(prev => ({
+                                ...prev,
+                                missing: prev.missing.map(x => x.name === m.name ? { ...x, status: 'error' } : x)
+                              }));
+                            }
+                          }}>
+                            Remove from Script
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setLaunchWarning(null)}>Cancel</button>
+              {launchWarning.missing.every(m => m.status === 'installed' || m.status === 'removed') ? (
+                <button className="btn btn-primary" onClick={() => { const xi = launchWarning.useXiloader; setLaunchWarning(null); doLaunch(xi); }}>
+                  Launch
+                </button>
+              ) : (
+                <button className="btn btn-primary" onClick={() => { const xi = launchWarning.useXiloader; setLaunchWarning(null); doLaunch(xi); }}>
+                  Launch Anyway
+                </button>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+      {dirtyConfirm && (
+        <Modal onClose={() => setDirtyConfirm(null)} ariaLabel="Unsaved changes">
+          <div className="launch-warning-modal panel">
+            <h3 className="cinzel modal-title">Unsaved Changes</h3>
+            <p className="modal-desc">
+              {dirtyConfirm.message}
+            </p>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setDirtyConfirm(null)}>Stay</button>
+              <button className="btn btn-primary" onClick={dirtyConfirm.onConfirm}>Leave</button>
+            </div>
+          </div>
+        </Modal>
+      )}
       <div className="app-body">
         <Sidebar
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={guardedSetActiveTab}
           onToggleMusic={toggleMusic}
           musicPlaying={musicPlaying}
           musicVolume={musicVolume}
@@ -498,7 +690,7 @@ function App() {
           musicLoop={musicLoop}
           onToggleLoop={toggleLoop}
         />
-        <main className="app-content">
+        <main className="app-content" key={activeTab}>
           <ErrorBoundary>
             {renderTab()}
           </ErrorBoundary>

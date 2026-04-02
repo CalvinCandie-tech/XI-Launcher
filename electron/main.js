@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, safeStorage, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -54,16 +54,19 @@ function validateRegValue(value) {
   return num;
 }
 function escapePSString(str) {
-  return String(str).replace(/'/g, "''");
+  return String(str).replace(/'/g, "''").replace(/`/g, '``').replace(/\$/g, '`$').replace(/"/g, '`"');
 }
 function isAllowedPath(filePath) {
   const resolved = path.resolve(filePath);
+  const ffxiPath = store?.get('ffxiPath');
   const allowed = [
     store?.get('ashitaPath'),
-    store?.get('ffxiPath'),
+    ffxiPath,
     store?.get('xiloaderPath'),
     runtimeDir,
-    os.tmpdir()
+    os.tmpdir(),
+    // Allow sibling dirs of FFXI (e.g. PlayOnlineViewer for pol.exe)
+    ffxiPath ? path.resolve(ffxiPath, '..') : null
   ].filter(Boolean).map(p => path.resolve(p));
   return allowed.some(root => resolved.startsWith(root + path.sep) || resolved === root);
 }
@@ -93,6 +96,24 @@ function countFiles(dir) {
 }
 
 let mainWindow;
+let tray = null;
+let minimizeToTray = false;
+
+function createTray() {
+  const iconPath = isDev
+    ? path.join(__dirname, '..', 'public', 'favicon.ico')
+    : path.join(__dirname, '..', 'build', 'favicon.ico');
+  const icon = fs.existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
+  tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
+  tray.setToolTip('XI Launcher');
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'Show', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
+    { type: 'separator' },
+    { label: 'Quit', click: () => { minimizeToTray = false; app.quit(); } }
+  ]);
+  tray.setContextMenu(contextMenu);
+  tray.on('double-click', () => { mainWindow?.show(); mainWindow?.focus(); });
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -114,6 +135,13 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, '..', 'build', 'index.html'));
   }
+
+  mainWindow.on('close', (e) => {
+    if (minimizeToTray && tray) {
+      e.preventDefault();
+      mainWindow.hide();
+    }
+  });
 }
 
 async function deployBundledXiloader() {
@@ -172,6 +200,8 @@ app.whenReady().then(async () => {
 
   await deployBundledXiloader();
   createWindow();
+  createTray();
+  minimizeToTray = store.get('minimizeToTray') || false;
   registerIPC();
 });
 
@@ -185,6 +215,13 @@ function registerIPC() {
     else mainWindow?.maximize();
   });
   ipcMain.on('window-close', () => mainWindow?.close());
+
+  ipcMain.handle('set-minimize-to-tray', (_, enabled) => {
+    minimizeToTray = !!enabled;
+    store.set('minimizeToTray', minimizeToTray);
+    return minimizeToTray;
+  });
+  ipcMain.handle('get-minimize-to-tray', () => minimizeToTray);
 
   // Store (with password encryption)
   ipcMain.handle('store-get', (_, key) => {
@@ -244,6 +281,7 @@ function registerIPC() {
 
   ipcMain.handle('read-dir', async (_, dirPath) => {
     try {
+      if (!isAllowedPath(dirPath)) return { exists: false, files: [] };
       if (!fs.existsSync(dirPath)) return { exists: false, files: [] };
       const entries = fs.readdirSync(dirPath, { withFileTypes: true });
       return {
@@ -280,7 +318,10 @@ function registerIPC() {
     }
   });
 
-  ipcMain.handle('path-exists', async (_, p) => fs.existsSync(p));
+  ipcMain.handle('path-exists', async (_, p) => {
+    if (!isAllowedPath(p)) return false;
+    return fs.existsSync(p);
+  });
 
   ipcMain.handle('open-folder', async (_, p) => {
     try { await shell.openPath(p); return true; } catch { return false; }
@@ -346,7 +387,9 @@ function registerIPC() {
   });
 
   ipcMain.handle('get-music-path', async (_, filename) => {
-    const filePath = path.join(musicDir, filename);
+    const filePath = path.resolve(musicDir, filename);
+    // Validate that the resolved path stays within the music directory
+    if (!filePath.startsWith(musicDir + path.sep) && filePath !== musicDir) return null;
     if (!fs.existsSync(filePath)) return null;
     const ext = path.extname(filename).toLowerCase().slice(1);
     const mimeMap = { mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', flac: 'audio/flac', m4a: 'audio/mp4', aac: 'audio/aac', wma: 'audio/x-ms-wma' };
@@ -414,7 +457,6 @@ function registerIPC() {
   // Backup registry before writing — stores previous values for undo
   ipcMain.handle('backup-registry', async () => {
     try {
-      const current = await ipcMain.listeners('read-ffxi-registry'); // reuse existing handler
       // Read current values directly
       const regPaths = [
         'HKLM\\SOFTWARE\\PlayOnlineUS\\SquareEnix\\FinalFantasyXI',
@@ -610,7 +652,8 @@ function registerIPC() {
       if (fs.existsSync(tmpExtract)) {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
-      execSync(`powershell -Command "Expand-Archive -Path '${tmpZip}' -DestinationPath '${tmpExtract}' -Force"`, { timeout: 120000 });
+      fs.mkdirSync(tmpExtract, { recursive: true });
+      execSync(`tar -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 300000 });
 
       // GitHub ZIP has a top-level folder like "Ashita-v4beta-main/"
       const extracted = fs.readdirSync(tmpExtract);
@@ -644,7 +687,7 @@ function registerIPC() {
       if (msg.includes('EACCES') || msg.includes('EPERM')) {
         return { success: false, error: `Permission denied writing to ${destPath}. Try running XI Launcher as Administrator or choose a different install location.` };
       }
-      if (msg.includes('Expand-Archive')) {
+      if (msg.includes('Expand-Archive') || msg.includes('tar')) {
         return { success: false, error: 'Failed to extract the download. The ZIP file may be corrupted — try again.' };
       }
       return { success: false, error: `Install failed: ${msg}` };
@@ -652,13 +695,22 @@ function registerIPC() {
   });
 
   // Watch for game process to exit, then notify renderer
+  let gameExitPoll = null;
+  let gameExitTimeout = null;
   const watchForGameExit = (processName) => {
+    // Clear any previous watcher
+    if (gameExitPoll) clearInterval(gameExitPoll);
+    if (gameExitTimeout) clearTimeout(gameExitTimeout);
     // Wait a few seconds for the process to start
-    setTimeout(() => {
-      const poll = setInterval(() => {
+    gameExitTimeout = setTimeout(() => {
+      let pollCount = 0;
+      gameExitPoll = setInterval(() => {
+        pollCount++;
+        if (pollCount > 720) { clearInterval(gameExitPoll); gameExitPoll = null; return; } // max 1 hour
         exec(`tasklist /FI "IMAGENAME eq ${processName}" /NH`, (err, stdout) => {
           if (err || !stdout.toLowerCase().includes(processName.toLowerCase())) {
-            clearInterval(poll);
+            clearInterval(gameExitPoll);
+            gameExitPoll = null;
             try { mainWindow?.webContents?.send('game-exited'); } catch {}
           }
         });
@@ -866,6 +918,23 @@ function registerIPC() {
   });
 
   // Addons
+  ipcMain.handle('get-plugins', async (_, ashitaPath) => {
+    const pluginsDir = path.join(ashitaPath, 'plugins');
+    try {
+      if (!fs.existsSync(pluginsDir)) return { plugins: [] };
+      const entries = fs.readdirSync(pluginsDir, { withFileTypes: true });
+      const plugins = entries
+        .filter(e => e.isFile() && e.name.endsWith('.dll'))
+        .map(e => ({
+          name: e.name.replace(/\.dll$/i, ''),
+          size: fs.statSync(path.join(pluginsDir, e.name)).size
+        }));
+      return { plugins };
+    } catch {
+      return { plugins: [] };
+    }
+  });
+
   ipcMain.handle('get-addons', async (_, ashitaPath) => {
     const addonsDir = path.join(ashitaPath, 'addons');
     try {
@@ -899,8 +968,17 @@ function registerIPC() {
     }
   });
 
+  const sanitizeProfileName = (name) => {
+    if (!name || typeof name !== 'string') return null;
+    // Block path traversal and unsafe characters
+    if (/[/\\:*?"<>|]|\.\./.test(name)) return null;
+    return name.trim();
+  };
+
   ipcMain.handle('read-profile', async (_, ashitaPath, name) => {
-    const filePath = path.join(ashitaPath, 'config', 'boot', `${name}.ini`);
+    const safeName = sanitizeProfileName(name);
+    if (!safeName) return { exists: false, content: '' };
+    const filePath = path.join(ashitaPath, 'config', 'boot', `${safeName}.ini`);
     try {
       if (!fs.existsSync(filePath)) return { exists: false, content: '' };
       return { exists: true, content: fs.readFileSync(filePath, 'utf-8') };
@@ -910,7 +988,9 @@ function registerIPC() {
   });
 
   ipcMain.handle('save-profile', async (_, ashitaPath, name, content) => {
-    const filePath = path.join(ashitaPath, 'config', 'boot', `${name}.ini`);
+    const safeName = sanitizeProfileName(name);
+    if (!safeName) return { success: false, error: 'Invalid profile name' };
+    const filePath = path.join(ashitaPath, 'config', 'boot', `${safeName}.ini`);
     try {
       const dir = path.dirname(filePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -1120,12 +1200,13 @@ function registerIPC() {
         download(asset.browser_download_url);
       });
 
-      // Step 4: Extract using PowerShell
+      // Step 4: Extract
       const tmpExtract = path.join(os.tmpdir(), 'xipivot-extract');
       if (fs.existsSync(tmpExtract)) {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
-      execSync(`powershell -Command "Expand-Archive -Path '${tmpZip}' -DestinationPath '${tmpExtract}' -Force"`, { timeout: 30000 });
+      fs.mkdirSync(tmpExtract, { recursive: true });
+      execSync(`tar -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 120000 });
 
       // Step 5: Copy extracted contents into Ashita directory
       copyRecursive(tmpExtract, ashitaPath);
@@ -1358,15 +1439,17 @@ function registerIPC() {
               return reject(new Error(`Download failed with status ${res.statusCode}`));
             }
             const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
+            // GitHub archive zips often lack content-length; use repo size (KB) as estimate
+            const estimatedTotal = totalBytes > 0 ? totalBytes : (repoInfo.size ? repoInfo.size * 1024 : 0);
             let receivedBytes = 0;
             const file = fs.createWriteStream(tmpZip);
             res.on('data', (chunk) => {
               receivedBytes += chunk.length;
               file.write(chunk);
               const mb = (receivedBytes / 1048576).toFixed(1);
-              if (totalBytes > 0) {
-                const pct = Math.round((receivedBytes / totalBytes) * 70);
-                const totalMb = (totalBytes / 1048576).toFixed(1);
+              if (estimatedTotal > 0) {
+                const pct = Math.min(70, Math.round((receivedBytes / estimatedTotal) * 70));
+                const totalMb = (estimatedTotal / 1048576).toFixed(1);
                 sendProgress('download', pct, `Downloading... ${mb} MB / ${totalMb} MB`);
               } else {
                 sendProgress('download', Math.min(60, Math.round(receivedBytes / 50000)), `Downloading... ${mb} MB`);
@@ -1386,7 +1469,9 @@ function registerIPC() {
       if (fs.existsSync(tmpExtract)) {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
-      execSync(`powershell -Command "Expand-Archive -Path '${tmpZip}' -DestinationPath '${tmpExtract}' -Force"`, { timeout: 120000 });
+      fs.mkdirSync(tmpExtract, { recursive: true });
+      // Use tar — much faster than PowerShell Expand-Archive for large zips (e.g. AshenbubsHD 232K+ files)
+      execSync(`tar -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 600000 });
 
       // GitHub ZIPs extract to a folder like "RepoName-main/" — find it
       const extracted = fs.readdirSync(tmpExtract);
@@ -1537,7 +1622,8 @@ function registerIPC() {
       if (fs.existsSync(tmpExtract)) {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
-      execSync(`powershell -Command "Expand-Archive -Path '${tmpZip}' -DestinationPath '${tmpExtract}' -Force"`, { timeout: 300000 });
+      fs.mkdirSync(tmpExtract, { recursive: true });
+      execSync(`tar -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 600000 });
 
       // Look for a 'dats' subfolder inside the extracted content — that's what XIPivot needs
       const extracted = fs.readdirSync(tmpExtract);
@@ -1574,11 +1660,407 @@ function registerIPC() {
     }
   });
 
+  // ── dgVoodoo2 Setup ──
+
+  // Whitelist for dgVoodoo config values
+  const DGV_ALLOWED = {
+    outputAPI: ['d3d11', 'd3d12'],
+    scalingMode: ['stretched_ar', 'stretched', 'centered', 'unspecified'],
+    msaa: ['off', '2x', '4x', '8x'],
+    anisotropic: ['off', '2x', '4x', '8x', '16x'],
+    resolution: ['app_controlled', '1920x1080', '2560x1440', '3840x2160'],
+    depthBuffer: ['appdriven', 'forcemin24bit', 'force32bit'],
+    vram: ['512', '1024', '2048', '4096'],
+    fpsLimit: ['0', '30', '60', '120'],
+    fullscreenAttr: ['default', 'fake'],
+    resampling: ['pointsampled', 'bilinear', 'bicubic', 'lanczos-2', 'lanczos-3'],
+    mipmapping: ['appdriven', 'disabled', 'autogen_bilinear']
+  };
+
+  function validateStoredFfxiPath(ffxiPath) {
+    const stored = store?.get('ffxiPath');
+    if (!stored || path.resolve(ffxiPath) !== path.resolve(stored)) {
+      throw new Error('FFXI path does not match stored configuration');
+    }
+  }
+
+  ipcMain.handle('download-dgvoodoo', async () => {
+    const destDir = path.join(runtimeDir, 'dgvoodoo');
+    try {
+      const sendProgress = (percent, detail) => {
+        try { mainWindow?.webContents?.send('dgvoodoo-download-progress', percent, detail); } catch {}
+      };
+
+      sendProgress(0, 'Fetching latest release info...');
+
+      // Query GitHub API for latest release
+      const releaseInfo = await new Promise((resolve, reject) => {
+        https.get('https://api.github.com/repos/dege-diosg/dgVoodoo2/releases/latest', {
+          headers: { 'User-Agent': 'XI-Launcher', 'Accept': 'application/vnd.github.v3+json' }
+        }, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => {
+            if (res.statusCode !== 200) return reject(new Error(`GitHub API returned ${res.statusCode}`));
+            try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
+          });
+          res.on('error', reject);
+        }).on('error', reject);
+      });
+
+      // Find the main zip (not _dbg, _dev64, or API)
+      const asset = releaseInfo.assets?.find(a =>
+        a.name.endsWith('.zip') &&
+        !a.name.includes('_dbg') &&
+        !a.name.includes('_dev') &&
+        !a.name.toLowerCase().includes('api') &&
+        !a.name.includes('source')
+      );
+      if (!asset) return { success: false, error: 'Could not find the main dgVoodoo2 ZIP in the latest release' };
+
+      sendProgress(5, `Downloading ${asset.name}...`);
+
+      if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+      const tmpZip = path.join(os.tmpdir(), asset.name);
+
+      // Download the zip
+      await new Promise((resolve, reject) => {
+        const download = (url) => {
+          https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
+            if (res.statusCode === 302 || res.statusCode === 301) {
+              return download(res.headers.location);
+            }
+            if (res.statusCode !== 200) {
+              return reject(new Error(`Download failed with status ${res.statusCode}`));
+            }
+            const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
+            let receivedBytes = 0;
+            const file = fs.createWriteStream(tmpZip);
+            res.on('data', (chunk) => {
+              receivedBytes += chunk.length;
+              file.write(chunk);
+              const mb = (receivedBytes / 1048576).toFixed(1);
+              if (totalBytes > 0) {
+                const pct = 5 + Math.round((receivedBytes / totalBytes) * 60);
+                const totalMb = (totalBytes / 1048576).toFixed(1);
+                sendProgress(pct, `Downloading... ${mb} / ${totalMb} MB`);
+              } else {
+                sendProgress(Math.min(60, 5 + Math.round(receivedBytes / 50000)), `Downloading... ${mb} MB`);
+              }
+            });
+            res.on('end', () => { file.end(); file.on('finish', resolve); });
+            res.on('error', reject);
+          }).on('error', reject);
+        };
+        download(asset.browser_download_url);
+      });
+
+      sendProgress(70, 'Extracting...');
+
+      // Clear old contents and extract
+      if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true });
+      fs.mkdirSync(destDir, { recursive: true });
+
+      execSync(`tar -xf "${tmpZip.replace(/\\/g, '/')}" -C "${destDir.replace(/\\/g, '/')}"`, { timeout: 120000 });
+
+      sendProgress(90, 'Cleaning up...');
+      try { fs.unlinkSync(tmpZip); } catch {}
+
+      // Verify D3D8.dll exists
+      const d3d8 = path.join(destDir, 'MS', 'x86', 'D3D8.dll');
+      if (!fs.existsSync(d3d8)) {
+        return { success: false, error: 'Download completed but MS\\x86\\D3D8.dll not found. The release structure may have changed.' };
+      }
+
+      sendProgress(100, 'dgVoodoo2 downloaded successfully');
+      return { success: true, path: destDir, version: releaseInfo.tag_name || asset.name };
+    } catch (e) {
+      const msg = e.message || '';
+      if (msg.includes('ENOTFOUND') || msg.includes('getaddrinfo')) {
+        return { success: false, error: 'Network error: Could not reach GitHub. Check your internet connection.' };
+      }
+      return { success: false, error: `Download failed: ${msg}` };
+    }
+  });
+
+  ipcMain.handle('get-dgvoodoo-path', async () => {
+    const destDir = path.join(runtimeDir, 'dgvoodoo');
+    const exists = fs.existsSync(path.join(destDir, 'MS', 'x86', 'D3D8.dll'));
+    return { path: destDir, exists };
+  });
+
+  // Helper: get all directories where dgVoodoo files should be placed
+  // dgVoodoo D3D8.dll must be next to the exe that creates the Direct3D8 device.
+  // With Ashita+xiloader, that's the xiloader dir (xiloader.exe process loads d3d8).
+  // We also place in FFXI dir and bootloader for standalone/pol.exe launches.
+  function getDgVoodooTargetDirs(ffxiPath) {
+    const dirs = [];
+    if (ffxiPath) dirs.push(ffxiPath);
+    const ashitaPath = store?.get('ashitaPath');
+    if (ashitaPath) {
+      const bootDir = path.join(ashitaPath, 'bootloader');
+      if (fs.existsSync(bootDir) && !dirs.includes(bootDir)) dirs.push(bootDir);
+    }
+    const xiloaderPath = store?.get('xiloaderPath');
+    if (xiloaderPath && fs.existsSync(xiloaderPath) && !dirs.includes(xiloaderPath)) {
+      dirs.push(xiloaderPath);
+    }
+    return dirs;
+  }
+
+  ipcMain.handle('check-dgvoodoo', async (_, ffxiPath) => {
+    try {
+      // Check both FFXI dir and Ashita bootloader dir
+      const dirs = getDgVoodooTargetDirs(ffxiPath);
+      const d3d8Exists = dirs.some(d => fs.existsSync(path.join(d, 'D3D8.dll')));
+      const confExists = dirs.some(d => fs.existsSync(path.join(d, 'dgVoodoo.conf')));
+      const cplExists = dirs.some(d => fs.existsSync(path.join(d, 'dgVoodooCpl.exe')));
+      return { d3d8Exists, confExists, cplExists };
+    } catch {
+      return { d3d8Exists: false, confExists: false, cplExists: false };
+    }
+  });
+
+  ipcMain.handle('copy-dgvoodoo-files', async (_, sourcePath, ffxiPath) => {
+    try {
+      if (!sourcePath || !ffxiPath) return { success: false, error: 'Missing paths' };
+      validateStoredFfxiPath(ffxiPath);
+
+      const d3d8Src = path.join(sourcePath, 'MS', 'x86', 'D3D8.dll');
+      if (!fs.existsSync(d3d8Src)) return { success: false, error: 'D3D8.dll not found in MS\\x86\\ — wrong folder?' };
+
+      const cplSrc = path.join(sourcePath, 'dgVoodooCpl.exe');
+      const dirs = getDgVoodooTargetDirs(ffxiPath);
+      const copied = [];
+
+      for (const dir of dirs) {
+        fs.copyFileSync(d3d8Src, path.join(dir, 'D3D8.dll'));
+        if (fs.existsSync(cplSrc)) {
+          fs.copyFileSync(cplSrc, path.join(dir, 'dgVoodooCpl.exe'));
+        }
+        copied.push(dir);
+      }
+
+      return { success: true, message: `Files copied to: ${copied.join(', ')}` };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('read-dgvoodoo-conf', async (_, ffxiPath) => {
+    try {
+      if (!ffxiPath) return { success: false };
+      const dirs = getDgVoodooTargetDirs(ffxiPath);
+      for (const dir of dirs) {
+        const confPath = path.join(dir, 'dgVoodoo.conf');
+        if (fs.existsSync(confPath)) {
+          const content = fs.readFileSync(confPath, 'utf-8');
+          const get = (key, fallback) => {
+            const m = content.match(new RegExp(`^\\s*${key}\\s*=\\s*(.+)`, 'mi'));
+            return m ? m[1].trim() : fallback;
+          };
+          const toBool = (v) => v === 'true';
+          const resolution = get('Resolution', 'unforced');
+          const filtering = get('Filtering', 'appdriven');
+          const antialiasing = get('Antialiasing', 'off');
+          return {
+            success: true,
+            settings: {
+              outputAPI: get('OutputAPI', 'd3d11') === 'bestavailable' ? 'd3d12' : 'd3d11',
+              scalingMode: get('ScalingMode', 'stretched_ar'),
+              watermark: toBool(get('dgVoodooWatermark', 'false')),
+              msaa: antialiasing === 'off' ? 'off' : antialiasing,
+              anisotropic: filtering === 'appdriven' ? 'off' : filtering,
+              vsync: toBool(get('ForceVerticalSync', 'false')),
+              resolution: resolution === 'unforced' ? 'app_controlled' : resolution,
+              depthBuffer: get('DepthBuffersBitDepth', 'forcemin24bit'),
+              fastVram: toBool(get('FastVideoMemoryAccess', 'false')),
+              keepFilter: toBool(get('KeepFilterIfPointSampled', 'false')),
+              vram: get('VRAM', '2048'),
+              fpsLimit: get('FPSLimit', '0'),
+              fullscreenAttr: get('FullscreenAttributes', 'default'),
+              resampling: get('Resampling', 'bilinear'),
+              mipmapping: toBool(get('DisableMipmapping', 'false')) ? 'disabled' : 'appdriven',
+              captureMouse: toBool(get('CaptureMouse', 'false')),
+            }
+          };
+        }
+      }
+      return { success: false };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('write-dgvoodoo-conf', async (_, ffxiPath, settings) => {
+    try {
+      if (!ffxiPath) return { success: false, error: 'FFXI path not set' };
+      validateStoredFfxiPath(ffxiPath);
+
+      // Validate all string settings against whitelists
+      const outputAPI = DGV_ALLOWED.outputAPI.includes(settings.outputAPI) ? settings.outputAPI : 'd3d11';
+      const scalingMode = DGV_ALLOWED.scalingMode.includes(settings.scalingMode) ? settings.scalingMode : 'stretched_ar';
+      const msaa = DGV_ALLOWED.msaa.includes(settings.msaa) ? settings.msaa : '4x';
+      const anisotropic = DGV_ALLOWED.anisotropic.includes(settings.anisotropic) ? settings.anisotropic : '16x';
+      const resolution = DGV_ALLOWED.resolution.includes(settings.resolution) ? settings.resolution : 'app_controlled';
+      const depthBuffer = DGV_ALLOWED.depthBuffer.includes(settings.depthBuffer) ? settings.depthBuffer : 'forcemin24bit';
+      const vram = DGV_ALLOWED.vram.includes(settings.vram) ? settings.vram : '2048';
+      const fpsLimit = DGV_ALLOWED.fpsLimit.includes(settings.fpsLimit) ? settings.fpsLimit : '0';
+      const fullscreenAttr = DGV_ALLOWED.fullscreenAttr.includes(settings.fullscreenAttr) ? settings.fullscreenAttr : 'default';
+      const resampling = DGV_ALLOWED.resampling.includes(settings.resampling) ? settings.resampling : 'bilinear';
+      const mipmapping = DGV_ALLOWED.mipmapping.includes(settings.mipmapping) ? settings.mipmapping : 'appdriven';
+      const watermark = !!settings.watermark;
+      const vsync = !!settings.vsync;
+      const fastVram = !!settings.fastVram;
+      const keepFilter = !!settings.keepFilter;
+      const captureMouse = !!settings.captureMouse;
+
+      // Resolution: "app_controlled" => "unforced", else "WxH"
+      const resValue = resolution === 'app_controlled' ? 'unforced' : resolution;
+
+      // Mipmapping map
+      const mipmapMap = { 'appdriven': 'appdriven', 'disabled': 'disabled', 'autogen_bilinear': 'autogen_bilinear' };
+
+      // Build conf lines
+      const confLines = [
+        '; dgVoodoo.conf — generated by XI Launcher',
+        '; Edit with dgVoodooCpl.exe for full options',
+        '',
+        '[General]',
+        `OutputAPI = ${outputAPI === 'd3d12' ? 'bestavailable' : 'd3d11'}`,
+        'Adapters = 0',
+        'FullScreenOutput = 0',
+        `ScalingMode = ${scalingMode}`,
+        `CaptureMouse = ${captureMouse ? 'true' : 'false'}`,
+        '',
+        '[GeneralExt]',
+        `Resampling = ${resampling}`,
+        `FPSLimit = ${fpsLimit}`,
+      ];
+
+      if (fullscreenAttr === 'fake') {
+        confLines.push('FullscreenAttributes = fake');
+      }
+
+      confLines.push(
+        '',
+        '[DirectX]',
+        'DisableAndPassThru = false',
+        'VideoCard = internal3D',
+        `VRAM = ${vram}`,
+        `Resolution = ${resValue}`,
+        `Antialiasing = ${msaa === 'off' ? 'off' : msaa}`,
+        `Filtering = ${anisotropic === 'off' ? 'appdriven' : anisotropic}`,
+        `KeepFilterIfPointSampled = ${keepFilter ? 'true' : 'false'}`,
+        `DisableMipmapping = ${mipmapping === 'disabled' ? 'true' : 'false'}`,
+        `ForceVerticalSync = ${vsync ? 'true' : 'false'}`,
+        `dgVoodooWatermark = ${watermark ? 'true' : 'false'}`,
+        `FastVideoMemoryAccess = ${fastVram ? 'true' : 'false'}`,
+        'AppControlledScreenMode = true',
+        'DisableAltEnterToToggleScreenMode = true',
+        '',
+        '[DirectXExt]',
+        'VendorID = 0',
+        'DeviceID = 0',
+        'SubSysID = 0',
+        'RevisionID = 0',
+        `DepthBuffersBitDepth = ${depthBuffer}`,
+        '',
+        '[Glide]',
+        'DisableAndPassThru = true',
+        '',
+        '[GlideExt]',
+        ''
+      );
+
+      const conf = confLines.join('\r\n');
+
+      const dirs = getDgVoodooTargetDirs(ffxiPath);
+      for (const dir of dirs) {
+        fs.writeFileSync(path.join(dir, 'dgVoodoo.conf'), conf, 'utf8');
+      }
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('launch-dgvoodoo-cpl', async (_, ffxiPath) => {
+    try {
+      validateStoredFfxiPath(ffxiPath);
+      const dirs = getDgVoodooTargetDirs(ffxiPath);
+      let cplPath = null;
+      for (const dir of dirs) {
+        const p = path.join(dir, 'dgVoodooCpl.exe');
+        if (fs.existsSync(p)) { cplPath = p; break; }
+      }
+      if (!cplPath) return { success: false, error: 'dgVoodooCpl.exe not found' };
+      spawn(cplPath, [], { cwd: path.dirname(cplPath), detached: true, stdio: 'ignore' }).unref();
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('open-defender-settings', async () => {
+    try {
+      await shell.openExternal('ms-settings:windowsdefender');
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('add-defender-exclusion', async (_, folderPath) => {
+    try {
+      if (!folderPath) return { success: false, error: 'No folder path provided' };
+      const resolved = path.resolve(folderPath);
+      // Use elevated PowerShell to add the exclusion
+      const cmd = `powershell -Command "Start-Process powershell -ArgumentList '-Command','Add-MpPreference -ExclusionPath \\\"${escapePSString(resolved)}\\\"' -Verb RunAs -Wait"`;
+      execSync(cmd, { timeout: 30000 });
+      return { success: true };
+    } catch (e) {
+      const msg = e.message || '';
+      if (msg.includes('canceled') || msg.includes('cancelled') || msg.includes('The operation was canceled')) {
+        return { success: false, error: 'UAC prompt was cancelled — exclusion not added' };
+      }
+      return { success: false, error: `Failed to add exclusion: ${msg}` };
+    }
+  });
+
+  ipcMain.handle('check-defender-exclusion', async (_, folderPath) => {
+    try {
+      if (!folderPath) return { excluded: false };
+      const resolved = path.resolve(folderPath);
+      const output = execSync('powershell -Command "(Get-MpPreference).ExclusionPath"', { timeout: 10000, encoding: 'utf8' });
+      const exclusions = output.split(/\r?\n/).map(l => l.trim().toLowerCase()).filter(Boolean);
+      const found = exclusions.some(ex => resolved.toLowerCase() === ex || resolved.toLowerCase().startsWith(ex + path.sep));
+      return { excluded: found };
+    } catch {
+      return { excluded: false, error: 'Could not check exclusions' };
+    }
+  });
+
+  ipcMain.handle('remove-dgvoodoo', async (_, ffxiPath) => {
+    try {
+      if (!ffxiPath) return { success: false, error: 'FFXI path not set' };
+      validateStoredFfxiPath(ffxiPath);
+      const files = ['D3D8.dll', 'dgVoodoo.conf', 'dgVoodooCpl.exe'];
+      const dirs = getDgVoodooTargetDirs(ffxiPath);
+      for (const dir of dirs) {
+        for (const f of files) {
+          const fp = path.join(dir, f);
+          if (fs.existsSync(fp)) fs.unlinkSync(fp);
+        }
+      }
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
   // Community addon install/update from GitHub
-  ipcMain.handle('install-addon', async (_, ashitaPath, addonName, repo, subdir) => {
-
-
-
+  ipcMain.handle('install-addon', async (_, ashitaPath, addonName, repo, subdir, useRelease, releaseFolder, isPlugin) => {
     try {
       const sendProgress = (percent, detail) => {
         try { mainWindow?.webContents?.send('addon-progress', addonName, percent, detail); } catch {}
@@ -1586,36 +2068,68 @@ function registerIPC() {
 
       sendProgress(0, 'Fetching repo info...');
 
-      // Get default branch
-      const repoInfo = await new Promise((resolve, reject) => {
-        https.get({
-          hostname: 'api.github.com',
-          path: `/repos/${repo}`,
-          headers: { 'User-Agent': 'XI-Launcher' }
-        }, (res) => {
-          let data = '';
-          res.on('data', (chunk) => data += chunk);
-          res.on('end', () => {
-            try { resolve(JSON.parse(data)); }
-            catch { reject(new Error('Failed to parse repo info')); }
-          });
-        }).on('error', reject);
-      });
+      let zipUrl;
+      let branch = 'main';
 
-      if (repoInfo.message === 'Not Found') {
-        return { success: false, error: `Repository ${repo} not found on GitHub.` };
+      if (useRelease) {
+        // Try to get the latest release with assets
+        const releaseInfo = await new Promise((resolve, reject) => {
+          https.get({
+            hostname: 'api.github.com',
+            path: `/repos/${repo}/releases/latest`,
+            headers: { 'User-Agent': 'XI-Launcher' }
+          }, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => {
+              try { resolve(JSON.parse(data)); }
+              catch { resolve(null); }
+            });
+          }).on('error', () => resolve(null));
+        });
+
+        if (releaseInfo && releaseInfo.assets && releaseInfo.assets.length > 0) {
+          // Pick the first .zip asset (skip horizon-specific builds)
+          const asset = releaseInfo.assets.find(a => a.name.endsWith('.zip') && !a.name.includes('horizon')) || releaseInfo.assets.find(a => a.name.endsWith('.zip'));
+          if (asset) {
+            zipUrl = asset.browser_download_url;
+            sendProgress(5, `Downloading release ${releaseInfo.tag_name}...`);
+          }
+        }
       }
 
-      const branch = repoInfo.default_branch || 'main';
-      const zipUrl = `https://github.com/${repo}/archive/refs/heads/${branch}.zip`;
+      if (!zipUrl) {
+        // Fallback to source ZIP
+        const repoInfo = await new Promise((resolve, reject) => {
+          https.get({
+            hostname: 'api.github.com',
+            path: `/repos/${repo}`,
+            headers: { 'User-Agent': 'XI-Launcher' }
+          }, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => {
+              try { resolve(JSON.parse(data)); }
+              catch { reject(new Error('Failed to parse repo info')); }
+            });
+          }).on('error', reject);
+        });
 
-      sendProgress(5, 'Downloading...');
+        if (repoInfo.message === 'Not Found') {
+          return { success: false, error: `Repository ${repo} not found on GitHub.` };
+        }
+
+        branch = repoInfo.default_branch || 'main';
+        zipUrl = `https://github.com/${repo}/archive/refs/heads/${branch}.zip`;
+        sendProgress(5, 'Downloading...');
+      }
 
       // Download ZIP to temp
       const tmpZip = path.join(os.tmpdir(), `addon-${addonName}.zip`);
       await new Promise((resolve, reject) => {
         const download = (url) => {
-          https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
+          const mod = url.startsWith('https') ? https : require('http');
+          mod.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
             if (res.statusCode === 302 || res.statusCode === 301) {
               return download(res.headers.location);
             }
@@ -1651,7 +2165,8 @@ function registerIPC() {
       if (fs.existsSync(tmpExtract)) {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
-      execSync(`powershell -Command "Expand-Archive -Path '${tmpZip}' -DestinationPath '${tmpExtract}' -Force"`, { timeout: 120000 });
+      fs.mkdirSync(tmpExtract, { recursive: true });
+      execSync(`tar -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 120000 });
 
       // GitHub ZIPs have a top-level folder like "RepoName-main/"
       const extracted = fs.readdirSync(tmpExtract);
@@ -1668,16 +2183,61 @@ function registerIPC() {
         innerDir = subPath;
       }
 
-      sendProgress(80, 'Installing to addons folder...');
+      // For release ZIPs, look for the addon folder inside (e.g. XIUI/ inside XIUI-1.7.5.zip)
+      if (useRelease && releaseFolder) {
+        const relPath = path.join(innerDir, releaseFolder);
+        if (fs.existsSync(relPath) && fs.statSync(relPath).isDirectory()) {
+          innerDir = relPath;
+        }
+      }
 
-      // Copy to ashitaPath/addons/<addonName>
-      const destDir = path.join(ashitaPath, 'addons', addonName);
+      sendProgress(78, `Installing to ${isPlugin ? 'plugins' : 'addons'} folder...`);
+
+      // Determine destination: plugins/ for plugins, addons/ for addons
+      const destBase = isPlugin ? 'plugins' : 'addons';
+      const destDir = path.join(ashitaPath, destBase, addonName);
+
+      // Back up user config files before overwriting
+      const configBackupDir = path.join(os.tmpdir(), 'xi-addon-backup-' + addonName + '-' + Date.now());
+      const configPatterns = ['config', 'settings', 'data'];
+      const configExts = ['.ini', '.json', '.lua', '.xml'];
+      const configExclude = ['manifest.json', 'package.json'];
       if (fs.existsSync(destDir)) {
+        sendProgress(79, 'Preserving config files...');
+        const backupFile = (dir, rel) => {
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const ent of entries) {
+            const fullPath = path.join(dir, ent.name);
+            const relPath = path.join(rel, ent.name);
+            if (ent.isDirectory()) {
+              if (configPatterns.includes(ent.name.toLowerCase())) {
+                // Back up entire config/settings/data directories
+                const backupDest = path.join(configBackupDir, relPath);
+                fs.mkdirSync(backupDest, { recursive: true });
+                copyRecursive(fullPath, backupDest);
+              } else {
+                backupFile(fullPath, relPath);
+              }
+            } else if (configExts.includes(path.extname(ent.name).toLowerCase()) && !configExclude.includes(ent.name.toLowerCase())) {
+              const backupDest = path.join(configBackupDir, relPath);
+              fs.mkdirSync(path.dirname(backupDest), { recursive: true });
+              fs.copyFileSync(fullPath, backupDest);
+            }
+          }
+        };
+        try { backupFile(destDir, ''); } catch (e) { console.error('[install-addon] config backup:', e.message); }
         fs.rmSync(destDir, { recursive: true, force: true });
       }
       fs.mkdirSync(destDir, { recursive: true });
 
       copyRecursive(innerDir, destDir);
+
+      // Restore backed up config files
+      if (fs.existsSync(configBackupDir)) {
+        sendProgress(85, 'Restoring config files...');
+        try { copyRecursive(configBackupDir, destDir); } catch (e) { console.error('[install-addon] config restore:', e.message); }
+        try { fs.rmSync(configBackupDir, { recursive: true, force: true }); } catch {}
+      }
       const fileCount = countFiles(destDir);
 
       sendProgress(100, `Installed — ${fileCount} files`);
@@ -1713,6 +2273,38 @@ function registerIPC() {
       }
 
       return { success: true, message: `${addonName} installed — ${fileCount} files` };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  // Copy a directory recursively (for local dependency installation)
+  ipcMain.handle('copy-dir', async (_, src, dest) => {
+    try {
+      if (!fs.existsSync(src)) return { success: false, error: 'Source not found' };
+      fs.cpSync(src, dest, { recursive: true, force: true });
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  // Uninstall an addon/plugin
+  ipcMain.handle('uninstall-addon', async (_, ashitaPath, addonName, isPlugin) => {
+    try {
+      const base = isPlugin ? 'plugins' : 'addons';
+      const addonDir = path.join(ashitaPath, base, addonName);
+      if (!fs.existsSync(addonDir)) {
+        return { success: false, error: 'Addon folder not found.' };
+      }
+      fs.rmSync(addonDir, { recursive: true, force: true });
+      // Clean up stored SHA
+      if (store) {
+        const shas = store.get('addonUpdateSHAs', {});
+        delete shas[addonName];
+        store.set('addonUpdateSHAs', shas);
+      }
+      return { success: true, message: `${addonName} uninstalled.` };
     } catch (e) {
       return { success: false, error: e.message };
     }
@@ -1768,6 +2360,136 @@ function registerIPC() {
     } catch (e) {
       console.error('[check-addon-updates]', e.message);
       return { updates: [], error: e.message };
+    }
+  });
+
+  // Server status check (TCP ping)
+  ipcMain.handle('check-server-status', async (_, host, port) => {
+    if (!host) return { online: false, error: 'No host' };
+    const net = require('net');
+    const p = parseInt(port) || 54231;
+    return new Promise((resolve) => {
+      const socket = new net.Socket();
+      const timeout = setTimeout(() => {
+        socket.destroy();
+        resolve({ online: false, latency: null });
+      }, 5000);
+      const start = Date.now();
+      socket.connect(p, host, () => {
+        clearTimeout(timeout);
+        const latency = Date.now() - start;
+        socket.destroy();
+        resolve({ online: true, latency });
+      });
+      socket.on('error', () => {
+        clearTimeout(timeout);
+        socket.destroy();
+        resolve({ online: false, latency: null });
+      });
+    });
+  });
+
+  // One-Click Backup — creates a ZIP of config/boot, scripts, and addon settings
+  ipcMain.handle('backup-ashita-config', async () => {
+    try {
+      const ashitaPath = store.get('ashitaPath');
+      if (!ashitaPath) return { success: false, error: 'Ashita path not set' };
+
+      const { filePath } = await dialog.showSaveDialog(mainWindow, {
+        title: 'Save Ashita Backup',
+        defaultPath: `xi-launcher-backup-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.zip`,
+        filters: [{ name: 'ZIP Archive', extensions: ['zip'] }]
+      });
+      if (!filePath) return { success: false, cancelled: true };
+
+      // Use PowerShell to create ZIP of key directories
+      const dirsToBackup = [
+        path.join(ashitaPath, 'config', 'boot'),
+        path.join(ashitaPath, 'scripts'),
+        path.join(ashitaPath, 'config', 'addons')
+      ].filter(d => fs.existsSync(d));
+
+      if (dirsToBackup.length === 0) return { success: false, error: 'No config directories found to backup' };
+
+      // Create a temp staging dir, copy files, then zip
+      const tmpDir = path.join(os.tmpdir(), 'xi-launcher-backup-' + Date.now());
+      fs.mkdirSync(tmpDir, { recursive: true });
+
+      for (const dir of dirsToBackup) {
+        const relPath = path.relative(ashitaPath, dir);
+        const destDir = path.join(tmpDir, relPath);
+        fs.mkdirSync(path.dirname(destDir), { recursive: true });
+        // Copy directory recursively
+        execSync(`xcopy "${dir}" "${destDir}\\" /E /I /H /Y /Q`, { timeout: 30000 });
+      }
+
+      // Also backup launcher settings
+      const launcherConfig = store.store;
+      fs.writeFileSync(path.join(tmpDir, 'xi-launcher-settings.json'), JSON.stringify(launcherConfig, null, 2));
+
+      // Create ZIP
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      execSync(`powershell -Command "Compress-Archive -Path '${escapePSString(tmpDir)}\\*' -DestinationPath '${escapePSString(filePath)}'"`, { timeout: 60000 });
+
+      // Cleanup temp
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+
+      return { success: true, message: `Backup saved to ${filePath}` };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  // Restore from backup ZIP
+  ipcMain.handle('restore-ashita-config', async () => {
+    try {
+      const ashitaPath = store.get('ashitaPath');
+      if (!ashitaPath) return { success: false, error: 'Ashita path not set' };
+
+      const { filePaths } = await dialog.showOpenDialog(mainWindow, {
+        title: 'Select Ashita Backup',
+        filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
+        properties: ['openFile']
+      });
+      if (!filePaths || filePaths.length === 0) return { success: false, cancelled: true };
+
+      const zipPath = filePaths[0];
+      const tmpDir = path.join(os.tmpdir(), 'xi-launcher-restore-' + Date.now());
+      fs.mkdirSync(tmpDir, { recursive: true });
+
+      // Extract ZIP
+      execSync(`tar -xf "${zipPath.replace(/\\/g, '/')}" -C "${tmpDir.replace(/\\/g, '/')}"`, { timeout: 120000 });
+
+      // Copy config dirs back
+      const configBoot = path.join(tmpDir, 'config', 'boot');
+      const scripts = path.join(tmpDir, 'scripts');
+      const configAddons = path.join(tmpDir, 'config', 'addons');
+
+      if (fs.existsSync(configBoot)) {
+        execSync(`xcopy "${configBoot}" "${path.join(ashitaPath, 'config', 'boot')}\\" /E /I /H /Y /Q`, { timeout: 30000 });
+      }
+      if (fs.existsSync(scripts)) {
+        execSync(`xcopy "${scripts}" "${path.join(ashitaPath, 'scripts')}\\" /E /I /H /Y /Q`, { timeout: 30000 });
+      }
+      if (fs.existsSync(configAddons)) {
+        execSync(`xcopy "${configAddons}" "${path.join(ashitaPath, 'config', 'addons')}\\" /E /I /H /Y /Q`, { timeout: 30000 });
+      }
+
+      // Restore launcher settings if present
+      const settingsFile = path.join(tmpDir, 'xi-launcher-settings.json');
+      if (fs.existsSync(settingsFile)) {
+        const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
+        for (const [key, value] of Object.entries(settings)) {
+          store.set(key, value);
+        }
+      }
+
+      // Cleanup
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+
+      return { success: true, message: 'Backup restored successfully. Restart the launcher to apply changes.' };
+    } catch (e) {
+      return { success: false, error: e.message };
     }
   });
 }

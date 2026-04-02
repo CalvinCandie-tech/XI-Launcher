@@ -14,6 +14,11 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
   const [profiles, setProfiles] = useState([]);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const [multiBoxOpen, setMultiBoxOpen] = useState(false);
+  const [multiBoxProfiles, setMultiBoxProfiles] = useState([]);
+  const [multiBoxLaunching, setMultiBoxLaunching] = useState(false);
+  const [multiBoxLog, setMultiBoxLog] = useState('');
+  const [serverStatus, setServerStatus] = useState(null); // { online, latency }
 
   // Close profile dropdown when clicking outside
   useEffect(() => {
@@ -39,11 +44,16 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
     if (!api) return;
     setAshitaInstalling(true);
     setAshitaProgress({ percent: 0, detail: 'Starting...' });
-    const result = await api.installAshitaV4(config.ashitaPath);
-    setAshitaInstalling(false);
-    if (result.success) {
-      const ashita = await api.pathExists(config.ashitaPath + '\\Ashita-cli.exe');
-      setStatus(prev => ({ ...prev, ashita }));
+    try {
+      const result = await api.installAshitaV4(config.ashitaPath);
+      if (result.success) {
+        const ashita = await api.pathExists(config.ashitaPath + '\\Ashita-cli.exe');
+        setStatus(prev => ({ ...prev, ashita }));
+      }
+    } catch (e) {
+      console.error('Failed to install Ashita v4:', e);
+    } finally {
+      setAshitaInstalling(false);
     }
   };
 
@@ -60,7 +70,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
       setProfiles(profiles);
     };
     check();
-  }, [config.ashitaPath, config.ffxiPath, config.xiloaderPath]);
+  }, [config.ashitaPath, config.ffxiPath, config.xiloaderPath, config.activeProfile]);
 
   const createAndActivate = async () => {
     const name = newName.trim();
@@ -73,6 +83,61 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
     setProfiles(updatedProfiles);
     setCreating(false);
   };
+
+  const toggleMultiBoxProfile = (name) => {
+    setMultiBoxProfiles(prev =>
+      prev.includes(name) ? prev.filter(p => p !== name) : [...prev, name]
+    );
+  };
+
+  const launchMultiBox = async () => {
+    if (!api || multiBoxProfiles.length === 0) return;
+    setMultiBoxLaunching(true);
+    setMultiBoxLog('');
+    const logs = [];
+    for (const profileName of multiBoxProfiles) {
+      // Load per-profile settings if available
+      let profileSettings = {};
+      try {
+        const ps = await api.loadProfileSettings(profileName);
+        if (ps) profileSettings = ps;
+      } catch (e) { console.error('Failed to load profile settings for', profileName, e); }
+      const result = await api.launchGame({
+        ashitaPath: config.ashitaPath,
+        profileName,
+        useXiloader: !!config.useXiloader,
+        xiloaderPath: config.xiloaderPath,
+        serverName: profileSettings.serverHost || config.serverHost,
+        serverPort: profileSettings.serverPort || config.serverPort,
+        loginUser: profileSettings.loginUser || config.loginUser,
+        loginPass: profileSettings.loginPass || config.loginPass,
+        hairpin: config.hairpin
+      });
+      if (result.error) {
+        logs.push(`${profileName}: ${result.error}`);
+      } else {
+        logs.push(`${profileName}: launched`);
+      }
+      // Small delay between launches to avoid conflicts
+      if (multiBoxProfiles.indexOf(profileName) < multiBoxProfiles.length - 1) {
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+    setMultiBoxLog(logs.join('\n'));
+    setMultiBoxLaunching(false);
+  };
+
+  // Server status check
+  useEffect(() => {
+    if (!api?.checkServerStatus || !config.serverHost) { setServerStatus(null); return; }
+    const check = async () => {
+      const result = await api.checkServerStatus(config.serverHost, config.serverPort);
+      setServerStatus(result);
+    };
+    check();
+    const interval = setInterval(check, 30000);
+    return () => clearInterval(interval);
+  }, [config.serverHost, config.serverPort]);
 
   const setupComplete = status.ashita && status.ffxi && config.activeProfile;
   const stepsComplete = [status.ashita, status.ffxi, !!config.activeProfile].filter(Boolean).length;
@@ -92,12 +157,12 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
       <div className="home-right">
         {/* Update notification */}
         {updateInfo && (
-          <div className="home-panel-section home-update-banner" onClick={() => api?.openExternal(updateInfo.releaseUrl)} style={{ cursor: 'pointer' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 13, color: 'var(--gold)', fontWeight: 600 }}>Update Available</span>
-              <span className="pill pill-gold" style={{ fontSize: 10 }}>v{updateInfo.latest}</span>
+          <div className="home-panel-section home-update-banner" onClick={() => api?.openExternal(updateInfo.releaseUrl)}>
+            <div className="home-update-row">
+              <span className="home-update-title">Update Available</span>
+              <span className="pill pill-gold pill-xs">v{updateInfo.latest}</span>
             </div>
-            <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>Click to download the latest version</p>
+            <p className="home-update-desc">Click to download the latest version</p>
           </div>
         )}
 
@@ -106,15 +171,17 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
           <div className="home-panel-label">Game Profile</div>
           {profiles.length > 0 ? (
             <div className="home-profile-switcher" ref={dropdownRef}>
-              <div className="home-profile-display" onClick={() => setProfileDropdownOpen(prev => !prev)}>
+              <div className="home-profile-display" role="button" aria-expanded={profileDropdownOpen} onClick={() => setProfileDropdownOpen(prev => !prev)}>
                 <span className="home-profile-name cinzel">{config.activeProfile || 'Select profile'}</span>
                 <span className="home-profile-change">{profileDropdownOpen ? '▲' : '▼'}</span>
               </div>
               {profileDropdownOpen && (
-                <div className="home-profile-dropdown">
+                <div className="home-profile-dropdown" role="listbox">
                   {profiles.map(name => (
                     <div
                       key={name}
+                      role="option"
+                      aria-selected={config.activeProfile === name}
                       className={`home-profile-option ${config.activeProfile === name ? 'active' : ''}`}
                       onClick={() => { updateConfig('activeProfile', name); setProfileDropdownOpen(false); }}
                     >
@@ -122,7 +189,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
                       <span>{name}</span>
                     </div>
                   ))}
-                  <div className="home-profile-option home-profile-manage" onClick={() => { setProfileDropdownOpen(false); onNavigate('profiles'); }}>
+                  <div role="option" className="home-profile-option home-profile-manage" onClick={() => { setProfileDropdownOpen(false); onNavigate('profiles'); }}>
                     ⚙ Manage Profiles...
                   </div>
                 </div>
@@ -135,6 +202,19 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
             </div>
           )}
         </div>
+
+        {/* Server Status */}
+        {config.serverHost && serverStatus && (
+          <div className="home-panel-section home-server-status">
+            <div className="home-server-status-left">
+              <span className={`status-dot ${serverStatus.online ? 'status-dot-online' : 'status-dot-offline'}`} />
+              <span className="mono">{config.serverHost}</span>
+            </div>
+            <span className={`pill ${serverStatus.online ? 'pill-green' : 'pill-red'}`}>
+              {serverStatus.online ? `Online (${serverStatus.latency}ms)` : 'Offline'}
+            </span>
+          </div>
+        )}
 
         {/* Status section — only show when something needs attention */}
         {(!status.ashita || !status.ffxi || !status.xiloader) && (
@@ -162,13 +242,13 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
             </div>
 
             {!status.ashita && !ashitaInstalling && (
-              <button className="btn btn-primary btn-sm" onClick={installAshitaV4} style={{ width: '100%', marginTop: 8 }}>
+              <button className="btn btn-primary btn-sm home-full-btn" onClick={installAshitaV4}>
                 ↓ Install Ashita v4
               </button>
             )}
             {ashitaInstalling && (
-              <div style={{ marginTop: 8 }}>
-                <div className="home-progress-bar" style={{ marginBottom: 4 }}>
+              <div className="home-install-progress">
+                <div className="home-progress-bar home-progress-bar-tight">
                   <div className="home-progress-fill" style={{ width: `${ashitaProgress.percent}%` }} />
                 </div>
                 <span className="home-progress-text">{ashitaProgress.detail}</span>
@@ -200,10 +280,9 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
                 onKeyDown={e => e.key === 'Enter' && createAndActivate()}
               />
               <button
-                className="btn btn-primary btn-sm"
+                className="btn btn-primary btn-sm home-full-btn"
                 onClick={createAndActivate}
                 disabled={creating || !newName.trim()}
-                style={{ width: '100%' }}
               >
                 {creating ? '◌ Creating...' : 'Create Profile'}
               </button>
@@ -252,8 +331,58 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
           </div>
         )}
 
+        {/* Multi-Box Launch */}
+        {setupComplete && profiles.length > 1 && (
+          <div className="home-panel-section home-panel-divider">
+            <button className="btn btn-ghost btn-sm home-full-btn" onClick={() => setMultiBoxOpen(o => !o)}>
+              {multiBoxOpen ? '▾ Multi-Box Launch' : '▸ Multi-Box Launch'}
+            </button>
+            {multiBoxOpen && (
+              <div className="home-multibox-body">
+                <p className="home-multibox-hint">
+                  Select profiles to launch simultaneously. Each will start in sequence with a 2-second delay.
+                </p>
+                <div className="home-multibox-list">
+                  {profiles.map(name => (
+                    <label key={name} className={`home-multibox-label ${multiBoxProfiles.includes(name) ? 'selected' : ''}`}>
+                      <input type="checkbox" checked={multiBoxProfiles.includes(name)} onChange={() => toggleMultiBoxProfile(name)} />
+                      <span>{name}</span>
+                      {config.activeProfile === name && <span className="pill pill-gold pill-xs">Active</span>}
+                    </label>
+                  ))}
+                </div>
+                <button
+                  className="btn btn-primary btn-sm home-full-btn"
+                  disabled={multiBoxLaunching || multiBoxProfiles.length === 0}
+                  onClick={launchMultiBox}
+                >
+                  {multiBoxLaunching ? '◌ Launching...' : `Launch ${multiBoxProfiles.length} Instance${multiBoxProfiles.length !== 1 ? 's' : ''}`}
+                </button>
+                {multiBoxLog && (
+                  <pre className="home-multibox-log">{multiBoxLog}</pre>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Launch History */}
+        {config.launchHistory && config.launchHistory.length > 0 && (
+          <div className="home-panel-section home-panel-divider">
+            <div className="home-panel-label home-panel-label-tight">Recent Launches</div>
+            <div className="home-history-list">
+              {config.launchHistory.slice(0, 5).map((entry, i) => (
+                <div key={i} className="home-history-row">
+                  <span className="home-history-name">{entry.profile}</span>
+                  <span>{new Date(entry.time).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {setupComplete && onShowWizard && (
-          <div className="home-panel-section" style={{ textAlign: 'center', borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          <div className="home-panel-section home-panel-divider home-panel-center">
             <button className="btn btn-ghost btn-sm" onClick={onShowWizard}>
               Re-run Setup Wizard
             </button>

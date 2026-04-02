@@ -17,7 +17,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-secondary);
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-body);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -34,16 +34,12 @@
   background: linear-gradient(135deg, var(--teal), var(--gold));
   color: #0a0c10;
   border-bottom-color: transparent;
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: 13px;
   font-weight: 700;
   border-radius: 6px;
   margin: 4px 0;
-  box-shadow:
-    0 0 12px rgba(58, 184, 200, 0.5),
-    0 0 24px rgba(58, 184, 200, 0.35),
-    0 4px 20px rgba(200, 146, 42, 0.5),
-    0 0 30px rgba(200, 146, 42, 0.3);
+  box-shadow: var(--active-glow-strong);
 }
 
 .topnav-tab-icon {
@@ -259,7 +255,7 @@
   left: 0;
   width: 200px;
   font-size: 11px;
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   color: var(--gold);
   white-space: nowrap;
   overflow: hidden;
@@ -269,7 +265,17 @@
   text-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
 
-.topnav-tab-bgwiki {
+.topnav-tab-external {
+  border-style: dashed;
+  opacity: 0.8;
+}
+.topnav-tab-external:hover {
+  opacity: 1;
+}
+.topnav-external-icon {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-left: -4px;
 }
 
 .topnav-bgwiki-icon {

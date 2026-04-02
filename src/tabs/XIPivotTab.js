@@ -1,17 +1,21 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './XIPivotTab.css';
 
 const api = window.xiAPI;
 
 const HD_PACKS = [
   { name: 'XiView', desc: 'HD UI overhaul — status icons, fonts, GUI elements, and menu skins for modern resolutions', url: 'https://github.com/KenshiDRK/XiView', variants: ['Normal', 'Widescreen'] },
-  { name: 'FFXI-Vision', desc: 'Overhauled in-game map files with cleaner, more detailed zone maps', url: 'https://github.com/Drauku/FFXI-Vision' },
-  { name: 'Remapster', desc: 'Hand-drawn, detailed zone maps — cities, dungeons, open world, and more. Available in 1024 or 2048 resolution', url: 'https://github.com/AkadenTK/remapster_maps', releaseAsset: true },
+  { name: 'FFXI-Vision', desc: 'Cleaner, more detailed zone maps — an overhaul of the stock in-game map files', url: 'https://github.com/Drauku/FFXI-Vision', conflictGroup: 'maps' },
+  { name: 'Remapster', desc: 'Hand-drawn zone maps with fine detail — cities, dungeons, open world. Available in 1024 or 2048 resolution', url: 'https://github.com/AkadenTK/remapster_maps', releaseAsset: true, conflictGroup: 'maps' },
   { name: 'AshenbubsHD', desc: 'Massive HD upscale project — 232,000+ textures covering armor, enemies, NPCs, magic effects, and more', url: 'https://github.com/Exarie/AshenbubsHD-Beta' },
   { name: 'LoFi-FFXI', desc: 'Lo-fi music replacements for FFXI — chill, relaxed versions of in-game BGM tracks', url: 'https://github.com/CatsAndBoats/LoFi-FFXI' }
 ];
 
-function XIPivotTab({ config, onSettingsSaved }) {
+const CONFLICT_GROUP_LABELS = {
+  maps: 'Map Pack'
+};
+
+function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
   const [pivotConfig, setPivotConfig] = useState({
     exists: false, rootPath: '', overlays: [], cacheEnabled: false, cacheSize: 1024, cacheMaxAge: 600
   });
@@ -61,6 +65,32 @@ function XIPivotTab({ config, onSettingsSaved }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Ensure 'pivot' is listed under [ashita.polplugins] in the active profile
+  const ensurePivotInProfile = async () => {
+    if (!config?.activeProfile || !config?.ashitaPath || !api) return;
+    const profile = await api.readProfile(config.ashitaPath, config.activeProfile);
+    if (!profile.exists) return;
+
+    const lines = profile.content.split('\n');
+    const polIdx = lines.findIndex(l => l.trim() === '[ashita.polplugins]');
+    if (polIdx === -1) return;
+
+    // Find section end
+    let nextIdx = lines.length;
+    for (let i = polIdx + 1; i < lines.length; i++) {
+      if (lines[i].trim().startsWith('[')) { nextIdx = i; break; }
+    }
+
+    // Check if pivot is already listed
+    const sectionLines = lines.slice(polIdx + 1, nextIdx);
+    const hasPivot = sectionLines.some(l => l.trim().replace(/\s*=\s*.*/, '') === 'pivot');
+    if (hasPivot) return;
+
+    // Insert 'pivot = 1' into the section
+    lines.splice(polIdx + 1, 0, 'pivot = 1');
+    await api.saveProfile(config.ashitaPath, config.activeProfile, lines.join('\n'));
+  };
+
   const installXIPivot = async () => {
     setInstallStatus('installing');
     setInstallMsg('Downloading XIPivot from GitHub...');
@@ -68,6 +98,7 @@ function XIPivotTab({ config, onSettingsSaved }) {
     if (result.success) {
       setInstallStatus('done');
       setInstallMsg(result.message);
+      await ensurePivotInProfile();
       await load(); // Refresh status
     } else {
       setInstallStatus('error');
@@ -99,6 +130,7 @@ function XIPivotTab({ config, onSettingsSaved }) {
     const newCfg = { ...pivotConfig, ...updates };
     setPivotConfig(newCfg);
     await api.writeXIPivotConfig(config.ashitaPath, newCfg);
+    await ensurePivotInProfile();
     if (onSettingsSaved) onSettingsSaved();
   };
 
@@ -122,6 +154,20 @@ function XIPivotTab({ config, onSettingsSaved }) {
     await saveConfig({ overlays });
   };
 
+  // Drag-and-drop reordering
+  const dragIdx = useRef(null);
+  const handleDragStart = (idx) => { dragIdx.current = idx; };
+  const handleDragOver = (e) => { e.preventDefault(); };
+  const handleDrop = async (targetIdx) => {
+    const fromIdx = dragIdx.current;
+    if (fromIdx === null || fromIdx === targetIdx) return;
+    const overlays = [...pivotConfig.overlays];
+    const [moved] = overlays.splice(fromIdx, 1);
+    overlays.splice(targetIdx, 0, moved);
+    dragIdx.current = null;
+    await saveConfig({ overlays });
+  };
+
   const browseOverlay = async () => {
     const result = await api.browseFolder(pivotConfig.rootPath || config.ashitaPath);
     if (result) {
@@ -136,8 +182,8 @@ function XIPivotTab({ config, onSettingsSaved }) {
   };
 
   const [hdPackStatus, setHdPackStatus] = useState({}); // { packName: { status, message, percent } }
-  const [remapsterRes, setRemapsterRes] = useState('2048');
-  const [xiviewVariant, setXiviewVariant] = useState('Widescreen');
+  const [remapsterRes, setRemapsterRes] = useState(() => config.remapsterRes || '2048');
+  const [xiviewVariant, setXiviewVariant] = useState(() => config.xiviewVariant || 'Widescreen');
 
   useEffect(() => {
     if (!api?.onHDPackProgress) return;
@@ -159,9 +205,24 @@ function XIPivotTab({ config, onSettingsSaved }) {
       result = await api.installHDPack(config.ashitaPath, pack.name, pack.url, subdir);
     }
     if (result.success) {
-      if (!pivotConfig.overlays.includes(pack.name)) {
-        await saveConfig({ overlays: [...pivotConfig.overlays, pack.name] });
+      // Remove conflicting packs from overlays
+      let newOverlays = [...pivotConfig.overlays];
+      if (pack.conflictGroup) {
+        const conflicting = HD_PACKS
+          .filter(p => p.conflictGroup === pack.conflictGroup && p.name !== pack.name)
+          .map(p => p.name);
+        newOverlays = newOverlays.filter(name => !conflicting.includes(name));
+        // Clear done status on conflicting packs so they show as installable again
+        setHdPackStatus(prev => {
+          const updated = { ...prev };
+          conflicting.forEach(name => { delete updated[name]; });
+          return updated;
+        });
       }
+      if (!newOverlays.includes(pack.name)) {
+        newOverlays.push(pack.name);
+      }
+      await saveConfig({ overlays: newOverlays });
       setHdPackStatus(prev => ({ ...prev, [pack.name]: { status: 'done', message: result.message, percent: 100 } }));
     } else {
       setHdPackStatus(prev => ({ ...prev, [pack.name]: { status: 'error', message: result.error, percent: 0 } }));
@@ -214,7 +275,7 @@ function XIPivotTab({ config, onSettingsSaved }) {
             value={pivotConfig.rootPath || ''}
             onChange={e => setPivotConfig(prev => ({ ...prev, rootPath: e.target.value }))}
             onBlur={e => saveConfig({ rootPath: e.target.value })}
-            style={{ flex: 1 }}
+            className="xipivot-flex-1"
             placeholder={config.ashitaPath}
           />
           <button className="btn btn-ghost btn-sm" onClick={browseRoot}>Browse</button>
@@ -229,13 +290,18 @@ function XIPivotTab({ config, onSettingsSaved }) {
         ) : (
           <div className="xipivot-overlay-list">
             {pivotConfig.overlays.map((name, idx) => (
-              <div key={idx} className="xipivot-overlay-row">
-                <span className="xipivot-overlay-num">{idx + 1}</span>
+              <div key={idx} className="xipivot-overlay-row"
+                draggable
+                onDragStart={() => handleDragStart(idx)}
+                onDragOver={handleDragOver}
+                onDrop={() => handleDrop(idx)}
+              >
+                <span className="xipivot-overlay-num" title="Drag to reorder">{idx + 1}</span>
                 <span className="xipivot-overlay-name mono">{name}</span>
                 <div className="xipivot-overlay-actions">
                   <button className="btn btn-ghost btn-sm" onClick={() => moveOverlay(idx, -1)} disabled={idx === 0}>▲</button>
                   <button className="btn btn-ghost btn-sm" onClick={() => moveOverlay(idx, 1)} disabled={idx === pivotConfig.overlays.length - 1}>▼</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => removeOverlay(idx)} style={{ color: 'var(--red)' }}>✕</button>
+                  <button className="btn btn-ghost btn-sm xipivot-remove-btn" onClick={() => removeOverlay(idx)}>✕</button>
                 </div>
               </div>
             ))}
@@ -248,7 +314,7 @@ function XIPivotTab({ config, onSettingsSaved }) {
             onChange={e => setNewOverlay(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addOverlay()}
             placeholder="Overlay folder name..."
-            style={{ flex: 1 }}
+            className="xipivot-flex-1"
           />
           <button className="btn btn-ghost btn-sm" onClick={browseOverlay}>Browse</button>
           <button className="btn btn-primary btn-sm" onClick={addOverlay} disabled={!newOverlay.trim()}>Add</button>
@@ -261,18 +327,18 @@ function XIPivotTab({ config, onSettingsSaved }) {
           The memory cache keeps recently loaded DAT files in RAM so they don't need to be re-read from disk.
           This speeds up zone transitions and model loading, especially on HDDs.
           {laaStatus.patched ? (
-            <> You have the <strong style={{ color: 'var(--green)' }}>4 GB patch</strong> applied, so you have more room to work with —
+            <> You have the <strong className="xipivot-text-green">4 GB patch</strong> applied, so you have more room to work with —
             but FFXI still shares that memory with addons, plugins, and the game itself. A cache size of 512–1024 MB is a good range.</>
           ) : (
-            <> Be careful with large HD packs — FFXI is a 32-bit game limited to <strong style={{ color: 'var(--red)' }}>2 GB RAM</strong> by default,
+            <> Be careful with large HD packs — FFXI is a 32-bit game limited to <strong className="xipivot-text-red">2 GB RAM</strong> by default,
             so setting this too high can cause crashes. Apply the <strong>4 GB RAM Patch</strong> below to double the available memory.</>
           )}
         </p>
-        <div className="setting-row" style={{ borderBottom: pivotConfig.cacheEnabled ? '1px solid var(--border)' : 'none' }}>
+        <div className={`setting-row ${pivotConfig.cacheEnabled ? 'xipivot-border-bottom' : 'xipivot-no-border'}`}>
           <div className="setting-info">
             <span className="setting-name">Enable Cache</span>
             <span className="setting-hint-inline">
-              Recommended: <strong style={{ color: 'var(--green)' }}>ON</strong> if you use any HD texture packs or experience slow zone transitions.
+              Recommended: <strong className="xipivot-text-green">ON</strong> if you use any HD texture packs or experience slow zone transitions.
               When enabled, XIPivot stores DAT files it has already loaded in RAM so the game doesn't re-read them from disk every time.
               This makes repeated zone-ins, model loads, and menu opens noticeably faster — especially on mechanical hard drives (HDDs).
               If you're on an SSD with no HD packs, you can leave this off.
@@ -287,9 +353,9 @@ function XIPivotTab({ config, onSettingsSaved }) {
           <>
             <div className="cache-setting-block">
               <span className="setting-name">Cache Size (MB)</span>
-              <span className="setting-hint-inline" style={{ marginBottom: 6 }}>
+              <span className="setting-hint-inline xipivot-mb-6">
                 {laaStatus.patched
-                  ? <>With the <strong style={{ color: 'var(--green)' }}>4 GB patch</strong> applied, you can safely go higher.
+                  ? <>With the <strong className="xipivot-text-green">4 GB patch</strong> applied, you can safely go higher.
                     Recommended: <strong>512 MB</strong> for 1–2 small overlays, <strong>768–1024 MB</strong> for multiple HD packs like AshenbubsHD.
                     Don't exceed 1536 MB — the game, addons, and plugins also need room in the 4 GB address space.</>
                   : <>Without the 4 GB patch, FFXI is capped at 2 GB total RAM.
@@ -319,9 +385,9 @@ function XIPivotTab({ config, onSettingsSaved }) {
                 ))}
               </div>
             </div>
-            <div className="cache-setting-block" style={{ borderBottom: 'none' }}>
+            <div className="cache-setting-block xipivot-no-border">
               <span className="setting-name">Max Age</span>
-              <span className="setting-hint-inline" style={{ marginBottom: 6 }}>
+              <span className="setting-hint-inline xipivot-mb-6">
                 How long an unused DAT stays in the cache before it gets removed to free up RAM.
                 Recommended: <strong>10 min</strong> for most players. Lower to <strong>2–5 min</strong> if you're tight on memory,
                 or increase to <strong>30–60 min</strong> if you revisit the same zones frequently and have RAM to spare.
@@ -355,12 +421,12 @@ function XIPivotTab({ config, onSettingsSaved }) {
       <div className="panel laa-panel">
         <div className="laa-content">
           <div className="laa-info">
-            <p className="xipivot-hint" style={{ marginBottom: 8 }}>
+            <p className="xipivot-hint xipivot-mb-8">
               FFXI's <code className="mono">pol.exe</code> is a 32-bit application limited to <strong>2 GB of RAM</strong> by default.
               This patch flips a flag in the executable's header that tells 64-bit Windows to allow the process to use <strong>up to 4 GB</strong> instead.
               This is highly recommended if you use HD texture packs — more textures means more memory, and hitting the 2 GB limit causes crashes.
             </p>
-            <p className="xipivot-hint" style={{ marginBottom: 0, fontSize: 12 }}>
+            <p className="xipivot-hint xipivot-hint-small">
               The patch modifies a single byte in <code className="mono">pol.exe</code>. It's safe, reversible, and widely used by the FFXI community.
               Game updates may replace the file, so you may need to re-apply after a version update.
             </p>
@@ -385,7 +451,7 @@ function XIPivotTab({ config, onSettingsSaved }) {
               </>
             )}
             {laaStatus.error && (
-              <span className="pill pill-red" style={{ fontSize: 11 }}>{laaStatus.error}</span>
+              <span className="pill pill-red xipivot-pill-small">{laaStatus.error}</span>
             )}
           </div>
           {laaMsg.text && (
@@ -394,7 +460,7 @@ function XIPivotTab({ config, onSettingsSaved }) {
             </div>
           )}
           {polExePath && laaStatus.exists && (
-            <div className="laa-path mono" style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 6 }}>
+            <div className="xipivot-laa-path mono">
               {polExePath}
             </div>
           )}
@@ -406,8 +472,73 @@ function XIPivotTab({ config, onSettingsSaved }) {
         Click "Install" to automatically download the mod from GitHub and set it up as an XIPivot overlay.
         The files will be extracted to your DATs folder and registered in your config. Some packs are large and may take a minute to download.
       </p>
+
+      {/* Render conflict groups first */}
+      {Object.entries(CONFLICT_GROUP_LABELS).map(([groupKey, groupLabel]) => {
+        const groupPacks = HD_PACKS.filter(p => p.conflictGroup === groupKey);
+        const activePack = groupPacks.find(p => pivotConfig.overlays.includes(p.name));
+        return (
+          <div key={groupKey} className="conflict-group panel">
+            <div className="conflict-group-header">
+              <span className="conflict-group-label">{groupLabel} — choose one</span>
+              {activePack && <span className="pill pill-green xipivot-pill-tiny">Using {activePack.name}</span>}
+            </div>
+            <div className="conflict-group-cards">
+              {groupPacks.map(pack => {
+                const added = pivotConfig.overlays.includes(pack.name);
+                const ps = hdPackStatus[pack.name];
+                const isInstalling = ps?.status === 'installing';
+                return (
+                  <div key={pack.name} className={`hdpack-card-inline ${added ? 'hdpack-selected' : ''}`}>
+                    <div className="hdpack-card-body">
+                      <h3 className="hdpack-name cinzel">{pack.name}</h3>
+                      <p className="hdpack-desc">{pack.desc}</p>
+                      {pack.releaseAsset && (
+                        <div className="hdpack-resolution">
+                          <span className="hdpack-res-label">Resolution:</span>
+                          <button className={`btn btn-sm ${remapsterRes === '1024' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setRemapsterRes('1024'); updateConfig('remapsterRes', '1024'); }}>1024</button>
+                          <button className={`btn btn-sm ${remapsterRes === '2048' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setRemapsterRes('2048'); updateConfig('remapsterRes', '2048'); }}>2048</button>
+                        </div>
+                      )}
+                      <div className="hdpack-actions">
+                        <button
+                          className={`btn ${added ? 'btn-ghost' : 'btn-primary'} btn-sm`}
+                          onClick={() => installHDPack(pack)}
+                          disabled={isInstalling || (added && ps?.status === 'done')}
+                        >
+                          {isInstalling ? '◌ Downloading...' : added && ps?.status === 'done' ? '✓ Active' : added ? '↻ Reinstall' : 'Install'}
+                        </button>
+                        {pack.url && (
+                          <button className="btn btn-ghost btn-sm hdpack-link" onClick={() => api.openExternal(pack.url)}>GitHub ↗</button>
+                        )}
+                      </div>
+                    </div>
+                    {ps && (
+                      <div className="hdpack-progress-area">
+                        {ps.status === 'installing' && (
+                          <div className="hdpack-progress-row">
+                            <div className="hdpack-progress-bar">
+                              <div className="hdpack-progress-fill" style={{ width: `${ps.percent || 0}%` }} />
+                            </div>
+                            <span className="hdpack-progress-pct">{Math.round(ps.percent || 0)}%</span>
+                          </div>
+                        )}
+                        <div className={`hdpack-status-msg ${ps.status === 'error' ? 'error' : ps.status === 'done' ? 'success' : ''}`}>
+                          {ps.message}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Render non-conflicting packs in grid */}
       <div className="hdpacks-grid">
-        {HD_PACKS.map(pack => {
+        {HD_PACKS.filter(p => !p.conflictGroup).map(pack => {
           const added = pivotConfig.overlays.includes(pack.name);
           const ps = hdPackStatus[pack.name];
           const isInstalling = ps?.status === 'installing';
@@ -415,18 +546,11 @@ function XIPivotTab({ config, onSettingsSaved }) {
             <div key={pack.name} className={`panel hdpack-card ${added ? 'hdpack-installed' : ''}`}>
               <h3 className="hdpack-name cinzel">{pack.name}</h3>
               <p className="hdpack-desc">{pack.desc}</p>
-              {pack.releaseAsset && (
-                <div className="hdpack-resolution">
-                  <span className="hdpack-res-label">Resolution:</span>
-                  <button className={`btn btn-sm ${remapsterRes === '1024' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setRemapsterRes('1024')}>1024</button>
-                  <button className={`btn btn-sm ${remapsterRes === '2048' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setRemapsterRes('2048')}>2048</button>
-                </div>
-              )}
               {pack.variants && (
                 <div className="hdpack-resolution">
                   <span className="hdpack-res-label">Variant:</span>
                   {pack.variants.map(v => (
-                    <button key={v} className={`btn btn-sm ${xiviewVariant === v ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setXiviewVariant(v)}>{v}</button>
+                    <button key={v} className={`btn btn-sm ${xiviewVariant === v ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setXiviewVariant(v); updateConfig('xiviewVariant', v); }}>{v}</button>
                   ))}
                 </div>
               )}
@@ -436,22 +560,20 @@ function XIPivotTab({ config, onSettingsSaved }) {
                   onClick={() => installHDPack(pack)}
                   disabled={isInstalling || (added && ps?.status === 'done')}
                 >
-                  {isInstalling ? '◌ Downloading...' : added && ps?.status === 'done' ? '✓ Installed' : added ? '↻ Reinstall' : '⚡ Install'}
+                  {isInstalling ? '◌ Downloading...' : added && ps?.status === 'done' ? '✓ Installed' : added ? '↻ Reinstall' : 'Install'}
                 </button>
                 {pack.url && (
-                  <button
-                    className="btn btn-ghost btn-sm hdpack-link"
-                    onClick={() => api.openExternal(pack.url)}
-                  >
-                    View on GitHub ↗
-                  </button>
+                  <button className="btn btn-ghost btn-sm hdpack-link" onClick={() => api.openExternal(pack.url)}>GitHub ↗</button>
                 )}
               </div>
               {ps && (
                 <div className="hdpack-progress-area">
                   {ps.status === 'installing' && (
-                    <div className="hdpack-progress-bar">
-                      <div className="hdpack-progress-fill" style={{ width: `${ps.percent || 0}%` }} />
+                    <div className="hdpack-progress-row">
+                      <div className="hdpack-progress-bar">
+                        <div className="hdpack-progress-fill" style={{ width: `${ps.percent || 0}%` }} />
+                      </div>
+                      <span className="hdpack-progress-pct">{Math.round(ps.percent || 0)}%</span>
                     </div>
                   )}
                   <div className={`hdpack-status-msg ${ps.status === 'error' ? 'error' : ps.status === 'done' ? 'success' : ''}`}>
@@ -464,15 +586,6 @@ function XIPivotTab({ config, onSettingsSaved }) {
         })}
       </div>
 
-      <div className="section-header">XIPivot Profile Setup</div>
-      <div className="panel">
-        <p className="xipivot-hint">XIPivot is a <strong>polplugin</strong>, not a regular addon or plugin. Add these lines to your Ashita profile INI:</p>
-        <pre className="xipivot-code mono">{`[ashita.polplugins]
-pivot`}</pre>
-        <p className="xipivot-hint" style={{ marginTop: 12 }}>
-          This tells Ashita to load the pivot polplugin at POL startup. The plugin reads its config from <code className="mono">config/pivot/pivot.ini</code>.
-        </p>
-      </div>
     </div>
   );
 }
