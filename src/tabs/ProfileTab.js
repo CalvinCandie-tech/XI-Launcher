@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './ProfileTab.css';
 import { DEFAULT_PROFILE_INI } from '../utils/profileTemplates';
+import ScriptEditorTab from './ScriptEditorTab';
+import Modal from '../components/Modal';
 
 const api = window.xiAPI;
 
@@ -21,6 +23,7 @@ function ProfileTab({ config, updateConfig }) {
   const [buildLog, setBuildLog] = useState('');
   const [downloadStatus, setDownloadStatus] = useState('idle');
   const [downloadProgress, setDownloadProgress] = useState({ percent: 0, detail: '' });
+  const [showScriptEditor, setShowScriptEditor] = useState(false);
 
   useEffect(() => {
     if (!api?.onXiloaderDownloadProgress) return;
@@ -121,6 +124,26 @@ function ProfileTab({ config, updateConfig }) {
     }
   };
 
+  const cloneProfile = async (name) => {
+    const result = await api.readProfile(config.ashitaPath, name);
+    if (!result.exists) return;
+    // Find a unique name
+    let cloneName = name + ' (Copy)';
+    let counter = 2;
+    while (profiles.includes(cloneName)) {
+      cloneName = `${name} (Copy ${counter})`;
+      counter++;
+    }
+    // Replace the profile name in the INI content
+    const content = result.content.replace(
+      /^(\s*name\s*=\s*).*$/im,
+      `$1${cloneName}`
+    );
+    await api.saveProfile(config.ashitaPath, cloneName, content);
+    await loadProfiles();
+    selectProfile(cloneName);
+  };
+
   const openProfileFolder = () => {
     api.openFolder(config.ashitaPath + '\\config\\ashita');
   };
@@ -130,7 +153,7 @@ function ProfileTab({ config, updateConfig }) {
     const result = await api.exportProfile(config.ashitaPath, name);
     if (result.success) {
       setBuildLog(result.message);
-      setTimeout(() => setBuildLog(''), 4000);
+      setTimeout(() => setBuildLog(''), 8000);
     } else if (!result.cancelled) {
       setBuildLog(`Export failed: ${result.error}`);
     }
@@ -143,7 +166,7 @@ function ProfileTab({ config, updateConfig }) {
       setBuildLog(result.message);
       await loadProfiles();
       selectProfile(result.name);
-      setTimeout(() => setBuildLog(''), 4000);
+      setTimeout(() => setBuildLog(''), 8000);
     } else if (!result.cancelled) {
       setBuildLog(`Import failed: ${result.error}`);
     }
@@ -296,7 +319,7 @@ function ProfileTab({ config, updateConfig }) {
         <div className="profiles-list panel">
           <div className="profiles-list-header">
             <span className="mono">{profiles.length} profile{profiles.length !== 1 ? 's' : ''}</span>
-            <div style={{ display: 'flex', gap: 4 }}>
+            <div className="profile-list-actions">
               <button className="btn btn-ghost btn-sm" onClick={importProfile} title="Import a .xiprofile file">↓ Import</button>
               <button className="btn btn-ghost btn-sm" onClick={loadProfiles}>↻ Refresh</button>
             </div>
@@ -315,7 +338,7 @@ function ProfileTab({ config, updateConfig }) {
                 {name}
               </span>
               {config.activeProfile === name ? (
-                <span className="pill pill-gold" style={{ fontSize: 10 }}>Active</span>
+                <span className="pill pill-gold profile-active-pill">Active</span>
               ) : selectedProfile === name ? (
                 <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); activateProfile(name); }}>
                   Set Active
@@ -357,8 +380,9 @@ function ProfileTab({ config, updateConfig }) {
           {selectedProfile ? (
             <>
               <div className="profile-editor-header">
-                <span className="mono" style={{ color: 'var(--gold)' }}>{selectedProfile}.ini</span>
+                <span className="mono profile-editor-filename">{selectedProfile}.ini</span>
                 <div className="profile-editor-actions">
+                  <button className="btn btn-ghost btn-sm" onClick={() => cloneProfile(selectedProfile)} title="Clone this profile">⧉ Clone</button>
                   <button className="btn btn-ghost btn-sm" onClick={() => exportProfile(selectedProfile)} title="Export as .xiprofile">↑ Export</button>
                   <button className="btn btn-ghost btn-sm" onClick={openProfileFolder}>Open Folder</button>
                   {isEditing ? (
@@ -454,14 +478,14 @@ function ProfileTab({ config, updateConfig }) {
               />
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+          <div className="profile-hairpin-row">
             <button
               className={`btn btn-sm ${config.hairpin ? 'btn-primary' : 'btn-ghost'}`}
               onClick={() => updateConfig('hairpin', !config.hairpin)}
             >
               {config.hairpin ? '✓ Hairpin Enabled' : 'Hairpin Off'}
             </button>
-            <span className="field-hint" style={{ margin: 0 }}>Use --hairpin flag for NAT loopback connections</span>
+            <span className="field-hint profile-hint-inline">Use --hairpin flag for NAT loopback connections</span>
           </div>
           <div className="credential-warning">
             🔒 Credentials are stored locally on this device only. They are not sent anywhere except to the server you connect to.
@@ -478,8 +502,7 @@ function ProfileTab({ config, updateConfig }) {
 
         {config.activeProfile && (
           <button
-            className="btn btn-primary"
-            style={{ width: '100%', marginTop: 12 }}
+            className="btn btn-primary profile-apply-btn"
             onClick={async () => {
               if (!api || !config.activeProfile) return;
               const result = await api.readProfile(config.ashitaPath, config.activeProfile);
@@ -507,7 +530,7 @@ function ProfileTab({ config, updateConfig }) {
                 setProfileContent(refreshed.content || '');
               }
               setBuildLog(`Profile "${config.activeProfile}" updated with server settings`);
-              setTimeout(() => setBuildLog(''), 4000);
+              setTimeout(() => setBuildLog(''), 8000);
             }}
           >
             Apply to Profile: {config.activeProfile}
@@ -517,22 +540,14 @@ function ProfileTab({ config, updateConfig }) {
 
       <div className="section-header">Installation Paths</div>
       <div className="panel">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <p className="profile-hint" style={{ margin: 0 }}>Tell the launcher where your game files live. Each path is checked automatically — a green "Found" badge means you're set.</p>
-          <button className="btn btn-primary btn-sm" onClick={autoDetectPaths} disabled={autoDetecting} style={{ flexShrink: 0, marginLeft: 16 }}>
+        <div className="profile-paths-header">
+          <p className="profile-hint profile-hint-inline">Tell the launcher where your game files live. Each path is checked automatically — a green "Found" badge means you're set.</p>
+          <button className="btn btn-primary btn-sm profile-autodetect-btn" onClick={autoDetectPaths} disabled={autoDetecting}>
             {autoDetecting ? '◌ Scanning...' : '⟳ Auto-Detect'}
           </button>
         </div>
         {autoDetectMsg && (
-          <div style={{
-            padding: '8px 14px',
-            borderRadius: 6,
-            marginBottom: 12,
-            fontSize: 13,
-            background: autoDetectMsg.success ? 'rgba(72, 184, 104, 0.1)' : 'rgba(200, 146, 42, 0.1)',
-            border: `1px solid ${autoDetectMsg.success ? 'rgba(72, 184, 104, 0.2)' : 'rgba(200, 146, 42, 0.2)'}`,
-            color: autoDetectMsg.success ? 'var(--green)' : 'var(--gold)'
-          }}>
+          <div className={`profile-autodetect-msg ${autoDetectMsg.success ? 'success' : 'warning'}`}>
             {autoDetectMsg.text}
           </div>
         )}
@@ -575,7 +590,7 @@ function ProfileTab({ config, updateConfig }) {
         </div>
         <div className="xiloader-build-actions">
           <div className="xiloader-build-dest">
-            <label>Install to:</label>
+            <span className="xiloader-build-dest-label">Install to:</span>
             <span className="mono">{config.xiloaderPath || 'C:\\xiloader'}</span>
           </div>
           <div className="xiloader-build-buttons">
@@ -604,11 +619,11 @@ function ProfileTab({ config, updateConfig }) {
           </div>
         </div>
         {downloadStatus === 'downloading' && (
-          <div style={{ marginTop: 8 }}>
-            <div className="home-progress-bar" style={{ marginBottom: 4, height: 5, background: 'var(--bg-deepest)', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ width: `${downloadProgress.percent}%`, height: '100%', background: 'linear-gradient(90deg, var(--teal), var(--gold))', borderRadius: 3, transition: 'width 0.3s' }} />
+          <div className="profile-download-progress">
+            <div className="profile-progress-bar">
+              <div className="profile-progress-fill" style={{ width: `${downloadProgress.percent}%` }} />
             </div>
-            <span style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: "'Share Tech Mono', monospace" }}>{downloadProgress.detail}</span>
+            <span className="profile-progress-detail mono">{downloadProgress.detail}</span>
           </div>
         )}
         {buildLog && (
@@ -618,9 +633,30 @@ function ProfileTab({ config, updateConfig }) {
         )}
       </div>
 
+      {/* Script Editor */}
+      {config.activeProfile && (
+        <>
+          <div className="section-header">Startup Script</div>
+          <div
+            className="panel profile-script-toggle"
+            onClick={() => setShowScriptEditor(o => !o)}
+          >
+            <div className="profile-script-toggle-left">
+              <span className="profile-script-icon">✎</span>
+              <div>
+                <div className="profile-script-title">Script Editor</div>
+                <div className="profile-script-desc">Edit keybinds, aliases, addon load order, and startup commands</div>
+              </div>
+            </div>
+            <span className="profile-script-chevron">{showScriptEditor ? '▲' : '▼'}</span>
+          </div>
+          {showScriptEditor && <ScriptEditorTab config={config} />}
+        </>
+      )}
+
       {/* Delete confirmation dialog */}
       {confirmDelete && (
-        <div className="profile-delete-overlay" onClick={() => setConfirmDelete(null)}>
+        <Modal onClose={() => setConfirmDelete(null)}>
           <div className="profile-delete-dialog" onClick={e => e.stopPropagation()}>
             <h3>Delete Profile</h3>
             <p>
@@ -637,7 +673,7 @@ function ProfileTab({ config, updateConfig }) {
               <button className="btn btn-danger" onClick={() => deleteProfile(confirmDelete)}>Delete Profile</button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './LaunchBar.css';
 
 function LaunchBar({ config, isLaunching, launchLog, onLaunch }) {
-  const [showXiloader, setShowXiloader] = useState(false);
+  const [showXiloader, setShowXiloader] = useState(() => !!config?.useXiloader);
 
   const lastTime = config?.lastLaunched
     ? new Date(config.lastLaunched).toLocaleString()

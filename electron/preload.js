@@ -112,8 +112,40 @@ contextBridge.exposeInMainWorld('xiAPI', {
   // Addon update check
   checkAddonUpdates: (addonList) => ipcRenderer.invoke('check-addon-updates', addonList),
 
+  // System tray
+  setMinimizeToTray: (enabled) => ipcRenderer.invoke('set-minimize-to-tray', enabled),
+  getMinimizeToTray: () => ipcRenderer.invoke('get-minimize-to-tray'),
+
+  // Server status
+  checkServerStatus: (host, port) => ipcRenderer.invoke('check-server-status', host, port),
+
+  // Backup / Restore
+  backupAshitaConfig: () => ipcRenderer.invoke('backup-ashita-config'),
+  restoreAshitaConfig: () => ipcRenderer.invoke('restore-ashita-config'),
+
+  // dgVoodoo2
+  downloadDgVoodoo: () => ipcRenderer.invoke('download-dgvoodoo'),
+  getDgVoodooPath: () => ipcRenderer.invoke('get-dgvoodoo-path'),
+  onDgVoodooProgress: (callback) => {
+    const handler = (_, percent, detail) => callback(percent, detail);
+    ipcRenderer.on('dgvoodoo-download-progress', handler);
+    return () => ipcRenderer.removeListener('dgvoodoo-download-progress', handler);
+  },
+  checkDgVoodoo: (ffxiPath) => ipcRenderer.invoke('check-dgvoodoo', ffxiPath),
+  readDgVoodooConf: (ffxiPath) => ipcRenderer.invoke('read-dgvoodoo-conf', ffxiPath),
+  copyDgVoodooFiles: (sourcePath, ffxiPath) => ipcRenderer.invoke('copy-dgvoodoo-files', sourcePath, ffxiPath),
+  writeDgVoodooConf: (ffxiPath, settings) => ipcRenderer.invoke('write-dgvoodoo-conf', ffxiPath, settings),
+  launchDgVoodooCpl: (ffxiPath) => ipcRenderer.invoke('launch-dgvoodoo-cpl', ffxiPath),
+  openDefenderSettings: () => ipcRenderer.invoke('open-defender-settings'),
+  addDefenderExclusion: (folderPath) => ipcRenderer.invoke('add-defender-exclusion', folderPath),
+  checkDefenderExclusion: (folderPath) => ipcRenderer.invoke('check-defender-exclusion', folderPath),
+  removeDgVoodoo: (ffxiPath) => ipcRenderer.invoke('remove-dgvoodoo', ffxiPath),
+
   // Community addon install
-  installAddon: (ashitaPath, addonName, repo, subdir) => ipcRenderer.invoke('install-addon', ashitaPath, addonName, repo, subdir),
+  getPlugins: (ashitaPath) => ipcRenderer.invoke('get-plugins', ashitaPath),
+  installAddon: (ashitaPath, addonName, repo, subdir, useRelease, releaseFolder, isPlugin) => ipcRenderer.invoke('install-addon', ashitaPath, addonName, repo, subdir, useRelease, releaseFolder, isPlugin),
+  uninstallAddon: (ashitaPath, addonName, isPlugin) => ipcRenderer.invoke('uninstall-addon', ashitaPath, addonName, isPlugin),
+  copyDir: (src, dest) => ipcRenderer.invoke('copy-dir', src, dest),
   onAddonProgress: (callback) => {
     const handler = (_, addonName, percent, detail) => callback(addonName, percent, detail);
     ipcRenderer.on('addon-progress', handler);

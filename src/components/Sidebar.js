@@ -7,13 +7,21 @@ const tabs = [
   { id: 'home', label: 'Home', icon: null },
   { id: 'profiles', label: 'Profiles', icon: '⚔' },
   { id: 'addons', label: 'Addons', icon: '◈' },
+  { id: 'plugins', label: 'Plugins', icon: '⬡' },
   { id: 'xipivot', label: 'XIPivot', icon: '◎' },
+  { id: 'dgvoodoo', label: 'dgVoodoo', icon: '◆' },
   { id: 'settings', label: 'Settings', icon: '⚙' }
 ];
 
 function Sidebar({ activeTab, onTabChange, onToggleMusic, musicPlaying, musicVolume, onVolumeChange, currentTrackName, onSkipTrack, musicShuffle, onToggleShuffle, musicLoop, onToggleLoop }) {
   const showMusic = activeTab === 'home';
   const clickTimer = React.useRef(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (clickTimer.current) clearTimeout(clickTimer.current);
+    };
+  }, []);
 
   const handleMusicClick = () => {
     if (clickTimer.current) return;
@@ -51,8 +59,9 @@ function Sidebar({ activeTab, onTabChange, onToggleMusic, musicPlaying, musicVol
                     onClick={handleMusicClick}
                     onDoubleClick={handleMusicDoubleClick}
                     title={musicPlaying ? 'Pause music (double-click to open folder)' : 'Play music (double-click to open folder)'}
+                    aria-label={musicPlaying ? 'Pause music' : 'Play music'}
                   >
-                    <img className="topnav-music-icon" src="./music-note.svg" alt="Music" />
+                    <img className="topnav-music-icon" src="./music-note.svg" alt="" />
                     {musicPlaying && (
                       <div className="topnav-floating-notes">
                         <span className="topnav-float-note n1">♪</span>
@@ -65,20 +74,20 @@ function Sidebar({ activeTab, onTabChange, onToggleMusic, musicPlaying, musicVol
                   {musicPlaying && (
                     <>
                       <div className="topnav-music-controls">
-                        <button className="topnav-music-ctrl" onClick={() => onSkipTrack('prev')} title="Previous track">
-                          <img src="./icon-prev.svg" alt="Prev" className="topnav-ctrl-icon" />
+                        <button className="topnav-music-ctrl" onClick={() => onSkipTrack('prev')} title="Previous track" aria-label="Previous track">
+                          <img src="./icon-prev.svg" alt="" className="topnav-ctrl-icon" />
                         </button>
-                        <button className="topnav-music-ctrl" onClick={onToggleMusic} title="Pause">
-                          <img src="./icon-pause.svg" alt="Pause" className="topnav-ctrl-icon" />
+                        <button className="topnav-music-ctrl" onClick={onToggleMusic} title="Pause" aria-label="Pause">
+                          <img src="./icon-pause.svg" alt="" className="topnav-ctrl-icon" />
                         </button>
-                        <button className="topnav-music-ctrl" onClick={() => onSkipTrack('next')} title="Next track">
-                          <img src="./icon-next.svg" alt="Next" className="topnav-ctrl-icon" />
+                        <button className="topnav-music-ctrl" onClick={() => onSkipTrack('next')} title="Next track" aria-label="Next track">
+                          <img src="./icon-next.svg" alt="" className="topnav-ctrl-icon" />
                         </button>
-                        <button className={`topnav-music-ctrl ${musicShuffle ? 'active' : ''}`} onClick={onToggleShuffle} title="Shuffle">
-                          <img src="./icon-shuffle.svg" alt="Shuffle" className="topnav-ctrl-icon" />
+                        <button className={`topnav-music-ctrl ${musicShuffle ? 'active' : ''}`} onClick={onToggleShuffle} title="Shuffle" aria-label="Toggle shuffle">
+                          <img src="./icon-shuffle.svg" alt="" className="topnav-ctrl-icon" />
                         </button>
-                        <button className={`topnav-music-ctrl ${musicLoop !== 'none' ? 'active' : ''}`} onClick={onToggleLoop} title={`Loop: ${musicLoop}`}>
-                          <img src={musicLoop === 'one' ? './icon-loop-one.svg' : './icon-loop.svg'} alt="Loop" className="topnav-ctrl-icon" />
+                        <button className={`topnav-music-ctrl ${musicLoop !== 'none' ? 'active' : ''}`} onClick={onToggleLoop} title={`Loop: ${musicLoop}`} aria-label={`Loop mode: ${musicLoop}`}>
+                          <img src={musicLoop === 'one' ? './icon-loop-one.svg' : './icon-loop.svg'} alt="" className="topnav-ctrl-icon" />
                         </button>
                       </div>
                       {currentTrackName && (
@@ -111,11 +120,13 @@ function Sidebar({ activeTab, onTabChange, onToggleMusic, musicPlaying, musicVol
         </React.Fragment>
       ))}
       <button
-        className="topnav-tab topnav-tab-bgwiki"
+        className="topnav-tab topnav-tab-bgwiki topnav-tab-external"
         onClick={() => api && api.openExternal('https://www.bg-wiki.com/ffxi/Main_Page')}
+        aria-label="Open BG-Wiki in browser"
       >
-        <img className="topnav-bgwiki-icon" src="./bg-wiki.svg" alt="BG-Wiki" />
+        <img className="topnav-bgwiki-icon" src="./bg-wiki.svg" alt="" />
         <span className="topnav-tab-label">BG-Wiki</span>
+        <span className="topnav-external-icon" aria-hidden="true">↗</span>
       </button>
     </nav>
   );

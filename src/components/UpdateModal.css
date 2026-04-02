@@ -25,7 +25,7 @@
 }
 
 .update-header h3 {
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   color: var(--gold);
   font-size: 16px;
   margin: 0 0 4px;
@@ -63,7 +63,7 @@
 }
 
 .update-item-name {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--text-primary);
 }

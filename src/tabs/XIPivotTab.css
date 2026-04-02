@@ -81,6 +81,7 @@
   gap: 12px;
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
+  cursor: grab;
 }
 .xipivot-overlay-row:last-child {
   border-bottom: none;
@@ -93,7 +94,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: 13px;
   font-weight: 700;
   color: var(--gold);
@@ -118,6 +119,58 @@
   gap: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+}
+
+/* Conflict group — pick one */
+.conflict-group {
+  margin-bottom: 16px;
+}
+.conflict-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.conflict-group-label {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.conflict-group-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
+}
+.hdpack-card-inline {
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-deepest-alpha);
+  transition: all 0.2s;
+}
+.hdpack-card-inline:hover {
+  border-color: var(--border-bright);
+}
+.hdpack-card-inline.hdpack-selected {
+  border-color: transparent;
+  background: var(--active-bg);
+  box-shadow: var(--active-glow);
+  position: relative;
+}
+.hdpack-card-inline.hdpack-selected::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 9px;
+  padding: 2px;
+  background: linear-gradient(135deg, var(--teal), var(--gold));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 .hdpacks-grid {
@@ -199,8 +252,8 @@
 }
 .cache-option-btn.active {
   border-color: transparent;
-  background: linear-gradient(135deg, rgba(58, 184, 200, 0.1), rgba(200, 146, 42, 0.1));
-  box-shadow: 0 0 8px rgba(58, 184, 200, 0.1), 0 0 8px rgba(200, 146, 42, 0.1);
+  background: var(--active-bg);
+  box-shadow: var(--active-glow);
   position: relative;
 }
 .cache-option-btn.active::before {
@@ -227,8 +280,7 @@
 
 .cache-option-tag {
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
   color: var(--text-dim);
 }
 .cache-option-btn.active .cache-option-tag {
@@ -284,13 +336,28 @@
   margin-top: 10px;
 }
 
+.hdpack-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
 .hdpack-progress-bar {
   height: 6px;
   background: var(--bg-deepest);
   border-radius: 3px;
   overflow: hidden;
-  margin-bottom: 6px;
   border: 1px solid var(--border);
+  flex: 1;
+}
+
+.hdpack-progress-pct {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--teal);
+  min-width: 36px;
+  text-align: right;
 }
 
 .hdpack-progress-fill {
@@ -303,7 +370,7 @@
 .hdpack-status-msg {
   padding: 8px 10px;
   border-radius: 5px;
-  font-family: 'Share Tech Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.4;
   background: var(--bg-deepest);
@@ -331,4 +398,57 @@
   line-height: 1.6;
   overflow-x: auto;
   white-space: pre;
+}
+
+/* Extracted inline styles */
+
+.xipivot-flex-1 {
+  flex: 1;
+}
+
+.xipivot-remove-btn {
+  color: var(--red);
+}
+
+.xipivot-text-green {
+  color: var(--green);
+}
+
+.xipivot-text-red {
+  color: var(--red);
+}
+
+.xipivot-border-bottom {
+  border-bottom: 1px solid var(--border);
+}
+
+.xipivot-no-border {
+  border-bottom: none;
+}
+
+.xipivot-mb-6 {
+  margin-bottom: 6px;
+}
+
+.xipivot-mb-8 {
+  margin-bottom: 8px;
+}
+
+.xipivot-hint-small {
+  margin-bottom: 0;
+  font-size: 12px;
+}
+
+.xipivot-pill-small {
+  font-size: 11px;
+}
+
+.xipivot-pill-tiny {
+  font-size: 10px;
+}
+
+.xipivot-laa-path {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 6px;
 }

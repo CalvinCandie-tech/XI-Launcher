@@ -1,0 +1,160 @@
+.log-viewer-tab {
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 40px;
+}
+
+.log-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--text-dim);
+}
+
+/* Toolbar */
+.log-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.log-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.log-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.log-select {
+  min-width: 220px;
+}
+
+.log-search {
+  width: 180px;
+  font-size: 13px;
+}
+
+.log-level-filters {
+  display: flex;
+  gap: 2px;
+}
+.log-level-btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-deepest);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.log-level-btn:hover {
+  border-color: var(--border-bright);
+  color: var(--text-primary);
+}
+.log-level-btn.active {
+  background: rgba(58, 184, 200, 0.1);
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+/* Stats */
+.log-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 0 4px;
+}
+.log-autoscroll {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.log-autoscroll input {
+  cursor: pointer;
+}
+
+/* Log output */
+.log-output {
+  flex: 1;
+  min-height: 200px;
+  max-height: 45vh;
+  overflow-y: auto;
+  padding: 8px !important;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  background: var(--bg-deepest);
+}
+
+.log-empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-dim);
+}
+
+.log-line {
+  display: flex;
+  gap: 8px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  transition: background 0.1s;
+}
+.log-line:hover {
+  background: var(--bg-hover);
+}
+
+.log-time {
+  color: var(--text-dim);
+  flex-shrink: 0;
+  width: 160px;
+  font-size: 11px;
+}
+
+.log-level {
+  flex-shrink: 0;
+  width: 60px;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.log-source {
+  flex-shrink: 0;
+  width: 240px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  text-align: right;
+}
+
+.log-message {
+  flex: 1;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Footer */
+.log-footer {
+  display: flex;
+  gap: 8px;
+}

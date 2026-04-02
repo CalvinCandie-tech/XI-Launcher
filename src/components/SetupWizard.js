@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './SetupWizard.css';
 import { DEFAULT_PROFILE_INI } from '../utils/profileTemplates';
+import Modal from './Modal';
 
 const api = window.xiAPI;
 
@@ -101,7 +102,8 @@ function SetupWizard({ config, updateConfig, onComplete }) {
   const createProfile = async () => {
     if (!profileName.trim()) return;
     const name = profileName.trim();
-    await api.saveProfile(ashitaPath, name, DEFAULT_PROFILE_INI(name, profileType, serverHost, serverPort, config.xiloaderPath || (ashitaPath + '\\xiloader'), config.hairpin, config.loginUser, config.loginPass));
+    const xiloaderPath = config.xiloaderPath || (ashitaPath + '\\xiloader');
+    await api.saveProfile(ashitaPath, name, DEFAULT_PROFILE_INI(name, profileType, serverHost, serverPort, xiloaderPath, config.hairpin, config.loginUser, config.loginPass));
     updateConfig('activeProfile', name);
   };
 
@@ -114,9 +116,11 @@ function SetupWizard({ config, updateConfig, onComplete }) {
 
   const currentStep = STEPS[step];
 
+  const handleSkip = () => { updateConfig('setupComplete', true); onComplete(); };
+
   return (
-    <div className="wizard-overlay">
-      <div className="wizard-dialog">
+    <Modal onClose={handleSkip} className="wizard-overlay" zIndex={200}>
+      <div className="wizard-dialog" onClick={e => e.stopPropagation()}>
         <div className="wizard-header">
           <img src="./crystal.svg" alt="" />
           <h2>XI Launcher Setup</h2>
@@ -140,7 +144,7 @@ function SetupWizard({ config, updateConfig, onComplete }) {
               <p className="wizard-step-desc">
                 You'll need:
               </p>
-              <ul style={{ fontSize: 14, color: 'var(--text-secondary)', paddingLeft: 20, lineHeight: 2 }}>
+              <ul className="wizard-requirements-list">
                 <li><strong>FFXI installed</strong> — the base game client</li>
                 <li><strong>Ashita v4</strong> — the addon framework (we can install this for you)</li>
                 <li>A <strong>server address</strong> if connecting to a private server</li>
@@ -159,21 +163,21 @@ function SetupWizard({ config, updateConfig, onComplete }) {
                 <div className="wizard-field-row">
                   <input type="text" value={ashitaPath} onChange={e => setAshitaPath(e.target.value)} placeholder="C:\Ashita-v4" />
                   <button className="btn btn-ghost btn-sm" onClick={() => browse(setAshitaPath)}>Browse</button>
-                  <span className={`pill ${ashitaFound ? 'pill-green' : 'pill-red'}`} style={{ fontSize: 10 }}>
+                  <span className={`pill ${ashitaFound ? 'pill-green' : 'pill-red'} wizard-status-pill`}>
                     {ashitaFound ? 'Found' : 'Not Found'}
                   </span>
                 </div>
                 {!ashitaFound && !installing && (
-                  <button className="btn btn-primary btn-sm" onClick={installAshita} style={{ marginTop: 8 }}>
+                  <button className="btn btn-primary btn-sm wizard-action-btn" onClick={installAshita}>
                     ↓ Install Ashita v4 Automatically
                   </button>
                 )}
                 {installing && (
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{ height: 5, background: 'var(--bg-deepest)', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
-                      <div style={{ width: `${installProgress.percent}%`, height: '100%', background: 'linear-gradient(90deg, var(--teal), var(--gold))', borderRadius: 3, transition: 'width 0.3s' }} />
+                  <div className="wizard-progress-wrapper">
+                    <div className="wizard-progress-track">
+                      <div className="wizard-progress-bar" style={{ width: `${installProgress.percent}%` }} />
                     </div>
-                    <span style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: "'Share Tech Mono', monospace" }}>{installProgress.detail}</span>
+                    <span className="wizard-progress-detail">{installProgress.detail}</span>
                   </div>
                 )}
               </div>
@@ -184,14 +188,14 @@ function SetupWizard({ config, updateConfig, onComplete }) {
                 <div className="wizard-field-row">
                   <input type="text" value={ffxiPath} onChange={e => setFfxiPath(e.target.value)} placeholder="C:\Program Files (x86)\PlayOnline\SquareEnix\FINAL FANTASY XI" />
                   <button className="btn btn-ghost btn-sm" onClick={() => browse(setFfxiPath)}>Browse</button>
-                  <span className={`pill ${ffxiFound ? 'pill-green' : 'pill-red'}`} style={{ fontSize: 10 }}>
+                  <span className={`pill ${ffxiFound ? 'pill-green' : 'pill-red'} wizard-status-pill`}>
                     {ffxiFound ? 'Found' : 'Not Found'}
                   </span>
                 </div>
                 {!ffxiFound && (
-                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.6 }}>
+                  <p className="wizard-install-hint">
                     Don't have FFXI installed? You can download the official client from the{' '}
-                    <span style={{ color: 'var(--teal)', cursor: 'pointer' }} onClick={() => api.openExternal('https://www.playonline.com/ff11us/download/media/install_win.html')}>
+                    <span className="wizard-link" onClick={() => api.openExternal('https://www.playonline.com/ff11us/download/media/install_win.html')}>
                       PlayOnline website
                     </span>
                     . If you're joining a private server, check your server's website — many provide a custom installer.
@@ -213,7 +217,7 @@ function SetupWizard({ config, updateConfig, onComplete }) {
 
               <div className="wizard-field">
                 <label>Server Type</label>
-                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <div className="wizard-toggle-group">
                   <button className={`btn btn-sm ${profileType === 'private' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setProfileType('private')}>
                     Private Server
                   </button>
@@ -237,21 +241,21 @@ function SetupWizard({ config, updateConfig, onComplete }) {
                     <label>xiloader</label>
                     <span className="field-hint">Required for private servers — connects you directly, bypassing PlayOnline</span>
                     {xiloaderFound ? (
-                      <span className="pill pill-green" style={{ fontSize: 10, marginTop: 4, display: 'inline-block' }}>xiloader.exe found</span>
+                      <span className="pill pill-green wizard-status-pill wizard-status-pill-block">xiloader.exe found</span>
                     ) : !xiloaderDownloading ? (
-                      <button className="btn btn-primary btn-sm" onClick={downloadXiloader} style={{ marginTop: 8 }}>
+                      <button className="btn btn-primary btn-sm wizard-action-btn" onClick={downloadXiloader}>
                         ↓ Download xiloader
                       </button>
                     ) : (
-                      <div style={{ marginTop: 8 }}>
-                        <div style={{ height: 5, background: 'var(--bg-deepest)', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
-                          <div style={{ width: `${xiloaderProgress.percent}%`, height: '100%', background: 'linear-gradient(90deg, var(--teal), var(--gold))', borderRadius: 3, transition: 'width 0.3s' }} />
+                      <div className="wizard-progress-wrapper">
+                        <div className="wizard-progress-track">
+                          <div className="wizard-progress-bar" style={{ width: `${xiloaderProgress.percent}%` }} />
                         </div>
-                        <span style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: "'Share Tech Mono', monospace" }}>{xiloaderProgress.detail}</span>
+                        <span className="wizard-progress-detail">{xiloaderProgress.detail}</span>
                       </div>
                     )}
                     {xiloaderMsg && (
-                      <p style={{ fontSize: 12, marginTop: 6, color: xiloaderFound ? 'var(--green)' : 'var(--red)' }}>{xiloaderMsg}</p>
+                      <p className={`wizard-status-msg ${xiloaderFound ? 'wizard-status-msg-success' : 'wizard-status-msg-error'}`}>{xiloaderMsg}</p>
                     )}
                   </div>
                 </>
@@ -263,14 +267,14 @@ function SetupWizard({ config, updateConfig, onComplete }) {
             <div className="wizard-success">
               <h3>You're All Set!</h3>
               <p>Your launcher is configured and ready to go. Click "Finish" to start using XI Launcher.</p>
-              <div style={{ marginTop: 16, textAlign: 'left', padding: '12px 16px', background: 'var(--bg-deepest)', borderRadius: 8, fontSize: 13 }}>
-                <div style={{ color: 'var(--text-dim)', marginBottom: 8 }}>Summary:</div>
-                {ashitaFound && <div style={{ color: 'var(--green)' }}>✓ Ashita v4 found</div>}
-                {ffxiFound && <div style={{ color: 'var(--green)' }}>✓ FFXI client found</div>}
-                {profileName && <div style={{ color: 'var(--green)' }}>✓ Profile: {profileName}</div>}
-                {profileType === 'private' && serverHost && <div style={{ color: 'var(--teal)' }}>→ Server: {serverHost}{serverPort ? `:${serverPort}` : ''}</div>}
-                {profileType === 'private' && xiloaderFound && <div style={{ color: 'var(--green)' }}>✓ xiloader ready</div>}
-                {profileType === 'private' && !xiloaderFound && <div style={{ color: 'var(--text-dim)' }}>⚠ xiloader not downloaded — you can get it later from the Profiles tab</div>}
+              <div className="wizard-summary-panel">
+                <div className="wizard-summary-label">Summary:</div>
+                {ashitaFound && <div className="wizard-summary-ok">✓ Ashita v4 found</div>}
+                {ffxiFound && <div className="wizard-summary-ok">✓ FFXI client found</div>}
+                {profileName && <div className="wizard-summary-ok">✓ Profile: {profileName}</div>}
+                {profileType === 'private' && serverHost && <div className="wizard-summary-info">→ Server: {serverHost}{serverPort ? `:${serverPort}` : ''}</div>}
+                {profileType === 'private' && xiloaderFound && <div className="wizard-summary-ok">✓ xiloader ready</div>}
+                {profileType === 'private' && !xiloaderFound && <div className="wizard-summary-warn">⚠ xiloader not downloaded — you can get it later from the Profiles tab</div>}
               </div>
             </div>
           )}
@@ -283,7 +287,7 @@ function SetupWizard({ config, updateConfig, onComplete }) {
             )}
           </div>
           <div className="wizard-footer-right">
-            <button className="btn btn-ghost" onClick={() => { updateConfig('setupComplete', true); onComplete(); }}>
+            <button className="btn btn-ghost" onClick={handleSkip}>
               Skip Setup
             </button>
             {step < STEPS.length - 1 ? (
@@ -298,7 +302,7 @@ function SetupWizard({ config, updateConfig, onComplete }) {
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 

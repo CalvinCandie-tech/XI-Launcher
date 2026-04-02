@@ -5,9 +5,12 @@
   justify-content: space-between;
   background: linear-gradient(180deg, #0e1118 0%, var(--bg-deep) 100%);
   -webkit-app-region: drag;
-  position: relative;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
   flex-shrink: 0;
-  z-index: 100;
+  z-index: var(--z-titlebar);
 }
 
 .titlebar-accent {
@@ -32,13 +35,25 @@
 }
 
 .titlebar-title {
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.25em;
   background: linear-gradient(135deg, var(--teal), var(--gold));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+.titlebar-version {
+  font-size: 13px;
+  color: var(--gold);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  margin-left: -4px;
+}
+
+.titlebar-center {
+  flex: 1;
 }
 
 .titlebar-controls {
