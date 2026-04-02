@@ -274,7 +274,8 @@ const GAMEPAD_CONFIG_ROWS = [
 // Directional control groups for sidebar expansion panels
 const DIR_GROUPS = {
   Movement: { indices: [13, 14, 15, 16], labels: ['Up', 'Down', 'Left', 'Right'] },
-  Camera: { indices: [11, 17, 18, 19, 20, 21, 22, 23], labels: ['Camera (hold)', 'Up', 'Down', 'Left', 'Right', 'Zoom In', 'Zoom Out', 'Reset'] },
+  Camera: { indices: [11, 17, 18, 19, 20], labels: ['Camera (hold)', 'Up', 'Down', 'Left', 'Right'] },
+  'Menu / Targeting': { indices: [21, 22, 23, 24], labels: ['Up', 'Down', 'Left', 'Right'] },
 };
 
 function GamepadTestModal({ onClose }) {
