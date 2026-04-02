@@ -222,7 +222,21 @@ const XINPUT_BUTTONS = [
 ];
 
 const DINPUT_BUTTONS = [
-  ...Array.from({ length: 15 }, (_, i) => ({ id: i, label: `Button ${i + 1}` })),
+  { id: 0, label: 'Square' },
+  { id: 1, label: 'Cross (X)' },
+  { id: 2, label: 'Circle' },
+  { id: 3, label: 'Triangle' },
+  { id: 4, label: 'L1' },
+  { id: 5, label: 'R1' },
+  { id: 6, label: 'L2' },
+  { id: 7, label: 'R2' },
+  { id: 8, label: 'Select' },
+  { id: 9, label: 'Start' },
+  { id: 10, label: 'L3' },
+  { id: 11, label: 'R3' },
+  { id: 12, label: 'PS Button' },
+  { id: 13, label: 'Touchpad' },
+  { id: 14, label: 'Mute' },
   { id: 32, label: 'L Stick X' }, { id: 33, label: 'L Stick Y' },
   { id: 34, label: 'R Stick X' }, { id: 37, label: 'R Stick Y' },
   { id: 40, label: 'D-Pad X' }, { id: 41, label: 'D-Pad Y' },
