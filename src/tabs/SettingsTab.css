@@ -628,6 +628,54 @@
   color: var(--text-bright);
 }
 
+/* Controller GUID selector */
+.setting-row-stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.gp-guid-controls {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gp-guid-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+.gp-guid-select {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  background: var(--bg-elevated, #1a1a2e);
+  border: 1px solid var(--border, #2a2a4a);
+  color: var(--text, #e0e0e0);
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.gp-guid-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  background: var(--bg-elevated, #1a1a2e);
+  border: 1px solid var(--border, #2a2a4a);
+  color: var(--text, #e0e0e0);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+
+.gp-guid-input::placeholder {
+  color: var(--text-muted, #666);
+}
+
 .settings-subnav {
   display: flex;
   gap: 4px;

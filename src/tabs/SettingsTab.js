@@ -396,6 +396,8 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
   const [dirControlOpen, setDirControlOpen] = useState(null);
   const [gamepadTestOpen, setGamepadTestOpen] = useState(false);
   const gamepadTestRef = useRef(null);
+  const [detectedControllers, setDetectedControllers] = useState([]);
+  const [controllersLoading, setControllersLoading] = useState(false);
 
   // Load registry values (read-only baseline) and INI overrides
   const loadValues = useCallback(async () => {
@@ -463,6 +465,16 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
   }, [config?.activeProfile, config?.ashitaPath]);
 
   useEffect(() => { loadValues(); }, [loadValues]);
+
+  const loadControllers = useCallback(async () => {
+    if (!api?.enumerateGameControllers) return;
+    setControllersLoading(true);
+    const result = await api.enumerateGameControllers();
+    if (result.success) setDetectedControllers(result.devices);
+    setControllersLoading(false);
+  }, []);
+
+  useEffect(() => { loadControllers(); }, [loadControllers]);
   useEffect(() => {
     if (api?.getMinimizeToTray) api.getMinimizeToTray().then(v => setMinimizeToTray(!!v));
   }, []);
@@ -1182,6 +1194,54 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
             <span className="toggle-slider" />
           </label>
         </div>
+        {getPadmode()[0] === 1 && (
+          <div className="setting-row setting-row-stack">
+            <div className="setting-info">
+              <span className="setting-name">Controller Device (GUID)</span>
+              <span className="setting-hint-inline">Select which controller Ashita should use. Leave on "Auto-detect" to use the first controller found.</span>
+            </div>
+            <div className="gp-guid-controls">
+              <div className="gp-guid-row">
+                <select
+                  className="gp-guid-select"
+                  value={getValue('padguid000') || ''}
+                  onChange={e => setPending('padguid000', e.target.value)}
+                >
+                  <option value="">Auto-detect (first found)</option>
+                  {detectedControllers.map((c, i) => (
+                    <option key={i} value={c.GUID}>{c.Name} — {c.GUID}</option>
+                  ))}
+                </select>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={loadControllers}
+                  disabled={controllersLoading}
+                  title="Re-scan for controllers"
+                >
+                  {controllersLoading ? '...' : '\u27F3'}
+                </button>
+              </div>
+              <div className="gp-guid-row">
+                <input
+                  type="text"
+                  className="gp-guid-input"
+                  placeholder="{00000000-0000-0000-0000-000000000000}"
+                  value={getValue('padguid000') || ''}
+                  onChange={e => setPending('padguid000', e.target.value)}
+                />
+                {getValue('padguid000') && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setPending('padguid000', '')}
+                    title="Clear GUID (use auto-detect)"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {getPadmode()[0] === 1 && (
