@@ -2605,7 +2605,6 @@ function registerIPC() {
       validateStoredFfxiPath(ffxiPath);
       const dllDir = getReshadeDllDir() || ffxiPath;
 
-      // Parse an INI file into { section: { key: value } }
       const parseIni = (filePath) => {
         if (!fs.existsSync(filePath)) return {};
         const content = fs.readFileSync(filePath, 'utf8');
@@ -2620,11 +2619,9 @@ function registerIPC() {
         return sections;
       };
 
-      // Read techniques (enabled state) and values from preset file
       const presetPath = path.join(dllDir, 'ReShadePreset.ini');
       const presetSections = parseIni(presetPath);
 
-      // Techniques line is before any section, parse it directly
       let techniquesLine = '';
       if (fs.existsSync(presetPath)) {
         const raw = fs.readFileSync(presetPath, 'utf8');
@@ -2633,27 +2630,34 @@ function registerIPC() {
       }
       const enabledTechniques = techniquesLine.split(',').map(s => s.trim()).filter(Boolean);
 
-      const effects = {
-        sharpening: {
-          enabled: enabledTechniques.some(t => t.includes('LumaSharpen')),
-          value: parseFloat(presetSections['LumaSharpen.fx']?.sharp_strength) || 0.60,
-        },
-        saturation: {
-          enabled: enabledTechniques.some(t => t.includes('Vibrance')),
-          value: parseFloat(presetSections['Vibrance.fx']?.Vibrance) || 0.50,
-        },
-        bloom: {
-          enabled: enabledTechniques.some(t => t.includes('Bloom')),
-          value: parseFloat(presetSections['Bloom.fx']?.BloomIntensity) || 0.20,
-        },
-        filmGrain: {
-          enabled: enabledTechniques.some(t => t.includes('FilmGrain')),
-          value: parseFloat(presetSections['FilmGrain.fx']?.Intensity) || 0.30,
-        },
-        ambientOcclusion: {
-          enabled: enabledTechniques.some(t => t.includes('MXAO')),
-        },
-      };
+      // Map technique substring -> effect key, plus optional INI section/key/default
+      const READ_MAP = [
+        { key: 'smaa',             match: 'SMAA' },
+        { key: 'sharpening',       match: 'LumaSharpen', section: 'LumaSharpen.fx', iniKey: 'sharp_strength', defaultVal: 0.60 },
+        { key: 'clarity',          match: 'Clarity',     section: 'Clarity.fx',     iniKey: 'ClarityStrength', defaultVal: 0.30 },
+        { key: 'vibrance',         match: 'Vibrance',    section: 'Vibrance.fx',    iniKey: 'Vibrance',        defaultVal: 0.30 },
+        { key: 'colourfulness',    match: 'Colourfulness', section: 'Colourfulness.fx', iniKey: 'colourfulness', defaultVal: 0.40 },
+        { key: 'bloom',            match: 'Bloom',       section: 'Bloom.fx',       iniKey: 'BloomIntensity',  defaultVal: 0.20 },
+        { key: 'ambientOcclusion', match: 'MXAO' },
+        { key: 'vignette',         match: 'Vignette',    section: 'Vignette.fx',    iniKey: 'VignetteAmount',  defaultVal: 0.40 },
+        { key: 'filmGrain',        match: 'FilmGrain',   section: 'FilmGrain.fx',   iniKey: 'Intensity',       defaultVal: 0.15 },
+        { key: 'depthOfField',     match: 'DepthOfField' },
+        { key: 'fakeHDR',          match: 'FakeHDR',     section: 'FakeHDR.fx',     iniKey: 'HDRPower',        defaultVal: 0.50 },
+        { key: 'liftGammaGain',    match: 'LiftGammaGain' },
+      ];
+
+      const effects = {};
+      for (const entry of READ_MAP) {
+        const enabled = enabledTechniques.some(t => t.includes(entry.match));
+        if (entry.section && entry.iniKey) {
+          effects[entry.key] = {
+            enabled,
+            value: parseFloat(presetSections[entry.section]?.[entry.iniKey]) || entry.defaultVal,
+          };
+        } else {
+          effects[entry.key] = { enabled };
+        }
+      }
 
       return { success: true, effects };
     } catch (e) {
