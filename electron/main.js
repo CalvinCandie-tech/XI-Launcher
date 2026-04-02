@@ -2492,4 +2492,19 @@ function registerIPC() {
       return { success: false, error: e.message };
     }
   });
+
+  // Enumerate game controllers (DirectInput GUIDs)
+  ipcMain.handle('enumerate-game-controllers', async () => {
+    try {
+      const output = execSync(
+        `powershell -Command "Get-PnpDevice -Class 'HIDClass','Media' -Status 'OK' -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -match 'game|controller|gamepad|joystick|xbox|playstation|dualshock|dualsense|wireless controller' } | ForEach-Object { $instanceId = $_.InstanceId; $guidMatch = [regex]::Match($instanceId, '\\\\{[0-9A-Fa-f-]+\\\\}'); @{ Name = $_.FriendlyName; GUID = if ($guidMatch.Success) { $guidMatch.Value } else { '' }; InstanceId = $instanceId } } | ConvertTo-Json -Compress"`,
+        { encoding: 'utf-8', timeout: 8000 }
+      );
+      const parsed = JSON.parse(output || '[]');
+      const devices = Array.isArray(parsed) ? parsed : [parsed];
+      return { success: true, devices: devices.filter(d => d.GUID) };
+    } catch (e) {
+      return { success: false, devices: [], error: e.message };
+    }
+  });
 }

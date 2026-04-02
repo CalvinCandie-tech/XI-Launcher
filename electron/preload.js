@@ -150,5 +150,8 @@ contextBridge.exposeInMainWorld('xiAPI', {
     const handler = (_, addonName, percent, detail) => callback(addonName, percent, detail);
     ipcRenderer.on('addon-progress', handler);
     return () => ipcRenderer.removeListener('addon-progress', handler);
-  }
+  },
+
+  // Game controller enumeration
+  enumerateGameControllers: () => ipcRenderer.invoke('enumerate-game-controllers'),
 });
