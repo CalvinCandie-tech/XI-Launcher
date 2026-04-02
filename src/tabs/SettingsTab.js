@@ -528,6 +528,13 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
     setPending('padsin000', current.join(','));
   };
 
+  const invertPadsinAxis = (upIdx, downIdx) => {
+    const current = getPadsin();
+    current[upIdx] = -current[upIdx];
+    current[downIdx] = -current[downIdx];
+    setPending('padsin000', current.join(','));
+  };
+
   const isXInput = () => getPadmode()[5] === 1;
   const isXInputRef = useRef(isXInput);
   const setPadsinButtonRef = useRef(setPadsinButton);
@@ -1417,6 +1424,27 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
                     );
                   })}
                 </div>
+                {(dirControlOpen === 'Movement' || dirControlOpen === 'Camera') && (() => {
+                  const padsin = getPadsin();
+                  const upIdx = dirControlOpen === 'Movement' ? 13 : 17;
+                  const downIdx = dirControlOpen === 'Movement' ? 14 : 18;
+                  const upVal = padsin[upIdx] || 0;
+                  const downVal = padsin[downIdx] || 0;
+                  const isAxisBound = upVal !== -1 && upVal !== 0 && downVal !== -1 && downVal !== 0;
+                  const isInverted = isAxisBound && (upVal < -1 || downVal < -1);
+                  return (
+                    <label className="gp-invert-toggle">
+                      <input
+                        type="checkbox"
+                        checked={isInverted}
+                        disabled={!isAxisBound}
+                        onChange={() => invertPadsinAxis(upIdx, downIdx)}
+                      />
+                      <span>Invert Y-Axis</span>
+                      {!isAxisBound && <span className="setting-hint-inline">Bind Up/Down to an axis first</span>}
+                    </label>
+                  );
+                })()}
               </div>
             )}
 
