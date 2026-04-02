@@ -706,7 +706,7 @@ function registerIPC() {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
       fs.mkdirSync(tmpExtract, { recursive: true });
-      execSync(`tar --force-local -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 300000 });
+      await extractZip(tmpZip, tmpExtract);
 
       // GitHub ZIP has a top-level folder like "Ashita-v4beta-main/"
       const extracted = fs.readdirSync(tmpExtract);
@@ -1262,7 +1262,7 @@ function registerIPC() {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
       fs.mkdirSync(tmpExtract, { recursive: true });
-      execSync(`tar --force-local -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 120000 });
+      await extractZip(tmpZip, tmpExtract);
 
       // Step 5: Copy extracted contents into Ashita directory
       copyRecursive(tmpExtract, ashitaPath);
@@ -1526,8 +1526,9 @@ function registerIPC() {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
       fs.mkdirSync(tmpExtract, { recursive: true });
-      // Use tar — much faster than PowerShell Expand-Archive for large zips (e.g. AshenbubsHD 232K+ files)
-      execSync(`tar --force-local -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 600000 });
+      await extractZip(tmpZip, tmpExtract, (pct, file) => {
+        sendProgress('extract', 75 + Math.round(pct * 0.15), `Extracting... ${pct}% — ${path.basename(file)}`);
+      });
 
       // GitHub ZIPs extract to a folder like "RepoName-main/" — find it
       const extracted = fs.readdirSync(tmpExtract);
@@ -1867,7 +1868,7 @@ function registerIPC() {
       if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true });
       fs.mkdirSync(destDir, { recursive: true });
 
-      execSync(`tar --force-local -xf "${tmpZip.replace(/\\/g, '/')}" -C "${destDir.replace(/\\/g, '/')}"`, { timeout: 120000 });
+      await extractZip(tmpZip, destDir);
 
       sendProgress(90, 'Cleaning up...');
       try { fs.unlinkSync(tmpZip); } catch {}
@@ -2294,7 +2295,7 @@ function registerIPC() {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
       fs.mkdirSync(tmpExtract, { recursive: true });
-      execSync(`tar --force-local -xf "${tmpZip}" -C "${tmpExtract}"`, { timeout: 120000 });
+      await extractZip(tmpZip, tmpExtract);
 
       // GitHub ZIPs have a top-level folder like "RepoName-main/"
       const extracted = fs.readdirSync(tmpExtract);
@@ -2586,7 +2587,7 @@ function registerIPC() {
       fs.mkdirSync(tmpDir, { recursive: true });
 
       // Extract ZIP
-      execSync(`tar --force-local -xf "${zipPath.replace(/\\/g, '/')}" -C "${tmpDir.replace(/\\/g, '/')}"`, { timeout: 120000 });
+      await extractZip(zipPath, tmpDir);
 
       // Copy config dirs back
       const configBoot = path.join(tmpDir, 'config', 'boot');
