@@ -675,9 +675,35 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
 
       await api.saveProfile(config.ashitaPath, config.activeProfile, content);
 
+      // Ensure required addons are enabled in profile when their settings are used
+      const requiredAddons = [];
+      if (drawMob !== '0' || drawWorld !== '0') requiredAddons.push('drawdistance');
+      if (fpsDivisor !== '') requiredAddons.push('fps');
+      if (requiredAddons.length > 0) {
+        const freshProfile = await api.readProfile(config.ashitaPath, config.activeProfile);
+        if (freshProfile?.exists) {
+          const pLines = freshProfile.content.split('\n');
+          const addonsIdx = pLines.findIndex(l => l.trim() === '[ashita.addons]');
+          if (addonsIdx !== -1) {
+            let nextIdx = pLines.length;
+            for (let i = addonsIdx + 1; i < pLines.length; i++) {
+              if (pLines[i].trim().startsWith('[')) { nextIdx = i; break; }
+            }
+            const sectionLines = pLines.slice(addonsIdx + 1, nextIdx);
+            const enabledNames = sectionLines.map(l => l.trim().replace(/\s*=\s*.*/, '').toLowerCase()).filter(Boolean);
+            const toAdd = requiredAddons.filter(a => !enabledNames.includes(a));
+            if (toAdd.length > 0) {
+              pLines.splice(addonsIdx + 1, 0, ...toAdd.map(a => `${a} = 1`));
+              await api.saveProfile(config.ashitaPath, config.activeProfile, pLines.join('\n'));
+            }
+          }
+        }
+      }
+
       // Sync addon commands to boot script (draw distance, fps)
       try {
-        const scriptName = getScriptName(profile.content);
+        const profile2 = await api.readProfile(config.ashitaPath, config.activeProfile);
+        const scriptName = getScriptName(profile2.content || profile.content);
         const scriptPath = `${config.ashitaPath}/scripts/${scriptName}`;
         const scriptResult = await api.readFile(scriptPath);
         if (scriptResult?.content) {
@@ -1096,7 +1122,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
       <div className="section-header" id="section-performance">Performance</div>
       <div className="section-header settings-subheader">Draw Distance</div>
       <div className="panel">
-        <p className="settings-hint">Controls how far the game renders entities and terrain. Requires the <strong>drawdistance</strong> addon (loaded by default). Higher values show more of the world but may impact performance in crowded zones.</p>
+        <p className="settings-hint">Controls how far the game renders entities and terrain. Uses the <strong>drawdistance</strong> addon — it will be auto-enabled when you apply these settings. Higher values show more of the world but may impact performance in crowded zones.</p>
         <div className="setting-row">
           <div className="setting-info">
             <span className="setting-name">Entity / Mob Distance</span>
@@ -1119,7 +1145,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
 
       <div className="section-header">Frame Rate</div>
       <div className="panel">
-        <p className="settings-hint">Controls FFXI's frame rate divisor via the <strong>fps</strong> addon (loaded by default). FFXI's engine ties game logic to frame rate, so 60 FPS makes movement and animations smoother but may cause minor timing quirks on some private servers.</p>
+        <p className="settings-hint">Controls FFXI's frame rate divisor via the <strong>fps</strong> addon — it will be auto-enabled when you apply these settings. FFXI's engine ties game logic to frame rate, so 60 FPS makes movement and animations smoother but may cause minor timing quirks on some private servers.</p>
         <div className="setting-row">
           <div className="setting-info">
             <span className="setting-name">FPS Divisor</span>
