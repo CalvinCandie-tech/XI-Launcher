@@ -76,7 +76,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
     const name = newName.trim();
     if (!name || !api) return;
     setCreating(true);
-    await api.saveProfile(config.ashitaPath, name, DEFAULT_PROFILE_INI(name, profileType, config.serverHost, config.serverPort, config.xiloaderPath, config.hairpin, config.loginUser, config.loginPass));
+    await api.saveProfile(config.ashitaPath, name, DEFAULT_PROFILE_INI(name, profileType, config.serverHost, config.serverPort, config.xiloaderPath, config.hairpin, config.loginUser, config.loginPass, config.ffxiPath));
     updateConfig('activeProfile', name);
     const updatedProfiles = await api.listProfiles(config.ashitaPath);
     setStatus(prev => ({ ...prev, profileCount: updatedProfiles.length }));

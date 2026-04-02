@@ -103,7 +103,7 @@ function SetupWizard({ config, updateConfig, onComplete }) {
     if (!profileName.trim()) return;
     const name = profileName.trim();
     const xiloaderPath = config.xiloaderPath || (ashitaPath + '\\xiloader');
-    await api.saveProfile(ashitaPath, name, DEFAULT_PROFILE_INI(name, profileType, serverHost, serverPort, xiloaderPath, config.hairpin, config.loginUser, config.loginPass));
+    await api.saveProfile(ashitaPath, name, DEFAULT_PROFILE_INI(name, profileType, serverHost, serverPort, xiloaderPath, config.hairpin, config.loginUser, config.loginPass, config.ffxiPath));
     updateConfig('activeProfile', name);
   };
 

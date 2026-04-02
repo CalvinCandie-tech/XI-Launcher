@@ -733,7 +733,7 @@ function registerIPC() {
         if (!opts.serverName) return { error: 'No server address set. Go to Profiles → Private Server Connection and enter your server hostname.' };
         const args = [];
         if (opts.serverName) args.push('--server', opts.serverName);
-        if (opts.serverPort) args.push('--port', opts.serverPort);
+        if (opts.serverPort) args.push('--serverport', opts.serverPort);
         if (opts.loginUser) args.push('--user', opts.loginUser);
         if (opts.loginPass) args.push('--pass', opts.loginPass);
         if (opts.hairpin) args.push('--hairpin');
@@ -752,7 +752,10 @@ function registerIPC() {
         if (!opts.profileName) return { error: 'No profile selected. Create or select a profile from the Profiles tab before launching.' };
         const profileIni = path.join(opts.ashitaPath, 'config', 'boot', `${opts.profileName}.ini`);
         if (!fs.existsSync(profileIni)) return { error: `Profile "${opts.profileName}" INI file not found. The profile may have been deleted. Select a different profile or create a new one.` };
-        const argStr = opts.profileName ? `-ArgumentList '${escapePSString(opts.profileName)}.ini'` : '';
+        const iniName = `${opts.profileName}.ini`;
+        const argStr = iniName.includes(' ')
+          ? `-ArgumentList '""${escapePSString(iniName)}""'`
+          : `-ArgumentList '${escapePSString(iniName)}'`;
         const psCmd = `Start-Process -FilePath '${escapePSString(exe)}' ${argStr} -WorkingDirectory '${escapePSString(opts.ashitaPath)}' -Verb RunAs`;
         exec(`powershell -Command "${psCmd}"`, { timeout: 15000 }, (err) => {
           if (err) console.error('Launch error:', err.message);
@@ -1867,15 +1870,35 @@ function registerIPC() {
           const toBool = (v) => v === 'true';
           const resolution = get('Resolution', 'unforced');
           const filtering = get('Filtering', 'appdriven');
-          const antialiasing = get('Antialiasing', 'off');
+          const antialiasing = get('Antialiasing', 'appdriven');
+          // Parse Mipmapping key (v2.8x format), fall back to legacy DisableMipmapping
+          const mipmapVal = get('Mipmapping', '');
+          const legacyDisableMipmap = toBool(get('DisableMipmapping', 'false'));
+          let mipmapping = 'appdriven';
+          if (mipmapVal) {
+            mipmapping = mipmapVal; // already correct: 'appdriven', 'disabled', 'autogen_bilinear', etc.
+          } else if (legacyDisableMipmap) {
+            mipmapping = 'disabled';
+          }
+          // Parse Filtering: could be 'appdriven', 'bilinear', etc. or an integer (1-16) for AF
+          let afVal = 'off';
+          if (filtering === 'appdriven' || filtering === 'pointsampled' || filtering === 'bilinear' || filtering === 'trilinear') {
+            afVal = 'off';
+          } else {
+            // Could be integer like '16' or old format like '16x'
+            const num = parseInt(filtering, 10);
+            if (num >= 2 && num <= 16) afVal = num + 'x';
+            else if (filtering.endsWith('x')) afVal = filtering;
+            else afVal = 'off';
+          }
           return {
             success: true,
             settings: {
-              outputAPI: get('OutputAPI', 'd3d11') === 'bestavailable' ? 'd3d12' : 'd3d11',
+              outputAPI: get('OutputAPI', 'd3d11').includes('d3d12') || get('OutputAPI', '') === 'bestavailable' ? 'd3d12' : 'd3d11',
               scalingMode: get('ScalingMode', 'stretched_ar'),
               watermark: toBool(get('dgVoodooWatermark', 'false')),
-              msaa: antialiasing === 'off' ? 'off' : antialiasing,
-              anisotropic: filtering === 'appdriven' ? 'off' : filtering,
+              msaa: (antialiasing === 'appdriven' || antialiasing === 'off') ? 'off' : antialiasing,
+              anisotropic: afVal,
               vsync: toBool(get('ForceVerticalSync', 'false')),
               resolution: resolution === 'unforced' ? 'app_controlled' : resolution,
               depthBuffer: get('DepthBuffersBitDepth', 'forcemin24bit'),
@@ -1883,9 +1906,9 @@ function registerIPC() {
               keepFilter: toBool(get('KeepFilterIfPointSampled', 'false')),
               vram: get('VRAM', '2048'),
               fpsLimit: get('FPSLimit', '0'),
-              fullscreenAttr: get('FullscreenAttributes', 'default'),
+              fullscreenAttr: get('FullscreenAttributes', '').includes('fake') ? 'fake' : 'default',
               resampling: get('Resampling', 'bilinear'),
-              mipmapping: toBool(get('DisableMipmapping', 'false')) ? 'disabled' : 'appdriven',
+              mipmapping: mipmapping,
               captureMouse: toBool(get('CaptureMouse', 'false')),
             }
           };
@@ -1923,60 +1946,62 @@ function registerIPC() {
       // Resolution: "app_controlled" => "unforced", else "WxH"
       const resValue = resolution === 'app_controlled' ? 'unforced' : resolution;
 
-      // Mipmapping map
-      const mipmapMap = { 'appdriven': 'appdriven', 'disabled': 'disabled', 'autogen_bilinear': 'autogen_bilinear' };
+      // Convert anisotropic '16x' -> integer '16' for dgVoodoo conf format
+      const afValue = anisotropic === 'off' ? 'appdriven' : anisotropic.replace('x', '');
 
-      // Build conf lines
+      // Build conf lines matching dgVoodoo2 v2.8x format
       const confLines = [
         '; dgVoodoo.conf — generated by XI Launcher',
-        '; Edit with dgVoodooCpl.exe for full options',
+        '',
+        'Version                              = 0x287',
         '',
         '[General]',
-        `OutputAPI = ${outputAPI === 'd3d12' ? 'bestavailable' : 'd3d11'}`,
-        'Adapters = 0',
-        'FullScreenOutput = 0',
-        `ScalingMode = ${scalingMode}`,
-        `CaptureMouse = ${captureMouse ? 'true' : 'false'}`,
+        `OutputAPI                            = ${outputAPI === 'd3d12' ? 'bestavailable' : 'd3d11_fl11_0'}`,
+        'Adapters                             = all',
+        'FullScreenOutput                     = default',
+        'FullScreenMode                       = true',
+        `ScalingMode                          = ${scalingMode}`,
+        'ProgressiveScanlineOrder             = false',
+        'EnumerateRefreshRates                = false',
+        'Brightness                           = 100',
+        'Color                                = 100',
+        'Contrast                             = 100',
+        'InheritColorProfileInFullScreenMode  = true',
+        'KeepWindowAspectRatio                = true',
+        `CaptureMouse                         = ${captureMouse ? 'true' : 'false'}`,
+        'CenterAppWindow                      = false',
         '',
         '[GeneralExt]',
-        `Resampling = ${resampling}`,
-        `FPSLimit = ${fpsLimit}`,
-      ];
-
-      if (fullscreenAttr === 'fake') {
-        confLines.push('FullscreenAttributes = fake');
-      }
-
-      confLines.push(
+        `Resampling                           = ${resampling}`,
+        'PresentationModel                    = auto',
+        'ColorSpace                           = appdriven',
+        `FullscreenAttributes                 = ${fullscreenAttr === 'fake' ? 'fake' : ''}`,
+        `FPSLimit                             = ${fpsLimit}`,
         '',
         '[DirectX]',
-        'DisableAndPassThru = false',
-        'VideoCard = internal3D',
-        `VRAM = ${vram}`,
-        `Resolution = ${resValue}`,
-        `Antialiasing = ${msaa === 'off' ? 'off' : msaa}`,
-        `Filtering = ${anisotropic === 'off' ? 'appdriven' : anisotropic}`,
-        `KeepFilterIfPointSampled = ${keepFilter ? 'true' : 'false'}`,
-        `DisableMipmapping = ${mipmapping === 'disabled' ? 'true' : 'false'}`,
-        `ForceVerticalSync = ${vsync ? 'true' : 'false'}`,
-        `dgVoodooWatermark = ${watermark ? 'true' : 'false'}`,
-        `FastVideoMemoryAccess = ${fastVram ? 'true' : 'false'}`,
-        'AppControlledScreenMode = true',
-        'DisableAltEnterToToggleScreenMode = true',
+        'DisableAndPassThru                   = false',
+        'VideoCard                            = internal3D',
+        `VRAM                                 = ${vram}`,
+        `Filtering                            = ${afValue}`,
+        `Mipmapping                           = ${mipmapping}`,
+        `KeepFilterIfPointSampled             = ${keepFilter ? 'true' : 'false'}`,
+        `Resolution                           = ${resValue}`,
+        `Antialiasing                         = ${msaa === 'off' ? 'appdriven' : msaa}`,
+        `AppControlledScreenMode              = true`,
+        'DisableAltEnterToToggleScreenMode    = true',
+        `ForceVerticalSync                    = ${vsync ? 'true' : 'false'}`,
+        `dgVoodooWatermark                    = ${watermark ? 'true' : 'false'}`,
+        `FastVideoMemoryAccess                = ${fastVram ? 'true' : 'false'}`,
         '',
         '[DirectXExt]',
-        'VendorID = 0',
-        'DeviceID = 0',
-        'SubSysID = 0',
-        'RevisionID = 0',
-        `DepthBuffersBitDepth = ${depthBuffer}`,
+        `DepthBuffersBitDepth                 = ${depthBuffer}`,
         '',
         '[Glide]',
-        'DisableAndPassThru = true',
+        'DisableAndPassThru                   = true',
         '',
         '[GlideExt]',
         ''
-      );
+      ];
 
       const conf = confLines.join('\r\n');
 

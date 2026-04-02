@@ -87,7 +87,7 @@ function ProfileTab({ config, updateConfig }) {
   const createProfile = async () => {
     const name = newProfileName.trim();
     if (!name) return;
-    await api.saveProfile(config.ashitaPath, name, DEFAULT_PROFILE_INI(name, newProfileType, config.serverHost, config.serverPort, config.xiloaderPath, config.hairpin, config.loginUser, config.loginPass));
+    await api.saveProfile(config.ashitaPath, name, DEFAULT_PROFILE_INI(name, newProfileType, config.serverHost, config.serverPort, config.xiloaderPath, config.hairpin, config.loginUser, config.loginPass, config.ffxiPath));
     setNewProfileName('');
     await loadProfiles();
     selectProfile(name);
@@ -500,23 +500,24 @@ function ProfileTab({ config, updateConfig }) {
           </div>
         )}
 
-        {config.activeProfile && (
+        {(config.activeProfile || selectedProfile) ? (
           <button
             className="btn btn-primary profile-apply-btn"
             onClick={async () => {
-              if (!api || !config.activeProfile) return;
-              const result = await api.readProfile(config.ashitaPath, config.activeProfile);
+              const targetProfile = config.activeProfile || selectedProfile;
+              if (!api || !targetProfile) return;
+              const result = await api.readProfile(config.ashitaPath, targetProfile);
               if (!result.content) return;
               const lines = result.content.split('\n');
               const updated = lines.map(line => {
                 const trimmed = line.replace(/\s/g, '');
                 if (trimmed.startsWith('file=') && config.xiloaderPath) {
-                  const xiloaderExe = config.xiloaderPath.replace(/\//g, '\\\\') + '\\\\xiloader.exe';
+                  const xiloaderExe = config.xiloaderPath.replace(/\//g, '\\') + '\\xiloader.exe';
                   return `file         = ${xiloaderExe}`;
                 }
                 if (trimmed.startsWith('command=') && config.serverHost) {
                   const args = ['--server', config.serverHost];
-                  if (config.serverPort) args.push('--port', config.serverPort);
+                  if (config.serverPort) args.push('--serverport', config.serverPort);
                   if (config.loginUser) args.push('--user', config.loginUser);
                   if (config.loginPass) args.push('--pass', config.loginPass);
                   if (config.hairpin) args.push('--hairpin');
@@ -524,17 +525,21 @@ function ProfileTab({ config, updateConfig }) {
                 }
                 return line;
               });
-              await api.saveProfile(config.ashitaPath, config.activeProfile, updated.join('\n'));
-              if (selectedProfile === config.activeProfile) {
-                const refreshed = await api.readProfile(config.ashitaPath, config.activeProfile);
+              await api.saveProfile(config.ashitaPath, targetProfile, updated.join('\n'));
+              if (selectedProfile === targetProfile) {
+                const refreshed = await api.readProfile(config.ashitaPath, targetProfile);
                 setProfileContent(refreshed.content || '');
               }
-              setBuildLog(`Profile "${config.activeProfile}" updated with server settings`);
+              setBuildLog(`Profile "${targetProfile}" updated with server settings`);
               setTimeout(() => setBuildLog(''), 8000);
             }}
           >
-            Apply to Profile: {config.activeProfile}
+            Apply to {config.activeProfile ? `Active Profile: ${config.activeProfile}` : `Profile: ${selectedProfile}`}
           </button>
+        ) : (
+          <div className="server-summary" style={{ opacity: 0.6 }}>
+            Select or activate a profile above to apply these settings.
+          </div>
         )}
       </div>
 
