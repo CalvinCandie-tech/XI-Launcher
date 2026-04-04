@@ -121,7 +121,7 @@ contextBridge.exposeInMainWorld('xiAPI', {
   },
 
   // Addon update check
-  checkAddonUpdates: (addonList) => ipcRenderer.invoke('check-addon-updates', addonList),
+  checkAddonUpdates: (addonList, force) => ipcRenderer.invoke('check-addon-updates', addonList, force),
 
   // System tray
   setMinimizeToTray: (enabled) => ipcRenderer.invoke('set-minimize-to-tray', enabled),

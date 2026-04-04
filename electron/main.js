@@ -3054,15 +3054,17 @@ function registerIPC() {
   });
 
   // Check for addon updates by comparing stored SHAs against GitHub
-  ipcMain.handle('check-addon-updates', async (_, addonList) => {
+  ipcMain.handle('check-addon-updates', async (_, addonList, force) => {
     try {
       if (!store) return { updates: [] };
 
-      // Enforce 24-hour cooldown
-      const lastCheck = store.get('addonUpdateLastCheck', 0);
-      const now = Date.now();
-      if (now - lastCheck < 24 * 60 * 60 * 1000) {
-        return { updates: [], skipped: true };
+      // Enforce 24-hour cooldown (skip if force=true)
+      if (!force) {
+        const lastCheck = store.get('addonUpdateLastCheck', 0);
+        const now = Date.now();
+        if (now - lastCheck < 24 * 60 * 60 * 1000) {
+          return { updates: [], skipped: true };
+        }
       }
 
       const shas = store.get('addonUpdateSHAs', {});
