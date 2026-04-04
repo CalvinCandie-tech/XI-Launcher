@@ -399,8 +399,17 @@ function registerIPC() {
   ipcMain.handle('get-app-version', () => APP_VERSION);
 
   ipcMain.handle('check-for-updates', async () => {
-
     try {
+      // Read skip list
+      const prefsPath = path.join(runtimeDir, 'launcher-prefs.json');
+      let skippedVersions = [];
+      try {
+        if (fs.existsSync(prefsPath)) {
+          const prefs = JSON.parse(fs.readFileSync(prefsPath, 'utf8'));
+          skippedVersions = Array.isArray(prefs.skippedVersions) ? prefs.skippedVersions : [];
+        }
+      } catch {}
+
       const data = await new Promise((resolve, reject) => {
         https.get(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
           headers: { 'User-Agent': 'XI-Launcher', Accept: 'application/json' }
@@ -418,16 +427,40 @@ function registerIPC() {
 
       const latest = data.tag_name.replace(/^v/, '');
       const isNewer = latest.localeCompare(APP_VERSION, undefined, { numeric: true }) > 0;
+      const isSkipped = skippedVersions.includes(latest);
+
+      // Find the zip asset for download
+      const zipAsset = data.assets?.find(a => a.name.endsWith('.zip'));
+      const downloadUrl = zipAsset?.browser_download_url || '';
+
       return {
         upToDate: !isNewer,
+        skipped: isSkipped,
         current: APP_VERSION,
         latest,
+        downloadUrl,
         releaseUrl: data.html_url || '',
         releaseNotes: (data.body || '').slice(0, 500)
       };
     } catch {
       return { upToDate: true, current: APP_VERSION, error: 'Could not check for updates' };
     }
+  });
+
+  ipcMain.handle('skip-update-version', async (_, version) => {
+    const prefsPath = path.join(runtimeDir, 'launcher-prefs.json');
+    let prefs = {};
+    try {
+      if (fs.existsSync(prefsPath)) {
+        prefs = JSON.parse(fs.readFileSync(prefsPath, 'utf8'));
+      }
+    } catch {}
+    if (!Array.isArray(prefs.skippedVersions)) prefs.skippedVersions = [];
+    if (!prefs.skippedVersions.includes(version)) {
+      prefs.skippedVersions.push(version);
+    }
+    fs.writeFileSync(prefsPath, JSON.stringify(prefs, null, 2), 'utf8');
+    return { success: true };
   });
 
   ipcMain.handle('open-external', async (_, url) => {
