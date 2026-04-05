@@ -258,31 +258,57 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
       return;
     }
     setCustomModError('');
-    setCustomModAdding(true);
+
+    // Show a placeholder card immediately so the user sees something happen
+    const placeholderName = url.replace(/\/$/, '').split('/').pop() || 'custom-mod';
+    const placeholder = { name: placeholderName, url, description: 'Fetching info...', installedAt: new Date().toISOString() };
+    setCustomMods(prev => [...prev.filter(m => m.name !== placeholderName), placeholder]);
+    setCustomModStatus(prev => ({ ...prev, [placeholderName]: { status: 'installing', message: 'Fetching mod info...', percent: 0 } }));
+    setCustomModUrl('');
 
     const info = await api.fetchGithubRepoInfo(url);
     if (!info.success) {
+      // Remove placeholder and show error
+      setCustomMods(prev => prev.filter(m => m.name !== placeholderName));
+      setCustomModStatus(prev => { const s = { ...prev }; delete s[placeholderName]; return s; });
       setCustomModError(info.error);
-      setCustomModAdding(false);
       return;
     }
 
-    setCustomModStatus(prev => ({ ...prev, [info.name]: { status: 'installing', message: 'Starting...', percent: 0 } }));
-    setCustomModUrl('');
-    setCustomModAdding(false);
+    // Update placeholder with real info if name changed
+    if (info.name !== placeholderName) {
+      setCustomMods(prev => prev.filter(m => m.name !== placeholderName).concat([{ name: info.name, url, description: info.description || '', installedAt: new Date().toISOString() }]));
+      setCustomModStatus(prev => {
+        const s = { ...prev };
+        delete s[placeholderName];
+        s[info.name] = { status: 'installing', message: 'Starting download...', percent: 0 };
+        return s;
+      });
+    } else {
+      setCustomMods(prev => prev.map(m => m.name === placeholderName ? { ...m, description: info.description || '' } : m));
+      setCustomModStatus(prev => ({ ...prev, [info.name]: { status: 'installing', message: 'Starting download...', percent: 0 } }));
+    }
 
     const result = await api.installCustomMod(config.ashitaPath, url);
     if (result.success) {
-      const updatedMods = customMods.filter(m => m.name !== result.name);
-      updatedMods.push({ name: result.name, url, description: info.description || '', installedAt: new Date().toISOString() });
-      setCustomMods(updatedMods);
-      await api.storeSet('customMods', updatedMods);
+      const finalName = result.name;
+      setCustomMods(prev => {
+        const cleaned = prev.filter(m => m.name !== placeholderName && m.name !== info.name && m.name !== finalName);
+        cleaned.push({ name: finalName, url, description: info.description || '', installedAt: new Date().toISOString() });
+        return cleaned;
+      });
+      await api.storeSet('customMods', customMods.filter(m => m.name !== placeholderName && m.name !== info.name && m.name !== result.name).concat([{ name: finalName, url, description: info.description || '', installedAt: new Date().toISOString() }]));
 
-      if (config.activeProfile && !profileOverlays.includes(result.name)) {
-        await saveProfileOverlays([...profileOverlays, result.name]);
+      if (config.activeProfile && !profileOverlays.includes(finalName)) {
+        await saveProfileOverlays([...profileOverlays, finalName]);
       }
 
-      setCustomModStatus(prev => ({ ...prev, [result.name]: { status: 'done', message: result.message, percent: 100 } }));
+      setCustomModStatus(prev => {
+        const s = { ...prev };
+        delete s[placeholderName];
+        s[finalName] = { status: 'done', message: result.message, percent: 100 };
+        return s;
+      });
     } else {
       setCustomModStatus(prev => ({ ...prev, [info.name]: { status: 'error', message: result.error, percent: 0 } }));
     }
