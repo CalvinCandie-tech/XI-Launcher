@@ -112,6 +112,16 @@ contextBridge.exposeInMainWorld('xiAPI', {
   readXIPivotConfig: (ashitaPath) => ipcRenderer.invoke('read-xipivot-config', ashitaPath),
   writeXIPivotConfig: (ashitaPath, config) => ipcRenderer.invoke('write-xipivot-config', ashitaPath, config),
 
+  // Custom DAT mods
+  installCustomMod: (ashitaPath, url) => ipcRenderer.invoke('install-custom-mod', ashitaPath, url),
+  removeCustomMod: (ashitaPath, modName) => ipcRenderer.invoke('remove-custom-mod', ashitaPath, modName),
+  fetchGithubRepoInfo: (url) => ipcRenderer.invoke('fetch-github-repo-info', url),
+  onCustomModProgress: (callback) => {
+    const handler = (_, modName, percent, detail) => callback(modName, percent, detail);
+    ipcRenderer.on('custom-mod-progress', handler);
+    return () => ipcRenderer.removeListener('custom-mod-progress', handler);
+  },
+
   // Ashita v4 install
   installAshitaV4: (destPath) => ipcRenderer.invoke('install-ashita-v4', destPath),
   onAshitaInstallProgress: (callback) => {
