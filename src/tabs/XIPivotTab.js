@@ -38,6 +38,7 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
   const [customModUrl, setCustomModUrl] = useState('');
   const [customModStatus, setCustomModStatus] = useState({});
   const [customModError, setCustomModError] = useState('');
+  const [customModAdding, setCustomModAdding] = useState(false);
   const [modFolderStatus, setModFolderStatus] = useState({});
 
   const checkLAA = useCallback(async () => {
@@ -257,15 +258,18 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
       return;
     }
     setCustomModError('');
+    setCustomModAdding(true);
 
     const info = await api.fetchGithubRepoInfo(url);
     if (!info.success) {
       setCustomModError(info.error);
+      setCustomModAdding(false);
       return;
     }
 
     setCustomModStatus(prev => ({ ...prev, [info.name]: { status: 'installing', message: 'Starting...', percent: 0 } }));
     setCustomModUrl('');
+    setCustomModAdding(false);
 
     const result = await api.installCustomMod(config.ashitaPath, url);
     if (result.success) {
@@ -824,9 +828,9 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
           <button
             className="btn btn-primary btn-sm"
             onClick={installCustomMod}
-            disabled={!customModUrl.trim()}
+            disabled={!customModUrl.trim() || customModAdding}
           >
-            Add
+            {customModAdding ? '◌ Fetching...' : 'Add'}
           </button>
         </div>
         {customModError && (
