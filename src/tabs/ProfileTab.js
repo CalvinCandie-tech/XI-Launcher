@@ -24,6 +24,12 @@ function ProfileTab({ config, updateConfig }) {
   const [downloadStatus, setDownloadStatus] = useState('idle');
   const [downloadProgress, setDownloadProgress] = useState({ percent: 0, detail: '' });
   const [showScriptEditor, setShowScriptEditor] = useState(false);
+  const [profileOverlays, setProfileOverlays] = useState({});
+
+  useEffect(() => {
+    if (!api) return;
+    api.storeGet('profileOverlays').then(data => setProfileOverlays(data || {}));
+  }, [config.activeProfile]);
 
   useEffect(() => {
     if (!api?.onXiloaderDownloadProgress) return;
@@ -119,6 +125,11 @@ function ProfileTab({ config, updateConfig }) {
         setProfileContent('');
         setIsEditing(false);
       }
+      // Clean up per-profile overlays
+      const allOverlays = await api.storeGet('profileOverlays') || {};
+      delete allOverlays[name];
+      await api.storeSet('profileOverlays', allOverlays);
+      setProfileOverlays(allOverlays);
       setConfirmDelete(null);
       await loadProfiles();
     }
@@ -140,6 +151,13 @@ function ProfileTab({ config, updateConfig }) {
       `$1${cloneName}`
     );
     await api.saveProfile(config.ashitaPath, cloneName, content);
+    // Copy overlay list to cloned profile
+    const allOverlays = await api.storeGet('profileOverlays') || {};
+    if (allOverlays[name]) {
+      allOverlays[cloneName] = [...allOverlays[name]];
+      await api.storeSet('profileOverlays', allOverlays);
+      setProfileOverlays(allOverlays);
+    }
     await loadProfiles();
     selectProfile(cloneName);
   };
@@ -337,6 +355,12 @@ function ProfileTab({ config, updateConfig }) {
                 {config.activeProfile === name && <span className="profile-active-icon">✦</span>}
                 {name}
               </span>
+              {(() => {
+                const count = (profileOverlays[name] || []).length;
+                return count > 0 ? (
+                  <span className="pill pill-teal profile-mod-count">{count} mod{count !== 1 ? 's' : ''}</span>
+                ) : null;
+              })()}
               {config.activeProfile === name ? (
                 <span className="pill pill-gold profile-active-pill">Active</span>
               ) : selectedProfile === name ? (

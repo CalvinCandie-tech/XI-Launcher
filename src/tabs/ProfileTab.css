@@ -564,3 +564,9 @@
 .profile-editor-filename {
   color: var(--gold);
 }
+
+.profile-mod-count {
+  font-size: var(--text-xs, 11px);
+  margin-left: 8px;
+  flex-shrink: 0;
+}
