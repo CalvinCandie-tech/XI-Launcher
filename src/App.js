@@ -113,6 +113,21 @@ function App() {
       }
       setConfig(merged);
 
+      // Migrate: copy global pivot.ini overlays to all profiles as per-profile overlays
+      const existingProfileOverlays = await api.storeGet('profileOverlays');
+      if (!existingProfileOverlays && merged.ashitaPath) {
+        try {
+          const pivot = await api.readXIPivotConfig(merged.ashitaPath);
+          const overlays = pivot.overlays || [];
+          const profileList = await api.listProfiles(merged.ashitaPath);
+          const profileOverlays = {};
+          for (const name of profileList) {
+            profileOverlays[name] = [...overlays];
+          }
+          await api.storeSet('profileOverlays', profileOverlays);
+        } catch (e) { console.error('Failed to migrate profile overlays:', e); }
+      }
+
       // Show setup wizard for first-time users
       if (!merged.setupComplete && !merged.activeProfile) {
         setShowWizard(true);
@@ -442,6 +457,15 @@ function App() {
     setIsLaunching(true);
     setLaunchLog('');
     try {
+      // Write active profile's overlays to pivot.ini before launch
+      const profileOverlays = await api.storeGet('profileOverlays') || {};
+      const overlays = profileOverlays[config.activeProfile] || [];
+      const pivotCfg = await api.readXIPivotConfig(config.ashitaPath);
+      await api.writeXIPivotConfig(config.ashitaPath, {
+        ...pivotCfg,
+        overlays
+      });
+
       const result = await api.launchGame({
         ashitaPath: config.ashitaPath,
         profileName: config.activeProfile,
