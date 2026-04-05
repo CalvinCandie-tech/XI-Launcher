@@ -25,6 +25,7 @@ function ProfileTab({ config, updateConfig }) {
   const [downloadProgress, setDownloadProgress] = useState({ percent: 0, detail: '' });
   const [showScriptEditor, setShowScriptEditor] = useState(false);
   const [profileOverlays, setProfileOverlays] = useState({});
+  const [modPopover, setModPopover] = useState(null); // profile name or null
 
   useEffect(() => {
     if (!api) return;
@@ -326,7 +327,7 @@ function ProfileTab({ config, updateConfig }) {
   };
 
   return (
-    <div className="profile-tab">
+    <div className="profile-tab" onClick={() => modPopover && setModPopover(null)}>
       <div className="section-header">Launch Profiles</div>
       <p className="profile-hint">
         Ashita uses <strong>profiles</strong> (INI files) to control which addons, plugins, and polplugins load when you start the game.
@@ -356,9 +357,28 @@ function ProfileTab({ config, updateConfig }) {
                 {name}
               </span>
               {(() => {
-                const count = (profileOverlays[name] || []).length;
+                const mods = profileOverlays[name] || [];
+                const count = mods.length;
                 return count > 0 ? (
-                  <span className="pill pill-teal profile-mod-count">{count} mod{count !== 1 ? 's' : ''}</span>
+                  <span className="profile-mod-badge-wrapper">
+                    <span
+                      className="pill pill-teal profile-mod-count profile-mod-clickable"
+                      onClick={(e) => { e.stopPropagation(); setModPopover(modPopover === name ? null : name); }}
+                      title="Click to see active mods"
+                    >
+                      {count} mod{count !== 1 ? 's' : ''}
+                    </span>
+                    {modPopover === name && (
+                      <div className="profile-mod-popover" onClick={e => e.stopPropagation()}>
+                        <div className="profile-mod-popover-header">Active Overlays</div>
+                        <ul className="profile-mod-popover-list">
+                          {mods.map((mod, i) => (
+                            <li key={i} className="profile-mod-popover-item mono">{mod}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </span>
                 ) : null;
               })()}
               {config.activeProfile === name ? (
