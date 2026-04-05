@@ -20,17 +20,18 @@ Make the XIPivot tab profile-aware and add support for custom DAT mod downloads 
 ### Custom DAT Mod Downloads
 
 - A "Custom DAT Mods" section appears below the built-in HD packs on the XIPivot tab.
-- User pastes a GitHub URL and clicks "Add".
-- URL detection:
-  - **Repo URL** (`github.com/user/repo`): downloads default branch as zip via GitHub archive endpoint.
-  - **Release URL** (`github.com/user/repo/releases/...`): fetches latest release assets via GitHub API, downloads the zip.
-- Mods extract to `runtime/ashita/polplugins/DATs/<repo-name>/`, same as built-in packs.
+- User pastes a URL and clicks "Add".
+- URL detection (in priority order):
+  - **GitHub Repo URL** (`github.com/user/repo`): downloads default branch as zip via GitHub archive endpoint.
+  - **GitHub Release URL** (`github.com/user/repo/releases/...`): fetches latest release assets via GitHub API, downloads the zip.
+  - **Direct zip URL** (any URL ending in `.zip`, or any non-GitHub URL): downloads the file directly. The mod name is derived from the zip filename.
+- Mods extract to `runtime/ashita/polplugins/DATs/<mod-name>/`, same as built-in packs.
 - Custom mod metadata stored in electron-store under `customMods` — array of `{ name, url, description, installedAt }`.
 - GitHub repo description fetched from API for card display.
 
 ### New IPC Handlers (main.js)
 
-- `install-custom-mod` — takes a GitHub URL, resolves type (repo vs release), downloads zip, extracts to DATs folder. Reuses existing `yauzl` extraction and progress reporting patterns.
+- `install-custom-mod` — takes a URL, resolves type (GitHub repo, GitHub release, or direct zip), downloads zip, extracts to DATs folder. Reuses existing `yauzl` extraction and progress reporting patterns.
 - `remove-custom-mod` — deletes the overlay folder from DATs.
 - `fetch-github-repo-info` — fetches repo name + description from GitHub API.
 
@@ -51,7 +52,7 @@ Make the XIPivot tab profile-aware and add support for custom DAT mod downloads 
 
 **Custom Mods section (new):**
 - Section header: "Custom DAT Mods".
-- URL input with placeholder: "Paste a GitHub repo or release URL..."
+- URL input with placeholder: "Paste a GitHub link or direct zip URL..."
 - "Add" button triggers download + extraction.
 - Installed mods render as cards matching existing HD pack card styling: name, description, source link, reinstall/remove buttons, progress bar during install.
 
@@ -71,7 +72,7 @@ Make the XIPivot tab profile-aware and add support for custom DAT mod downloads 
 
 ## Error Handling
 
-- **Invalid GitHub URL:** Validate format before download. Inline error: "Not a valid GitHub URL".
+- **Invalid URL:** Validate format before download. Inline error: "Not a valid URL — paste a GitHub link or direct zip URL".
 - **GitHub API rate limit (403):** Show: "GitHub rate limit reached — try again in a few minutes".
 - **Download/extraction failure:** Same error pattern as existing HD packs — card shows error state, user can retry.
 - **Duplicate custom mod:** If same repo name already installed, prompt to reinstall.
@@ -83,5 +84,5 @@ Make the XIPivot tab profile-aware and add support for custom DAT mod downloads 
 
 - Auto-updating custom mods (user can reinstall manually).
 - Private GitHub repos (auth tokens).
-- Non-GitHub sources (can add later).
+- Non-zip formats (e.g. .rar, .7z).
 - User-defined categories or grouping for custom mods.
