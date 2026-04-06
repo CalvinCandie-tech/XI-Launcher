@@ -607,42 +607,50 @@ function registerIPC() {
         download(downloadUrl);
       }), { label: 'Update download' });
 
-      sendProgress(75, 'Extracting update...');
+      // Disable Electron's asar interception so we can extract/copy app.asar as a raw file
+      const prevNoAsar = process.noAsar;
+      process.noAsar = true;
 
-      const extractDir = path.join(tmpDir, 'extracted');
-      fs.mkdirSync(extractDir, { recursive: true });
-      await extractZip(tmpFile, extractDir);
+      try {
+        sendProgress(75, 'Extracting update...');
 
-      sendProgress(85, 'Installing update...');
+        const extractDir = path.join(tmpDir, 'extracted');
+        fs.mkdirSync(extractDir, { recursive: true });
+        await extractZip(tmpFile, extractDir);
 
-      // Find the root of the extracted content — may be nested in a folder
-      let sourceDir = extractDir;
-      const entries = fs.readdirSync(extractDir);
-      if (entries.length === 1) {
-        const single = path.join(extractDir, entries[0]);
-        if (fs.statSync(single).isDirectory()) {
-          sourceDir = single;
-        }
-      }
+        sendProgress(85, 'Installing update...');
 
-      // Copy files to app directory, skipping runtime/ and node_modules/
-      const copyRecursive = (src, dest) => {
-        const items = fs.readdirSync(src);
-        for (const item of items) {
-          if (item === 'runtime' || item === 'node_modules') continue;
-          const srcPath = path.join(src, item);
-          const destPath = path.join(dest, item);
-          const stat = fs.statSync(srcPath);
-          if (stat.isDirectory()) {
-            if (!fs.existsSync(destPath)) fs.mkdirSync(destPath, { recursive: true });
-            copyRecursive(srcPath, destPath);
-          } else {
-            fs.copyFileSync(srcPath, destPath);
+        // Find the root of the extracted content — may be nested in a folder
+        let sourceDir = extractDir;
+        const entries = fs.readdirSync(extractDir);
+        if (entries.length === 1) {
+          const single = path.join(extractDir, entries[0]);
+          if (fs.statSync(single).isDirectory()) {
+            sourceDir = single;
           }
         }
-      };
 
-      copyRecursive(sourceDir, appRoot);
+        // Copy files to app directory, skipping runtime/ and node_modules/
+        const copyRecursive = (src, dest) => {
+          const items = fs.readdirSync(src);
+          for (const item of items) {
+            if (item === 'runtime' || item === 'node_modules') continue;
+            const srcPath = path.join(src, item);
+            const destPath = path.join(dest, item);
+            const stat = fs.statSync(srcPath);
+            if (stat.isDirectory()) {
+              if (!fs.existsSync(destPath)) fs.mkdirSync(destPath, { recursive: true });
+              copyRecursive(srcPath, destPath);
+            } else {
+              fs.copyFileSync(srcPath, destPath);
+            }
+          }
+        };
+
+        copyRecursive(sourceDir, appRoot);
+      } finally {
+        process.noAsar = prevNoAsar;
+      }
 
       sendProgress(95, 'Cleaning up...');
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
