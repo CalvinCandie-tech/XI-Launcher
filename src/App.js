@@ -519,10 +519,7 @@ function App() {
             const addonMatch = line.trim().match(/^\/addon\s+load\s+(\S+)/i);
             if (addonMatch) {
               const name = addonMatch[1];
-              const isBuiltIn = ADDON_CATALOGUE.some(a => (a.installAs || a.name).toLowerCase() === name.toLowerCase() && !a.repo);
-              if (!isBuiltIn) {
-                checks.push(api.pathExists(config.ashitaPath + '\\addons\\' + name).then(exists => { if (!exists) missing.push({ name, type: 'addon' }); }));
-              }
+              checks.push(api.pathExists(config.ashitaPath + '\\addons\\' + name).then(exists => { if (!exists) missing.push({ name, type: 'addon' }); }));
             }
           }
           await Promise.all(checks);

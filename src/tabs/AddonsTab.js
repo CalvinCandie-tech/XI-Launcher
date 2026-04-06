@@ -134,8 +134,8 @@ export const ADDON_CATALOGUE = [
   { name: 'affinity', description: 'Allows setting the current process affinity mask in-game', category: 'Automation & Scripting' },
   { name: 'hideobs', description: 'Hides the game window from OBS display stream capturing', category: 'Automation & Scripting' },
   { name: 'ime', description: 'Allows non-Japanese clients to use the Japanese IME and character sets', category: 'Automation & Scripting' },
-  // --- Libraries (auto-installed as dependencies, hidden from grid) ---
-  { name: 'gdifonts', description: 'Font rendering library required by balloon and other addons.', category: 'Library', repo: 'onimitch/gdifonts', installAs: 'libs/gdifonts', isLibrary: true },
+  // --- Libraries (auto-installed as dependencies) ---
+  { name: 'gdifonts', description: 'Font rendering library required by balloon and other addons.', category: 'Library', repo: 'onimitch/gdifonts', installAs: 'libs/gdifonts' },
 ];
 
 const ADDON_BUNDLES = [
@@ -450,7 +450,7 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
 
   const setAll = async (enable) => {
     if (!config.activeProfile) return;
-    const newEnabled = enable ? ADDON_CATALOGUE.filter(a => !a.isLibrary && (!a.repo || installedAddons.includes((a.installAs || a.name).toLowerCase()))).map(a => (a.installAs || a.name).toLowerCase()) : [];
+    const newEnabled = enable ? ADDON_CATALOGUE.filter(a => (!a.repo || installedAddons.includes((a.installAs || a.name).toLowerCase()))).map(a => (a.installAs || a.name).toLowerCase()) : [];
     setEnabledAddons(newEnabled);
     await saveAddonsToProfile(newEnabled);
   };
@@ -603,13 +603,12 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
   };
 
   const filtered = ADDON_CATALOGUE.filter(a => {
-    if (a.isLibrary) return false; // Hide library deps from grid
     if (search && !a.name.toLowerCase().includes(search.toLowerCase()) && !a.description.toLowerCase().includes(search.toLowerCase())) return false;
     if (categoryFilter !== 'All' && a.category !== categoryFilter) return false;
     return true;
   });
 
-  const visibleCatalogue = ADDON_CATALOGUE.filter(a => !a.isLibrary);
+  const visibleCatalogue = ADDON_CATALOGUE;
   const categories = [...new Set(visibleCatalogue.map(a => a.category))].sort();
 
 
