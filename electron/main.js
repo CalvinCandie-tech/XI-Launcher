@@ -630,36 +630,55 @@ function registerIPC() {
           }
         }
 
-        // Copy files to app directory, skipping runtime/ and node_modules/
-        const copyRecursive = (src, dest) => {
-          const items = fs.readdirSync(src);
-          for (const item of items) {
-            if (item === 'runtime' || item === 'node_modules') continue;
-            const srcPath = path.join(src, item);
-            const destPath = path.join(dest, item);
-            const stat = fs.statSync(srcPath);
-            if (stat.isDirectory()) {
-              if (!fs.existsSync(destPath)) fs.mkdirSync(destPath, { recursive: true });
-              copyRecursive(srcPath, destPath);
-            } else {
-              fs.copyFileSync(srcPath, destPath);
-            }
-          }
-        };
+        // Remove runtime/ and node_modules/ from extracted content so the batch script
+        // doesn't overwrite user data or bloat the install
+        const skipDirs = ['runtime', 'node_modules'];
+        for (const skip of skipDirs) {
+          const skipPath = path.join(sourceDir, skip);
+          if (fs.existsSync(skipPath)) fs.rmSync(skipPath, { recursive: true, force: true });
+        }
 
-        copyRecursive(sourceDir, appRoot);
+        sendProgress(95, 'Preparing restart...');
+
+        // Write a batch script that waits for the app to exit, copies files, then relaunches.
+        // This avoids EBUSY errors from overwriting files locked by the running process.
+        const exePath = app.getPath('exe');
+        const batPath = path.join(tmpDir, 'update.bat');
+        const batContent = [
+          '@echo off',
+          // Wait for the Electron process to fully exit
+          `set "EXE_NAME=${path.basename(exePath)}"`,
+          ':waitloop',
+          'tasklist /FI "IMAGENAME eq %EXE_NAME%" 2>NUL | find /I "%EXE_NAME%" >NUL',
+          'if not errorlevel 1 (',
+          '  timeout /t 1 /nobreak >NUL',
+          '  goto waitloop',
+          ')',
+          // Robocopy: mirror sourceDir into appRoot, exclude runtime/ and node_modules/
+          // /E = recurse, /IS /IT = overwrite same/tweaked, /R:3 /W:1 = retry, /XD = exclude dirs, /NFL /NDL /NJH /NJS = quiet
+          `robocopy "${sourceDir}" "${appRoot}" /E /IS /IT /R:3 /W:1 /XD runtime node_modules /NFL /NDL /NJH /NJS`,
+          // Clean up temp directory
+          `rmdir /S /Q "${tmpDir}" 2>NUL`,
+          // Relaunch the app
+          `start "" "${exePath}"`,
+        ].join('\r\n');
+        fs.writeFileSync(batPath, batContent, 'utf-8');
+
+        // Launch the batch script detached so it survives app exit
+        const child = spawn('cmd.exe', ['/c', batPath], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true,
+        });
+        child.unref();
       } finally {
         process.noAsar = prevNoAsar;
       }
-
-      sendProgress(95, 'Cleaning up...');
-      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
 
       sendProgress(100, 'Restarting...');
 
       // Small delay so the renderer sees "Restarting..."
       setTimeout(() => {
-        app.relaunch();
         app.exit(0);
       }, 1000);
 
