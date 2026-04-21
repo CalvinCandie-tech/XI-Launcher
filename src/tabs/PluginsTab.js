@@ -14,7 +14,6 @@ const PLUGIN_CATALOGUE = [
   { name: 'toon', desc: 'Applies cel-shading / toon rendering to the game for a stylized look.', category: 'Built-in' },
   { name: 'winefix', desc: 'Compatibility fixes for running FFXI under Wine/Proton on Linux. Not needed on Windows.', category: 'Built-in' },
   // Community — downloaded separately
-  { name: 'XICamera', desc: 'Unlocks extended camera distance and zoom controls beyond the default limits.', category: 'Community', repo: 'Hokuten85/XICamera', useRelease: true },
   { name: 'FindAll', desc: 'Instant inventory search across all characters and storage. Much faster than the built-in /find.', category: 'Community', repo: 'ThornyFFXI/FindAll', useRelease: true },
   { name: 'EquipViewer', desc: 'Overlays your currently equipped gear on screen in a translucent window.', category: 'Community', repo: 'ProjectTako/EquipViewer', subdir: 'plugins' },
 ];
