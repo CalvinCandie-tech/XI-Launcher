@@ -80,10 +80,10 @@ function LogViewerTab({ config }) {
     setFilteredLines(result);
   }, [lines, levelFilter, search]);
 
-  // Auto-scroll
+  // Auto-scroll — use 'auto' (instant) so rapid poll updates don't queue a long smooth-scroll animation.
   useEffect(() => {
     if (autoScroll && logEndRef.current) {
-      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      logEndRef.current.scrollIntoView({ behavior: 'auto', block: 'end' });
     }
   }, [filteredLines, autoScroll]);
 

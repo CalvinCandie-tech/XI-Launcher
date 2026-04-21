@@ -15,11 +15,17 @@ const yauzl = require('yauzl');
  */
 function extractZip(zipPath, destDir, onProgress) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (err) => { if (!settled) { settled = true; reject(err); } };
+    const finish = (count) => { if (!settled) { settled = true; resolve(count); } };
+
     yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
-      if (err) return reject(err);
+      if (err) return fail(err);
 
       let extracted = 0;
       const total = zipfile.entryCount;
+
+      zipfile.on('error', fail);
 
       zipfile.readEntry();
       zipfile.on('entry', (entry) => {
@@ -27,22 +33,36 @@ function extractZip(zipPath, destDir, onProgress) {
         // Zip slip protection: reject entries that escape destDir
         const resolved = path.resolve(entryPath);
         if (!resolved.startsWith(path.resolve(destDir) + path.sep) && resolved !== path.resolve(destDir)) {
-          return reject(new Error(`Zip entry escapes target: ${entry.fileName}`));
+          return fail(new Error(`Zip entry escapes target: ${entry.fileName}`));
         }
 
         if (/\/$/.test(entry.fileName)) {
           // Directory entry
-          fs.mkdirSync(entryPath, { recursive: true });
+          try {
+            fs.mkdirSync(entryPath, { recursive: true });
+          } catch (e) {
+            return fail(e);
+          }
           extracted++;
           if (onProgress) onProgress(Math.round((extracted / total) * 100), entry.fileName);
           zipfile.readEntry();
         } else {
           // File entry — ensure parent dir exists
-          fs.mkdirSync(path.dirname(entryPath), { recursive: true });
+          try {
+            fs.mkdirSync(path.dirname(entryPath), { recursive: true });
+          } catch (e) {
+            return fail(e);
+          }
           zipfile.openReadStream(entry, (err, readStream) => {
-            if (err) return reject(err);
+            if (err) return fail(err);
             const writeStream = fs.createWriteStream(entryPath);
-            readStream.on('end', () => {
+            // Both streams need error listeners — an unhandled 'error' event
+            // crashes the main process.
+            readStream.on('error', (e) => { try { writeStream.destroy(); } catch {} fail(e); });
+            writeStream.on('error', (e) => { try { readStream.destroy(); } catch {} fail(e); });
+            // Resolve per-entry on the writer's finish so we don't advance before
+            // the bytes are flushed to disk.
+            writeStream.on('finish', () => {
               extracted++;
               if (onProgress) onProgress(Math.round((extracted / total) * 100), entry.fileName);
               zipfile.readEntry();
@@ -52,8 +72,7 @@ function extractZip(zipPath, destDir, onProgress) {
         }
       });
 
-      zipfile.on('end', () => resolve(extracted));
-      zipfile.on('error', reject);
+      zipfile.on('end', () => finish(extracted));
     });
   });
 }
@@ -141,6 +160,34 @@ async function retryAsync(fn, { retries = 3, delay = 1000, label = 'Download' } 
   }
 }
 
+// GitHub API GET with timeout. Rejects on network error, timeout, or non-2xx.
+// Returns the parsed JSON body.
+function githubGet(apiPath, { timeoutMs = 10000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const req = https.get({
+      hostname: 'api.github.com',
+      path: apiPath,
+      headers: { 'User-Agent': 'XI-Launcher', Accept: 'application/vnd.github+json' }
+    }, (res) => {
+      if (res.statusCode && res.statusCode >= 400) {
+        res.resume();
+        return reject(new Error(`GitHub ${apiPath} returned HTTP ${res.statusCode}`));
+      }
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch { reject(new Error(`Invalid JSON from ${apiPath}`)); }
+      });
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error(`GitHub ${apiPath} timed out after ${timeoutMs}ms`));
+    });
+  });
+}
+
 // Check available disk space (returns bytes free on the drive containing targetPath)
 function checkDiskSpace(targetPath) {
   try {
@@ -186,6 +233,18 @@ function isAllowedPath(filePath) {
     ffxiPath ? path.resolve(ffxiPath, '..') : null
   ].filter(Boolean).map(p => path.resolve(p));
   return allowed.some(root => resolved.startsWith(root + path.sep) || resolved === root);
+}
+
+// Reject names that could escape a parent dir via path traversal or invalid chars.
+// Used for profile names, hd-pack names, custom mod names — anything user-controlled
+// that gets path.join'd into a filesystem path.
+function sanitizeName(name) {
+  if (!name || typeof name !== 'string') return null;
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  if (/[/\\:*?"<>|\x00-\x1f]|\.\./.test(trimmed)) return null;
+  if (trimmed === '.' || trimmed === '..') return null;
+  return trimmed;
 }
 
 // ── Shared utilities ──
@@ -299,6 +358,18 @@ async function deployBundledXiloader() {
 app.whenReady().then(async () => {
   // Ensure runtime directory exists
   if (!fs.existsSync(runtimeDir)) fs.mkdirSync(runtimeDir, { recursive: true });
+
+  // Check for a failed-update marker left by the post-exit batch script
+  try {
+    const errorMarker = path.join(runtimeDir, 'update-error.log');
+    if (fs.existsSync(errorMarker)) {
+      const detail = fs.readFileSync(errorMarker, 'utf8').split('\n')[0].trim();
+      startupWarnings.push(`Last update failed to install — ${detail || 'robocopy reported an error'}. You are still on the previous version; try the update again or reinstall from the GitHub release.`);
+      try { fs.unlinkSync(errorMarker); } catch {}
+    }
+  } catch (e) {
+    console.error('Failed to read update-error marker:', e.message);
+  }
 
   // Clean up stale temp files from previous sessions
   try {
@@ -507,19 +578,32 @@ function registerIPC() {
       } catch {}
 
       const data = await new Promise((resolve, reject) => {
-        https.get(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
+        const req = https.get(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
           headers: { 'User-Agent': 'XI-Launcher', Accept: 'application/json' }
         }, (res) => {
+          if (res.statusCode && res.statusCode >= 400) {
+            res.resume();
+            return reject(new Error(`GitHub API returned status ${res.statusCode}`));
+          }
           let body = '';
           res.on('data', c => body += c);
           res.on('end', () => {
-            try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
+            try { resolve(JSON.parse(body)); } catch (e) { reject(new Error('Invalid JSON from GitHub API')); }
           });
           res.on('error', reject);
-        }).on('error', reject);
+        });
+        req.on('error', reject);
+        req.setTimeout(10000, () => {
+          req.destroy(new Error('GitHub API request timed out'));
+        });
       });
 
-      if (!data.tag_name) return { upToDate: true, current: APP_VERSION };
+      if (data && typeof data.message === 'string' && /rate limit/i.test(data.message)) {
+        return { upToDate: true, current: APP_VERSION, error: 'GitHub rate limit reached — try again later' };
+      }
+      if (!data || !data.tag_name) {
+        return { upToDate: true, current: APP_VERSION, error: (data && data.message) || 'Unexpected response from GitHub' };
+      }
 
       const latest = data.tag_name.replace(/^v/, '');
       const isNewer = latest.localeCompare(APP_VERSION, undefined, { numeric: true }) > 0;
@@ -538,8 +622,8 @@ function registerIPC() {
         releaseUrl: data.html_url || '',
         releaseNotes: (data.body || '').slice(0, 500)
       };
-    } catch {
-      return { upToDate: true, current: APP_VERSION, error: 'Could not check for updates' };
+    } catch (e) {
+      return { upToDate: true, current: APP_VERSION, error: `Could not check for updates: ${e.message || e}` };
     }
   });
 
@@ -566,6 +650,7 @@ function registerIPC() {
 
     try {
       if (!downloadUrl) return { success: false, error: 'No download URL provided' };
+      if (isDev) return { success: false, error: 'Updates cannot be installed in development mode' };
 
       sendProgress(0, 'Starting download...');
 
@@ -577,20 +662,31 @@ function registerIPC() {
 
       // Download the zip
       await retryAsync(() => new Promise((resolve, reject) => {
-        const download = (url) => {
-          https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
-            if (res.statusCode === 302 || res.statusCode === 301) {
-              return download(res.headers.location);
+        let settled = false;
+        const finish = (fn, ...args) => { if (settled) return; settled = true; fn(...args); };
+
+        const download = (url, redirectsLeft = 5) => {
+          const req = https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
+            if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) {
+              res.resume();
+              if (redirectsLeft <= 0) return finish(reject, new Error('Too many redirects'));
+              if (!res.headers.location) return finish(reject, new Error('Redirect without location header'));
+              return download(res.headers.location, redirectsLeft - 1);
             }
             if (res.statusCode !== 200) {
-              return reject(new Error(`Download failed with status ${res.statusCode}`));
+              res.resume();
+              return finish(reject, new Error(`Download failed with status ${res.statusCode}`));
             }
             const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
             let receivedBytes = 0;
             const file = fs.createWriteStream(tmpFile);
+            file.on('error', (err) => {
+              res.destroy();
+              finish(reject, err);
+            });
             res.on('data', (chunk) => {
               receivedBytes += chunk.length;
-              file.write(chunk);
+              if (!file.write(chunk)) res.pause();
               const mb = (receivedBytes / 1048576).toFixed(1);
               if (totalBytes > 0) {
                 const pct = Math.round((receivedBytes / totalBytes) * 70);
@@ -600,9 +696,18 @@ function registerIPC() {
                 sendProgress(Math.min(70, Math.round(receivedBytes / 50000)), `Downloading... ${mb} MB`);
               }
             });
-            res.on('end', () => { file.end(); file.on('finish', resolve); });
-            res.on('error', (err) => { file.destroy(); reject(err); });
-          }).on('error', reject);
+            file.on('drain', () => res.resume());
+            res.on('end', () => {
+              file.end();
+              file.once('finish', () => finish(resolve));
+            });
+            res.on('error', (err) => { file.destroy(); finish(reject, err); });
+          });
+          req.on('error', (err) => finish(reject, err));
+          // Abort if no bytes arrive for 30s (stalled connection)
+          req.setTimeout(30000, () => {
+            req.destroy(new Error('Download stalled — no data for 30 seconds'));
+          });
         };
         download(downloadUrl);
       }), { label: 'Update download' });
@@ -644,6 +749,9 @@ function registerIPC() {
         // This avoids EBUSY errors from overwriting files locked by the running process.
         const exePath = app.getPath('exe');
         const batPath = path.join(tmpDir, 'update.bat');
+        const errorMarker = path.join(runtimeDir, 'update-error.log');
+        // Pre-remove any stale marker so a successful run doesn't leave one behind
+        try { if (fs.existsSync(errorMarker)) fs.unlinkSync(errorMarker); } catch {}
         const batContent = [
           '@echo off',
           // Wait for the Electron process to fully exit
@@ -654,12 +762,19 @@ function registerIPC() {
           '  timeout /t 1 /nobreak >NUL',
           '  goto waitloop',
           ')',
-          // Robocopy: mirror sourceDir into appRoot, exclude runtime/ and node_modules/
-          // /E = recurse, /IS /IT = overwrite same/tweaked, /R:3 /W:1 = retry, /XD = exclude dirs, /NFL /NDL /NJH /NJS = quiet
-          `robocopy "${sourceDir}" "${appRoot}" /E /IS /IT /R:3 /W:1 /XD runtime node_modules /NFL /NDL /NJH /NJS`,
-          // Clean up temp directory
+          // Robocopy: mirror sourceDir into appRoot so files removed upstream are cleaned up.
+          // /MIR = mirror (copy + purge extras), /R:3 /W:1 = retry, /XD = exclude dirs (protects runtime/),
+          // /NFL /NDL /NJH /NJS = quiet. Robocopy exit codes: 0-7 success, 8+ failure.
+          `robocopy "${sourceDir}" "${appRoot}" /MIR /R:3 /W:1 /XD runtime node_modules /NFL /NDL /NJH /NJS`,
+          'set RC_EXIT=%errorlevel%',
+          'if %RC_EXIT% GEQ 8 (',
+          `  echo Robocopy failed with exit code %RC_EXIT% while copying update files. > "${errorMarker}"`,
+          `  echo Source: ${sourceDir} >> "${errorMarker}"`,
+          `  echo Dest: ${appRoot} >> "${errorMarker}"`,
+          ')',
+          // Clean up temp directory (do this regardless so we don't leak disk)
           `rmdir /S /Q "${tmpDir}" 2>NUL`,
-          // Relaunch the app
+          // Relaunch the app so the user isn't stranded — if the copy failed they'll see a startup warning
           `start "" "${exePath}"`,
         ].join('\r\n');
         fs.writeFileSync(batPath, batContent, 'utf-8');
@@ -942,20 +1057,28 @@ function registerIPC() {
       sendProgress(5, 'Downloading Ashita v4 from GitHub...');
 
       await retryAsync(() => new Promise((resolve, reject) => {
-        const download = (url) => {
-          https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
+        let settled = false;
+        const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
+        const okResolve = done(resolve);
+        const okReject = done(reject);
+        const download = (url, redirects = 0) => {
+          if (redirects > 10) return okReject(new Error('Too many redirects.'));
+          const req = https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
             if (res.statusCode === 302 || res.statusCode === 301) {
-              return download(res.headers.location);
+              if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
+              res.resume();
+              return download(res.headers.location, redirects + 1);
             }
             if (res.statusCode !== 200) {
-              return reject(new Error(`Download failed with status ${res.statusCode}`));
+              return okReject(new Error(`Download failed with status ${res.statusCode}`));
             }
             const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
             let receivedBytes = 0;
             const file = fs.createWriteStream(tmpZip);
+            file.on('error', (err) => { try { res.destroy(); } catch {} okReject(err); });
             res.on('data', (chunk) => {
               receivedBytes += chunk.length;
-              file.write(chunk);
+              if (!file.write(chunk)) res.pause();
               const mb = (receivedBytes / 1048576).toFixed(1);
               if (totalBytes > 0) {
                 const pct = 5 + Math.round((receivedBytes / totalBytes) * 50);
@@ -965,9 +1088,11 @@ function registerIPC() {
                 sendProgress(Math.min(50, 5 + Math.round(receivedBytes / 50000)), `Downloading... ${mb} MB`);
               }
             });
-            res.on('end', () => { file.end(); file.on('finish', resolve); });
-            res.on('error', (err) => { file.destroy(); reject(err); });
-          }).on('error', reject);
+            file.on('drain', () => res.resume());
+            res.on('end', () => { file.end(); file.on('finish', okResolve); });
+            res.on('error', (err) => { file.destroy(); okReject(err); });
+          });
+          req.on('error', okReject);
         };
         download(zipUrl);
       }), { label: 'Ashita v4 download' });
@@ -1060,6 +1185,12 @@ function registerIPC() {
   ipcMain.handle('launch-game', async (_, opts) => {
     try {
       const profileKey = opts.profileName || opts.serverName || 'default';
+
+      // Reject any profile name with path-separator or traversal chars so we can't
+      // be tricked into reading `config/boot/../../evil.ini`.
+      if (opts.profileName && !sanitizeName(opts.profileName)) {
+        return { error: 'Profile name contains invalid characters. Rename the profile and try again.' };
+      }
 
       if (opts.useXiloader) {
         if (!opts.xiloaderPath) return { error: 'xiloader path is not set. Go to Profiles → Installation Paths and set the xiloader path.' };
@@ -1162,21 +1293,33 @@ function registerIPC() {
       sendProgress(10, 'Downloading xiloader.exe...');
 
       await retryAsync(() => new Promise((resolve, reject) => {
-        const download = (url) => {
-          https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
-            if (res.statusCode === 302 || res.statusCode === 301) return download(res.headers.location);
-            if (res.statusCode !== 200) return reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+        let settled = false;
+        const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
+        const okResolve = done(resolve);
+        const okReject = done(reject);
+        const download = (url, redirects = 0) => {
+          if (redirects > 10) return okReject(new Error('Too many redirects.'));
+          const req = https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
+            if (res.statusCode === 302 || res.statusCode === 301) {
+              if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
+              res.resume();
+              return download(res.headers.location, redirects + 1);
+            }
+            if (res.statusCode !== 200) return okReject(new Error(`Download failed: HTTP ${res.statusCode}`));
             const total = parseInt(res.headers['content-length'] || '0', 10);
             let received = 0;
             const file = fs.createWriteStream(destExe);
+            file.on('error', (err) => { try { res.destroy(); } catch {} okReject(err); });
             res.on('data', (chunk) => {
               received += chunk.length;
-              file.write(chunk);
+              if (!file.write(chunk)) res.pause();
               if (total > 0) sendProgress(10 + Math.round((received / total) * 85), `Downloading... ${(received / 1024).toFixed(0)} KB`);
             });
-            res.on('end', () => { file.end(); file.on('finish', resolve); });
-            res.on('error', (err) => { file.destroy(); reject(err); });
-          }).on('error', reject);
+            file.on('drain', () => res.resume());
+            res.on('end', () => { file.end(); file.on('finish', okResolve); });
+            res.on('error', (err) => { file.destroy(); okReject(err); });
+          });
+          req.on('error', okReject);
         };
         download(downloadUrl);
       }), { label: 'xiloader download' });
@@ -1288,17 +1431,29 @@ function registerIPC() {
     const addonsDir = path.join(ashitaPath, 'addons');
     try {
       if (!fs.existsSync(addonsDir)) return { addons: [] };
-      const entries = fs.readdirSync(addonsDir, { withFileTypes: true });
-      const addons = entries
-        .filter(e => e.isDirectory())
-        .map(e => {
-          const mainLua = path.join(addonsDir, e.name, `${e.name}.lua`);
-          const altLua = path.join(addonsDir, e.name, 'main.lua');
-          return {
-            name: e.name,
-            hasMainLua: fs.existsSync(mainLua) || fs.existsSync(altLua)
-          };
-        });
+      const hasLua = (dir, folderName) =>
+        fs.existsSync(path.join(dir, `${folderName}.lua`)) ||
+        fs.existsSync(path.join(dir, 'main.lua'));
+      const addons = [];
+      for (const ent of fs.readdirSync(addonsDir, { withFileTypes: true })) {
+        if (!ent.isDirectory()) continue;
+        const topDir = path.join(addonsDir, ent.name);
+        if (hasLua(topDir, ent.name)) {
+          addons.push({ name: ent.name, hasMainLua: true });
+          continue;
+        }
+        // Container folder (e.g. "libs/") — descend one level so nested installs
+        // like libs/gdifonts are detectable.
+        try {
+          for (const sub of fs.readdirSync(topDir, { withFileTypes: true })) {
+            if (!sub.isDirectory()) continue;
+            const subDir = path.join(topDir, sub.name);
+            if (hasLua(subDir, sub.name)) {
+              addons.push({ name: `${ent.name}/${sub.name}`, hasMainLua: true });
+            }
+          }
+        } catch {}
+      }
       return { addons };
     } catch {
       return { addons: [] };
@@ -1317,12 +1472,9 @@ function registerIPC() {
     }
   });
 
-  const sanitizeProfileName = (name) => {
-    if (!name || typeof name !== 'string') return null;
-    // Block path traversal and unsafe characters
-    if (/[/\\:*?"<>|]|\.\./.test(name)) return null;
-    return name.trim();
-  };
+  // Module-level sanitizeName() is the canonical guard — this local alias is kept
+  // so the existing call sites below continue to read naturally.
+  const sanitizeProfileName = sanitizeName;
 
   ipcMain.handle('read-profile', async (_, ashitaPath, name) => {
     const safeName = sanitizeProfileName(name);
@@ -1368,21 +1520,23 @@ function registerIPC() {
   // Profile export — saves INI + per-profile settings as a JSON file
   ipcMain.handle('export-profile', async (_, ashitaPath, profileName) => {
     try {
-      const iniPath = path.join(ashitaPath, 'config', 'boot', `${profileName}.ini`);
+      const safeName = sanitizeName(profileName);
+      if (!safeName) return { success: false, error: 'Invalid profile name' };
+      const iniPath = path.join(ashitaPath, 'config', 'boot', `${safeName}.ini`);
       if (!fs.existsSync(iniPath)) return { success: false, error: 'Profile INI not found' };
       const iniContent = fs.readFileSync(iniPath, 'utf-8');
-      const profileSettings = (store.get('profileSettings') || {})[profileName] || {};
+      const profileSettings = (store.get('profileSettings') || {})[safeName] || {};
 
       const exportData = {
         version: 1,
-        name: profileName,
+        name: safeName,
         ini: iniContent,
         settings: profileSettings,
         exportedAt: new Date().toISOString()
       };
 
       const result = await dialog.showSaveDialog(mainWindow, {
-        defaultPath: `${profileName}.xiprofile`,
+        defaultPath: `${safeName}.xiprofile`,
         filters: [{ name: 'XI Launcher Profile', extensions: ['xiprofile'] }]
       });
       if (result.canceled) return { success: false, cancelled: true };
@@ -1405,17 +1559,35 @@ function registerIPC() {
       const data = JSON.parse(content);
 
       if (!data.name || !data.ini) return { success: false, error: 'Invalid profile file — missing name or INI data.' };
+      if (typeof data.ini !== 'string') return { success: false, error: 'Invalid profile file — INI data is not a string.' };
+
+      // Untrusted JSON — sanitize the profile name before joining into a path.
+      const baseName = sanitizeName(data.name);
+      if (!baseName) return { success: false, error: 'Profile file contains an invalid name.' };
 
       const bootDir = path.join(ashitaPath, 'config', 'boot');
       if (!fs.existsSync(bootDir)) fs.mkdirSync(bootDir, { recursive: true });
 
-      // Check for name collision
-      let name = data.name;
-      const iniPath = path.join(bootDir, `${name}.ini`);
-      if (fs.existsSync(iniPath)) {
-        name = `${data.name}_imported`;
+      // Resolve collisions by appending a numeric suffix and using wx to guard
+      // against a TOCTOU race (two imports landing on the same name).
+      let name = baseName;
+      let fd;
+      for (let i = 0; i < 50; i++) {
+        const candidate = path.join(bootDir, `${name}.ini`);
+        try {
+          fd = fs.openSync(candidate, 'wx');
+          break;
+        } catch (err) {
+          if (err.code !== 'EEXIST') throw err;
+          name = i === 0 ? `${baseName}_imported` : `${baseName}_imported_${i + 1}`;
+        }
       }
-      fs.writeFileSync(path.join(bootDir, `${name}.ini`), data.ini, 'utf-8');
+      if (fd === undefined) return { success: false, error: 'Could not find a unique profile name after 50 attempts.' };
+      try {
+        fs.writeSync(fd, data.ini, 0, 'utf-8');
+      } finally {
+        fs.closeSync(fd);
+      }
 
       // Restore per-profile settings if present
       if (data.settings && Object.keys(data.settings).length > 0) {
@@ -1619,12 +1791,18 @@ function registerIPC() {
     const parsed = parseModUrl(url);
     if (!parsed) return { success: false, error: 'Invalid URL' };
 
-    const modName = parsed.type === 'direct-zip' ? parsed.name : parsed.repo;
+    const rawModName = parsed.type === 'direct-zip' ? parsed.name : parsed.repo;
+    // modName gets path.join'd into the DATs folder and used to name temp files, so
+    // strip slashes from GH-style "owner/repo" and block traversal characters.
+    const modName = sanitizeName(String(rawModName).replace(/[/\\]/g, '-'));
+    if (!modName) return { success: false, error: 'Could not derive a safe mod name from the URL.' };
 
     const sendProgress = (percent, detail) => {
       try { mainWindow?.webContents?.send('custom-mod-progress', modName, percent, detail); } catch {}
     };
 
+    let tmpZip = null;
+    let tmpExtract = null;
     try {
       const datsRoot = path.join(ashitaPath, 'polplugins', 'DATs');
       if (!fs.existsSync(datsRoot)) fs.mkdirSync(datsRoot, { recursive: true });
@@ -1684,24 +1862,32 @@ function registerIPC() {
       }
 
       // Download zip
-      const tmpZip = path.join(os.tmpdir(), `custom-mod-${modName}.zip`);
+      tmpZip = path.join(os.tmpdir(), `custom-mod-${modName}.zip`);
       await new Promise((resolve, reject) => {
-        const download = (downloadUrl) => {
+        let settled = false;
+        const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
+        const okResolve = done(resolve);
+        const okReject = done(reject);
+        const download = (downloadUrl, redirects = 0) => {
+          if (redirects > 10) return okReject(new Error('Too many redirects.'));
           const lib = downloadUrl.startsWith('https') ? https : require('http');
-          lib.get(downloadUrl, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
+          const req = lib.get(downloadUrl, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
             if (res.statusCode === 302 || res.statusCode === 301) {
-              return download(res.headers.location);
+              if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
+              res.resume();
+              return download(res.headers.location, redirects + 1);
             }
             if (res.statusCode !== 200) {
-              return reject(new Error(`Download failed with status ${res.statusCode}`));
+              return okReject(new Error(`Download failed with status ${res.statusCode}`));
             }
             const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
             const total = totalBytes > 0 ? totalBytes : estimatedSize;
             let received = 0;
             const file = fs.createWriteStream(tmpZip);
+            file.on('error', (err) => { try { res.destroy(); } catch {} okReject(err); });
             res.on('data', (chunk) => {
               received += chunk.length;
-              file.write(chunk);
+              if (!file.write(chunk)) res.pause();
               const mb = (received / 1048576).toFixed(1);
               if (total > 0) {
                 const pct = Math.min(70, Math.round((received / total) * 70));
@@ -1711,16 +1897,18 @@ function registerIPC() {
                 sendProgress(Math.min(60, Math.round(received / 50000)), `Downloading... ${mb} MB`);
               }
             });
-            res.on('end', () => { file.end(); file.on('finish', resolve); });
-            res.on('error', (err) => { file.close(); reject(err); });
-          }).on('error', reject);
+            file.on('drain', () => res.resume());
+            res.on('end', () => { file.end(); file.on('finish', okResolve); });
+            res.on('error', (err) => { file.destroy(); okReject(err); });
+          });
+          req.on('error', okReject);
         };
         download(zipUrl);
       });
 
       // Extract
       sendProgress(75, 'Extracting files...');
-      const tmpExtract = path.join(os.tmpdir(), `custom-mod-${modName}-extract`);
+      tmpExtract = path.join(os.tmpdir(), `custom-mod-${modName}-extract`);
       if (fs.existsSync(tmpExtract)) fs.rmSync(tmpExtract, { recursive: true, force: true });
       fs.mkdirSync(tmpExtract, { recursive: true });
       await extractZip(tmpZip, tmpExtract, (pct, file) => {
@@ -1753,21 +1941,22 @@ function registerIPC() {
       if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true });
       fs.cpSync(innerDir, destDir, { recursive: true });
 
-      // Cleanup temp files
-      try { fs.rmSync(tmpZip, { force: true }); } catch {}
-      try { fs.rmSync(tmpExtract, { recursive: true, force: true }); } catch {}
-
       sendProgress(100, 'Done!');
       return { success: true, name: modName, message: `${modName} installed to DATs folder` };
     } catch (e) {
       return { success: false, error: friendlyError(e, 'Installing custom mod') };
+    } finally {
+      if (tmpZip) { try { fs.rmSync(tmpZip, { force: true }); } catch {} }
+      if (tmpExtract) { try { fs.rmSync(tmpExtract, { recursive: true, force: true }); } catch {} }
     }
   });
 
   ipcMain.handle('remove-custom-mod', async (_, ashitaPath, modName) => {
     try {
+      const safeMod = sanitizeName(modName);
+      if (!safeMod) return { success: false, error: 'Invalid mod name' };
       const datsRoot = path.join(ashitaPath, 'polplugins', 'DATs');
-      const modDir = path.join(datsRoot, modName);
+      const modDir = path.join(datsRoot, safeMod);
       if (!path.resolve(modDir).startsWith(path.resolve(datsRoot) + path.sep)) {
         return { success: false, error: 'Invalid mod name' };
       }
@@ -1930,6 +2119,12 @@ function registerIPC() {
 
   // Download and install an HD mod pack from GitHub
   ipcMain.handle('install-hdpack', async (_, ashitaPath, packName, repoUrl, subdir) => {
+    const safePackName = sanitizeName(packName);
+    if (!safePackName) return { success: false, error: 'Invalid pack name.' };
+    const safeSubdir = subdir ? sanitizeName(subdir) : null;
+    if (subdir && !safeSubdir) return { success: false, error: 'Invalid subdirectory name.' };
+    let tmpZip = null;
+    let tmpExtract = null;
     try {
       // Check disk space (HD packs can be 500MB+)
       const freeBytes = checkDiskSpace(ashitaPath);
@@ -1939,11 +2134,16 @@ function registerIPC() {
       }
       // Determine DATs root from pivot.ini or default
       const pivotIni = path.join(ashitaPath, 'config', 'pivot', 'pivot.ini');
-      let datsRoot = path.join(ashitaPath, 'polplugins', 'DATs');
+      const defaultDatsRoot = path.join(ashitaPath, 'polplugins', 'DATs');
+      let datsRoot = defaultDatsRoot;
       if (fs.existsSync(pivotIni)) {
         const iniContent = fs.readFileSync(pivotIni, 'utf-8');
         const rootMatch = iniContent.match(/root_path\s*=\s*(.+)/i);
-        if (rootMatch && rootMatch[1].trim()) datsRoot = rootMatch[1].trim();
+        if (rootMatch && rootMatch[1].trim()) {
+          const candidate = path.resolve(rootMatch[1].trim());
+          // Untrusted INI — only honor root_path if it's inside an allowed root
+          if (isAllowedPath(candidate)) datsRoot = candidate;
+        }
       }
 
       // Query GitHub API for the default branch name
@@ -1972,35 +2172,47 @@ function registerIPC() {
 
       // Send progress updates to renderer
       const sendProgress = (phase, percent, detail) => {
-        try { mainWindow?.webContents?.send('hdpack-progress', packName, phase, percent, detail); } catch {}
+        try { mainWindow?.webContents?.send('hdpack-progress', safePackName, phase, percent, detail); } catch {}
       };
 
       sendProgress('download', 0, 'Connecting to GitHub...');
 
       // Download the ZIP to temp
-      const tmpZip = path.join(os.tmpdir(), `hdpack-${packName}.zip`);
+      tmpZip = path.join(os.tmpdir(), `hdpack-${safePackName}.zip`);
       await new Promise((resolve, reject) => {
-        const download = (url) => {
-          https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
+        let settled = false;
+        const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
+        const okResolve = done(resolve);
+        const okReject = done(reject);
+        const download = (url, redirects = 0) => {
+          if (redirects > 10) return okReject(new Error('Too many redirects.'));
+          const req = https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
             if (res.statusCode === 302 || res.statusCode === 301) {
-              return download(res.headers.location);
+              if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
+              res.resume();
+              return download(res.headers.location, redirects + 1);
             }
             if (res.statusCode === 404) {
-              return reject(new Error('Repository not found (404). The download URL may have changed.'));
+              return okReject(new Error('Repository not found (404). The download URL may have changed.'));
             }
             if (res.statusCode !== 200) {
-              return reject(new Error(`Download failed with status ${res.statusCode}`));
+              return okReject(new Error(`Download failed with status ${res.statusCode}`));
             }
             const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
             // GitHub archive zips often lack content-length; use repo size (KB) as estimate
             const estimatedTotal = totalBytes > 0 ? totalBytes : (repoInfo.size ? repoInfo.size * 1024 : 0);
             let receivedBytes = 0;
             const file = fs.createWriteStream(tmpZip);
-            activeDownloads[packName] = { response: res, file, cancelled: false };
+            activeDownloads[safePackName] = { response: res, file, cancelled: false };
+            file.on('error', (err) => {
+              try { res.destroy(); } catch {}
+              delete activeDownloads[safePackName];
+              okReject(err);
+            });
             res.on('data', (chunk) => {
-              if (activeDownloads[packName]?.cancelled) return;
+              if (activeDownloads[safePackName]?.cancelled) return;
               receivedBytes += chunk.length;
-              file.write(chunk);
+              if (!file.write(chunk)) res.pause(); // backpressure
               const mb = (receivedBytes / 1048576).toFixed(1);
               if (estimatedTotal > 0) {
                 const pct = Math.min(70, Math.round((receivedBytes / estimatedTotal) * 70));
@@ -2010,13 +2222,15 @@ function registerIPC() {
                 sendProgress('download', Math.min(60, Math.round(receivedBytes / 50000)), `Downloading... ${mb} MB`);
               }
             });
+            file.on('drain', () => res.resume());
             res.on('end', () => {
-              delete activeDownloads[packName];
+              delete activeDownloads[safePackName];
               file.end();
-              file.on('finish', resolve);
+              file.on('finish', okResolve);
             });
-            res.on('error', (err) => { file.destroy(); delete activeDownloads[packName]; reject(err); });
-          }).on('error', (err) => { delete activeDownloads[packName]; reject(err); });
+            res.on('error', (err) => { file.destroy(); delete activeDownloads[safePackName]; okReject(err); });
+          });
+          req.on('error', (err) => { delete activeDownloads[safePackName]; okReject(err); });
         };
         download(zipUrl);
       });
@@ -2024,7 +2238,7 @@ function registerIPC() {
       sendProgress('extract', 75, 'Extracting files...');
 
       // Extract to temp folder
-      const tmpExtract = path.join(os.tmpdir(), `hdpack-${packName}-extract`);
+      tmpExtract = path.join(os.tmpdir(), `hdpack-${safePackName}-extract`);
       if (fs.existsSync(tmpExtract)) {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
@@ -2054,9 +2268,18 @@ function registerIPC() {
         }
       }
 
-      // If a specific subdirectory was requested (e.g. XiView variant), use it
+      // If a specific subdirectory was requested (e.g. XiView variant), use it.
+      // The caller may pass a nested path like "Ashita4/addons/foo" — validate each
+      // segment and confirm the resolved path stays inside innerDir.
       if (subdir) {
-        const subPath = path.join(innerDir, subdir);
+        const segments = String(subdir).split(/[/\\]/).filter(Boolean);
+        if (segments.some(s => !sanitizeName(s))) {
+          return { success: false, error: 'Invalid subdirectory path.' };
+        }
+        const subPath = path.resolve(innerDir, ...segments);
+        if (!subPath.startsWith(path.resolve(innerDir) + path.sep) && subPath !== path.resolve(innerDir)) {
+          return { success: false, error: 'Subdirectory path escapes archive root.' };
+        }
         if (!fs.existsSync(subPath)) {
           return { success: false, error: `Subdirectory "${subdir}" not found in the repository.` };
         }
@@ -2066,7 +2289,7 @@ function registerIPC() {
       sendProgress('copy', 85, 'Moving files to DATs folder...');
 
       // Move to DATs/[packName] — avoid file-by-file copy which crashes on 232K+ files
-      const destDir = path.join(datsRoot, packName);
+      const destDir = path.join(datsRoot, safePackName);
       if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true });
       if (!fs.existsSync(datsRoot)) fs.mkdirSync(datsRoot, { recursive: true });
 
@@ -2098,24 +2321,28 @@ function registerIPC() {
 
       sendProgress('done', 100, `Installed — ${fileCount} files`);
 
-      try { fs.unlinkSync(tmpZip); } catch (e) { console.error('[install-hdpack] cleanup', e.message); }
-      try { fs.rmSync(tmpExtract, { recursive: true, force: true }); } catch {}
-
       return {
         success: true,
-        message: `${packName} installed — ${fileCount} files extracted to ${destDir}`
+        message: `${safePackName} installed — ${fileCount} files extracted to ${destDir}`
       };
     } catch (e) {
       return { success: false, error: friendlyError(e, 'Installing HD pack') };
+    } finally {
+      // Clean up tmp regardless of success/failure so we never leak GBs in %TEMP%.
+      if (tmpZip) { try { fs.unlinkSync(tmpZip); } catch {} }
+      if (tmpExtract) { try { fs.rmSync(tmpExtract, { recursive: true, force: true }); } catch {} }
     }
   });
 
   // Install an HD pack from a user-selected local zip (for Nexus-only packs)
   ipcMain.handle('install-hdpack-manual', async (_, ashitaPath, packName) => {
+    const safePackName = sanitizeName(packName);
+    if (!safePackName) return { success: false, error: 'Invalid pack name.' };
+    let tmpExtract = null;
     try {
       const downloadsPath = app.getPath('downloads');
       const { filePaths } = await dialog.showOpenDialog(mainWindow, {
-        title: `Select ${packName} zip file`,
+        title: `Select ${safePackName} zip file`,
         defaultPath: downloadsPath,
         filters: [{ name: 'Zip Archives', extensions: ['zip'] }],
         properties: ['openFile']
@@ -2132,16 +2359,19 @@ function registerIPC() {
       if (fs.existsSync(pivotIni)) {
         const iniContent = fs.readFileSync(pivotIni, 'utf-8');
         const rootMatch = iniContent.match(/root_path\s*=\s*(.+)/i);
-        if (rootMatch && rootMatch[1].trim()) datsRoot = rootMatch[1].trim();
+        if (rootMatch && rootMatch[1].trim()) {
+          const candidate = path.resolve(rootMatch[1].trim());
+          if (isAllowedPath(candidate)) datsRoot = candidate;
+        }
       }
 
       const sendProgress = (phase, percent, detail) => {
-        try { mainWindow?.webContents?.send('hdpack-progress', packName, phase, percent, detail); } catch {}
+        try { mainWindow?.webContents?.send('hdpack-progress', safePackName, phase, percent, detail); } catch {}
       };
 
       sendProgress('extract', 10, 'Extracting files...');
 
-      const tmpExtract = path.join(os.tmpdir(), `hdpack-${packName}-extract`);
+      tmpExtract = path.join(os.tmpdir(), `hdpack-${safePackName}-extract`);
       if (fs.existsSync(tmpExtract)) {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
@@ -2170,7 +2400,7 @@ function registerIPC() {
 
       sendProgress('copy', 75, 'Moving files to DATs folder...');
 
-      const destDir = path.join(datsRoot, packName);
+      const destDir = path.join(datsRoot, safePackName);
       if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true });
       if (!fs.existsSync(datsRoot)) fs.mkdirSync(datsRoot, { recursive: true });
 
@@ -2198,14 +2428,14 @@ function registerIPC() {
 
       sendProgress('done', 100, `Installed — ${fileCount} files`);
 
-      try { fs.rmSync(tmpExtract, { recursive: true, force: true }); } catch {}
-
       return {
         success: true,
-        message: `${packName} installed — ${fileCount} files extracted to ${destDir}`
+        message: `${safePackName} installed — ${fileCount} files extracted to ${destDir}`
       };
     } catch (e) {
       return { success: false, error: friendlyError(e, 'Installing HD pack') };
+    } finally {
+      if (tmpExtract) { try { fs.rmSync(tmpExtract, { recursive: true, force: true }); } catch {} }
     }
   });
 
@@ -2236,22 +2466,26 @@ function registerIPC() {
 
   // Download and install an HD pack from a GitHub release asset (e.g. Remapster)
   ipcMain.handle('install-hdpack-release', async (_, ashitaPath, packName, repoUrl, resolution) => {
-
-
-
+    const safePackName = sanitizeName(packName);
+    if (!safePackName) return { success: false, error: 'Invalid pack name.' };
+    let tmpZip = null;
+    let tmpExtract = null;
     try {
       const pivotIni = path.join(ashitaPath, 'config', 'pivot', 'pivot.ini');
       let datsRoot = path.join(ashitaPath, 'polplugins', 'DATs');
       if (fs.existsSync(pivotIni)) {
         const iniContent = fs.readFileSync(pivotIni, 'utf-8');
         const rootMatch = iniContent.match(/root_path\s*=\s*(.+)/i);
-        if (rootMatch && rootMatch[1].trim()) datsRoot = rootMatch[1].trim();
+        if (rootMatch && rootMatch[1].trim()) {
+          const candidate = path.resolve(rootMatch[1].trim());
+          if (isAllowedPath(candidate)) datsRoot = candidate;
+        }
       }
 
       const repoPath = repoUrl.replace('https://github.com/', '');
 
       const sendProgress = (phase, percent, detail) => {
-        try { mainWindow?.webContents?.send('hdpack-progress', packName, phase, percent, detail); } catch {}
+        try { mainWindow?.webContents?.send('hdpack-progress', safePackName, phase, percent, detail); } catch {}
       };
 
       sendProgress('download', 0, 'Fetching latest release...');
@@ -2294,49 +2528,64 @@ function registerIPC() {
       sendProgress('download', 5, `Downloading ${asset.name} (${(asset.size / 1048576).toFixed(1)} MB)...`);
 
       // Download the release asset
-      const tmpZip = path.join(os.tmpdir(), `hdpack-${packName}.zip`);
+      tmpZip = path.join(os.tmpdir(), `hdpack-${safePackName}.zip`);
       await new Promise((resolve, reject) => {
-        const download = (url) => {
-          const urlObj = new URL(url);
+        let settled = false;
+        const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
+        const okResolve = done(resolve);
+        const okReject = done(reject);
+        const download = (url, redirects = 0) => {
+          if (redirects > 10) return okReject(new Error('Too many redirects.'));
+          let urlObj;
+          try { urlObj = new URL(url); } catch { return okReject(new Error('Invalid download URL.')); }
           const options = {
             hostname: urlObj.hostname,
             path: urlObj.pathname + urlObj.search,
             headers: { 'User-Agent': 'XI-Launcher', 'Accept': 'application/octet-stream' }
           };
-          https.get(options, (res) => {
+          const req = https.get(options, (res) => {
             if (res.statusCode === 302 || res.statusCode === 301) {
-              return download(res.headers.location);
+              if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
+              res.resume();
+              return download(res.headers.location, redirects + 1);
             }
             if (res.statusCode !== 200) {
-              return reject(new Error(`Download failed with status ${res.statusCode}`));
+              return okReject(new Error(`Download failed with status ${res.statusCode}`));
             }
             const totalBytes = parseInt(res.headers['content-length'] || String(asset.size), 10);
             let receivedBytes = 0;
             const file = fs.createWriteStream(tmpZip);
-            activeDownloads[packName] = { response: res, file, cancelled: false };
+            activeDownloads[safePackName] = { response: res, file, cancelled: false };
+            file.on('error', (err) => {
+              try { res.destroy(); } catch {}
+              delete activeDownloads[safePackName];
+              okReject(err);
+            });
             res.on('data', (chunk) => {
-              if (activeDownloads[packName]?.cancelled) return;
+              if (activeDownloads[safePackName]?.cancelled) return;
               receivedBytes += chunk.length;
-              file.write(chunk);
+              if (!file.write(chunk)) res.pause();
               const mb = (receivedBytes / 1048576).toFixed(1);
               const totalMb = (totalBytes / 1048576).toFixed(1);
               const pct = totalBytes > 0 ? Math.round((receivedBytes / totalBytes) * 70) : Math.min(60, Math.round(receivedBytes / 50000));
               sendProgress('download', pct, `Downloading... ${mb} MB / ${totalMb} MB`);
             });
+            file.on('drain', () => res.resume());
             res.on('end', () => {
-              delete activeDownloads[packName];
+              delete activeDownloads[safePackName];
               file.end();
-              file.on('finish', resolve);
+              file.on('finish', okResolve);
             });
-            res.on('error', (err) => { file.destroy(); delete activeDownloads[packName]; reject(err); });
-          }).on('error', (err) => { delete activeDownloads[packName]; reject(err); });
+            res.on('error', (err) => { file.destroy(); delete activeDownloads[safePackName]; okReject(err); });
+          });
+          req.on('error', (err) => { delete activeDownloads[safePackName]; okReject(err); });
         };
         download(asset.browser_download_url);
       });
 
       sendProgress('extract', 75, 'Extracting files...');
 
-      const tmpExtract = path.join(os.tmpdir(), `hdpack-${packName}-extract`);
+      tmpExtract = path.join(os.tmpdir(), `hdpack-${safePackName}-extract`);
       if (fs.existsSync(tmpExtract)) {
         fs.rmSync(tmpExtract, { recursive: true, force: true });
       }
@@ -2360,7 +2609,7 @@ function registerIPC() {
 
       sendProgress('copy', 85, 'Moving files to DATs folder...');
 
-      const destDir = path.join(datsRoot, packName);
+      const destDir = path.join(datsRoot, safePackName);
       if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true });
       if (!fs.existsSync(datsRoot)) fs.mkdirSync(datsRoot, { recursive: true });
 
@@ -2388,15 +2637,15 @@ function registerIPC() {
 
       sendProgress('done', 100, `Installed — ${fileCount} files`);
 
-      try { fs.unlinkSync(tmpZip); } catch (e) { console.error('[install-hdpack-release] cleanup', e.message); }
-      try { fs.rmSync(tmpExtract, { recursive: true, force: true }); } catch (e) { console.error('[install-hdpack-release] cleanup', e.message); }
-
       return {
         success: true,
-        message: `${packName} installed — ${fileCount} files extracted to ${destDir}`
+        message: `${safePackName} installed — ${fileCount} files extracted to ${destDir}`
       };
     } catch (e) {
       return { success: false, error: friendlyError(e, 'Installing HD pack') };
+    } finally {
+      if (tmpZip) { try { fs.unlinkSync(tmpZip); } catch {} }
+      if (tmpExtract) { try { fs.rmSync(tmpExtract, { recursive: true, force: true }); } catch {} }
     }
   });
 
@@ -2465,20 +2714,28 @@ function registerIPC() {
 
       // Download the zip
       await retryAsync(() => new Promise((resolve, reject) => {
-        const download = (url) => {
-          https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
+        let settled = false;
+        const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
+        const okResolve = done(resolve);
+        const okReject = done(reject);
+        const download = (url, redirects = 0) => {
+          if (redirects > 10) return okReject(new Error('Too many redirects.'));
+          const req = https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
             if (res.statusCode === 302 || res.statusCode === 301) {
-              return download(res.headers.location);
+              if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
+              res.resume();
+              return download(res.headers.location, redirects + 1);
             }
             if (res.statusCode !== 200) {
-              return reject(new Error(`Download failed with status ${res.statusCode}`));
+              return okReject(new Error(`Download failed with status ${res.statusCode}`));
             }
             const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
             let receivedBytes = 0;
             const file = fs.createWriteStream(tmpZip);
+            file.on('error', (err) => { try { res.destroy(); } catch {} okReject(err); });
             res.on('data', (chunk) => {
               receivedBytes += chunk.length;
-              file.write(chunk);
+              if (!file.write(chunk)) res.pause();
               const mb = (receivedBytes / 1048576).toFixed(1);
               if (totalBytes > 0) {
                 const pct = 5 + Math.round((receivedBytes / totalBytes) * 60);
@@ -2488,9 +2745,11 @@ function registerIPC() {
                 sendProgress(Math.min(60, 5 + Math.round(receivedBytes / 50000)), `Downloading... ${mb} MB`);
               }
             });
-            res.on('end', () => { file.end(); file.on('finish', resolve); });
-            res.on('error', (err) => { file.destroy(); reject(err); });
-          }).on('error', reject);
+            file.on('drain', () => res.resume());
+            res.on('end', () => { file.end(); file.on('finish', okResolve); });
+            res.on('error', (err) => { file.destroy(); okReject(err); });
+          });
+          req.on('error', okReject);
         };
         download(asset.browser_download_url);
       }), { label: 'dgVoodoo download' });
@@ -2920,20 +3179,28 @@ function registerIPC() {
       const tmpFile = path.join(os.tmpdir(), asset.name);
 
       await retryAsync(() => new Promise((resolve, reject) => {
-        const download = (url) => {
-          https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
+        let settled = false;
+        const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
+        const okResolve = done(resolve);
+        const okReject = done(reject);
+        const download = (url, redirects = 0) => {
+          if (redirects > 10) return okReject(new Error('Too many redirects.'));
+          const req = https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
             if (res.statusCode === 302 || res.statusCode === 301) {
-              return download(res.headers.location);
+              if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
+              res.resume();
+              return download(res.headers.location, redirects + 1);
             }
             if (res.statusCode !== 200) {
-              return reject(new Error(`Download failed with status ${res.statusCode}`));
+              return okReject(new Error(`Download failed with status ${res.statusCode}`));
             }
             const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
             let receivedBytes = 0;
             const file = fs.createWriteStream(tmpFile);
+            file.on('error', (err) => { try { res.destroy(); } catch {} okReject(err); });
             res.on('data', (chunk) => {
               receivedBytes += chunk.length;
-              file.write(chunk);
+              if (!file.write(chunk)) res.pause();
               const mb = (receivedBytes / 1048576).toFixed(1);
               if (totalBytes > 0) {
                 const pct = 5 + Math.round((receivedBytes / totalBytes) * 60);
@@ -2943,9 +3210,11 @@ function registerIPC() {
                 sendProgress(Math.min(60, 5 + Math.round(receivedBytes / 50000)), `Downloading... ${mb} MB`);
               }
             });
-            res.on('end', () => { file.end(); file.on('finish', resolve); });
-            res.on('error', (err) => { file.destroy(); reject(err); });
-          }).on('error', reject);
+            file.on('drain', () => res.resume());
+            res.on('end', () => { file.end(); file.on('finish', okResolve); });
+            res.on('error', (err) => { file.destroy(); okReject(err); });
+          });
+          req.on('error', okReject);
         };
         download(asset.browser_download_url);
       }), { label: 'ReShade download' });
@@ -3175,50 +3444,40 @@ function registerIPC() {
 
       let zipUrl;
       let branch = 'main';
+      // Baseline version the update-checker will compare against next time.
+      // Release installs pin to the release tag; branch installs pin to the commit SHA.
+      let baseline = null; // { tag } or { sha }
 
       if (useRelease) {
-        // Try to get the latest release with assets
-        const releaseInfo = await new Promise((resolve, reject) => {
-          https.get({
-            hostname: 'api.github.com',
-            path: `/repos/${repo}/releases/latest`,
-            headers: { 'User-Agent': 'XI-Launcher' }
-          }, (res) => {
-            let data = '';
-            res.on('data', (chunk) => data += chunk);
-            res.on('end', () => {
-              try { resolve(JSON.parse(data)); }
-              catch { resolve(null); }
-            });
-          }).on('error', () => resolve(null));
-        });
+        let releaseInfo = null;
+        try { releaseInfo = await githubGet(`/repos/${repo}/releases/latest`); } catch (e) {
+          console.error('[install-addon] releases/latest:', e.message);
+        }
 
-        if (releaseInfo && releaseInfo.assets && releaseInfo.assets.length > 0) {
-          // Pick the first .zip asset (skip horizon-specific builds)
-          const asset = releaseInfo.assets.find(a => a.name.endsWith('.zip') && !a.name.includes('horizon')) || releaseInfo.assets.find(a => a.name.endsWith('.zip'));
+        if (releaseInfo && Array.isArray(releaseInfo.assets) && releaseInfo.assets.length > 0) {
+          // Pick the best .zip asset. Skip horizon-specific builds. When multiple
+          // zips target different Ashita interface versions (e.g. "FindAll.1.18.-.Interface.4.30.zip"),
+          // prefer the highest interface number so we match modern Ashita.
+          const zips = releaseInfo.assets.filter(a => a.name.endsWith('.zip') && !a.name.includes('horizon'));
+          const pool = zips.length ? zips : releaseInfo.assets.filter(a => a.name.endsWith('.zip'));
+          const score = (n) => {
+            const m = n.match(/Interface[._-]?(\d+)[._-](\d+)/i);
+            return m ? parseInt(m[1], 10) * 1000 + parseInt(m[2], 10) : -1;
+          };
+          const asset = pool.slice().sort((a, b) => score(b.name) - score(a.name))[0];
           if (asset) {
             zipUrl = asset.browser_download_url;
-            sendProgress(5, `Downloading release ${releaseInfo.tag_name}...`);
+            if (releaseInfo.tag_name) baseline = { tag: releaseInfo.tag_name };
+            sendProgress(5, `Downloading release ${releaseInfo.tag_name || ''} (${asset.name})...`);
           }
         }
       }
 
       if (!zipUrl) {
         // Fallback to source ZIP
-        const repoInfo = await new Promise((resolve, reject) => {
-          https.get({
-            hostname: 'api.github.com',
-            path: `/repos/${repo}`,
-            headers: { 'User-Agent': 'XI-Launcher' }
-          }, (res) => {
-            let data = '';
-            res.on('data', (chunk) => data += chunk);
-            res.on('end', () => {
-              try { resolve(JSON.parse(data)); }
-              catch { reject(new Error('Failed to parse repo info')); }
-            });
-          }).on('error', reject);
-        });
+        let repoInfo;
+        try { repoInfo = await githubGet(`/repos/${repo}`); }
+        catch (e) { return { success: false, error: friendlyError(e, 'Looking up repo') }; }
 
         if (repoInfo.message === 'Not Found') {
           return { success: false, error: `Repository ${repo} not found on GitHub.` };
@@ -3232,21 +3491,29 @@ function registerIPC() {
       // Download ZIP to temp (sanitize slashes — installAs like 'libs/gdifonts' would create subdirs)
       const tmpZip = path.join(os.tmpdir(), `addon-${addonName.replace(/[\\/]/g, '_')}.zip`);
       await retryAsync(() => new Promise((resolve, reject) => {
-        const download = (url) => {
+        let settled = false;
+        const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
+        const okResolve = done(resolve);
+        const okReject = done(reject);
+        const download = (url, redirects = 0) => {
+          if (redirects > 10) return okReject(new Error('Too many redirects.'));
           const mod = url.startsWith('https') ? https : require('http');
-          mod.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
+          const req = mod.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
             if (res.statusCode === 302 || res.statusCode === 301) {
-              return download(res.headers.location);
+              if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
+              res.resume();
+              return download(res.headers.location, redirects + 1);
             }
             if (res.statusCode !== 200) {
-              return reject(new Error(`Download failed with status ${res.statusCode}`));
+              return okReject(new Error(`Download failed with status ${res.statusCode}`));
             }
             const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
             let receivedBytes = 0;
             const file = fs.createWriteStream(tmpZip);
+            file.on('error', (err) => { try { res.destroy(); } catch {} okReject(err); });
             res.on('data', (chunk) => {
               receivedBytes += chunk.length;
-              file.write(chunk);
+              if (!file.write(chunk)) res.pause();
               const mb = (receivedBytes / 1048576).toFixed(1);
               if (totalBytes > 0) {
                 const pct = 5 + Math.round((receivedBytes / totalBytes) * 55);
@@ -3256,9 +3523,11 @@ function registerIPC() {
                 sendProgress(Math.min(50, 5 + Math.round(receivedBytes / 20000)), `Downloading... ${mb} MB`);
               }
             });
-            res.on('end', () => { file.end(); file.on('finish', resolve); });
-            res.on('error', (err) => { file.destroy(); reject(err); });
-          }).on('error', reject);
+            file.on('drain', () => res.resume());
+            res.on('end', () => { file.end(); file.on('finish', okResolve); });
+            res.on('error', (err) => { file.destroy(); okReject(err); });
+          });
+          req.on('error', okReject);
         };
         download(zipUrl);
       }), { label: `Addon ${addonName} download` });
@@ -3278,6 +3547,16 @@ function registerIPC() {
       let innerDir = extracted.length === 1 && fs.statSync(path.join(tmpExtract, extracted[0])).isDirectory()
         ? path.join(tmpExtract, extracted[0])
         : tmpExtract;
+
+      // Some release zips wrap the addon in an `addons/<name>/` folder. If we landed
+      // inside that wrapper, descend into the single child so we don't end up with
+      // `addons/<name>/<name>/...` on disk.
+      if (path.basename(innerDir).toLowerCase() === 'addons') {
+        const wrapped = fs.readdirSync(innerDir);
+        if (wrapped.length === 1 && fs.statSync(path.join(innerDir, wrapped[0])).isDirectory()) {
+          innerDir = path.join(innerDir, wrapped[0]);
+        }
+      }
 
       // If a subdir is specified (monorepo), use that subfolder as the source
       if (subdir) {
@@ -3350,30 +3629,20 @@ function registerIPC() {
       try { fs.unlinkSync(tmpZip); } catch (e) { console.error('[install-addon] cleanup', e.message); }
       try { fs.rmSync(tmpExtract, { recursive: true, force: true }); } catch {}
 
-      // Fetch latest commit SHA for version tracking
-      let latestSha = null;
-      try {
-        latestSha = await new Promise((resolve, reject) => {
-          https.get({
-            hostname: 'api.github.com',
-            path: `/repos/${repo}/commits?per_page=1`,
-            headers: { 'User-Agent': 'XI-Launcher' }
-          }, (res) => {
-            let data = '';
-            res.on('data', (chunk) => data += chunk);
-            res.on('end', () => {
-              try {
-                const commits = JSON.parse(data);
-                resolve(Array.isArray(commits) && commits.length > 0 ? commits[0].sha : null);
-              } catch { resolve(null); }
-            });
-          }).on('error', () => resolve(null));
-        });
-      } catch { /* SHA fetch is best-effort */ }
+      // If this was a branch install we still need a baseline — pin to the latest commit SHA.
+      // (Release installs were pinned to a tag above.)
+      if (!baseline) {
+        try {
+          const commits = await githubGet(`/repos/${repo}/commits?per_page=1`);
+          if (Array.isArray(commits) && commits.length > 0 && commits[0].sha) {
+            baseline = { sha: commits[0].sha };
+          }
+        } catch (e) { console.error('[install-addon] commit SHA:', e.message); }
+      }
 
-      if (latestSha && store) {
+      if (baseline && store) {
         const shas = store.get('addonUpdateSHAs', {});
-        shas[addonName] = { sha: latestSha, repo, subdir: subdir || null };
+        shas[addonName] = { ...baseline, useRelease: !!useRelease, repo, subdir: subdir || null };
         store.set('addonUpdateSHAs', shas);
       }
 
@@ -3416,7 +3685,7 @@ function registerIPC() {
     }
   });
 
-  // Check for addon updates by comparing stored SHAs against GitHub
+  // Check for addon updates by comparing stored baselines (release tag or commit SHA) against GitHub
   ipcMain.handle('check-addon-updates', async (_, addonList, force) => {
     try {
       if (!store) return { updates: [] };
@@ -3432,37 +3701,67 @@ function registerIPC() {
 
       const shas = store.get('addonUpdateSHAs', {});
       const updates = [];
+      let shasMutated = false;
 
       for (const addon of addonList) {
-        const stored = shas[addon.name];
-        if (!stored || !stored.sha) continue;
+        // Storage key matches the name used at install time (installAs || name).
+        const key = addon.installAs || addon.name;
+        const stored = shas[key];
+        const useRelease = stored ? !!stored.useRelease : !!addon.useRelease;
 
         try {
-          const remoteSha = await new Promise((resolve, reject) => {
-            https.get({
-              hostname: 'api.github.com',
-              path: `/repos/${addon.repo}/commits?per_page=1`,
-              headers: { 'User-Agent': 'XI-Launcher' }
-            }, (res) => {
-              let data = '';
-              res.on('data', (chunk) => data += chunk);
-              res.on('end', () => {
-                try {
-                  const commits = JSON.parse(data);
-                  resolve(Array.isArray(commits) && commits.length > 0 ? commits[0].sha : null);
-                } catch { resolve(null); }
-              });
-            }).on('error', () => resolve(null));
-          });
+          if (useRelease) {
+            const releaseInfo = await githubGet(`/repos/${addon.repo}/releases/latest`);
+            const remoteTag = releaseInfo && releaseInfo.tag_name;
+            if (!remoteTag) continue;
 
-          if (remoteSha && remoteSha !== stored.sha) {
-            updates.push({ name: addon.name, repo: addon.repo, subdir: addon.subdir || null });
+            if (!stored || (!stored.tag && !stored.sha)) {
+              // Backfill — no baseline on record yet. Pin silently, don't flag as an update.
+              shas[key] = { tag: remoteTag, useRelease: true, repo: addon.repo, subdir: addon.subdir || null };
+              shasMutated = true;
+              continue;
+            }
+
+            // If this addon was previously pinned by SHA but is now a release addon,
+            // adopt the current tag silently rather than flagging an update.
+            if (!stored.tag) {
+              shas[key] = { tag: remoteTag, useRelease: true, repo: addon.repo, subdir: addon.subdir || null };
+              shasMutated = true;
+              continue;
+            }
+
+            if (remoteTag !== stored.tag) {
+              updates.push({ name: addon.name, repo: addon.repo, subdir: addon.subdir || null });
+            }
+          } else {
+            const commits = await githubGet(`/repos/${addon.repo}/commits?per_page=1`);
+            const remoteSha = Array.isArray(commits) && commits.length > 0 ? commits[0].sha : null;
+            if (!remoteSha) continue;
+
+            if (!stored || (!stored.sha && !stored.tag)) {
+              // Backfill — pin current commit silently.
+              shas[key] = { sha: remoteSha, useRelease: false, repo: addon.repo, subdir: addon.subdir || null };
+              shasMutated = true;
+              continue;
+            }
+
+            if (!stored.sha) {
+              shas[key] = { sha: remoteSha, useRelease: false, repo: addon.repo, subdir: addon.subdir || null };
+              shasMutated = true;
+              continue;
+            }
+
+            if (remoteSha !== stored.sha) {
+              updates.push({ name: addon.name, repo: addon.repo, subdir: addon.subdir || null });
+            }
           }
-        } catch {
-          // Skip addons that fail to check
+        } catch (e) {
+          // Network failure / rate limit — skip this addon, don't poison the baseline.
+          console.error(`[check-addon-updates] ${addon.name}:`, e.message);
         }
       }
 
+      if (shasMutated) store.set('addonUpdateSHAs', shas);
       store.set('addonUpdateLastCheck', Date.now());
       return { updates };
     } catch (e) {

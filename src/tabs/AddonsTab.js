@@ -6,7 +6,7 @@ const api = window.xiAPI;
 
 // Conflict groups — addons in the same group may conflict
 const ADDON_CONFLICTS = {
-  'hud-bars': { label: 'HUD / Player Bars', addons: ['HXUI', 'XIVBar', 'ibar'] },
+  'hud-bars': { label: 'HUD / Player Bars', addons: ['HXUI', 'XIVBar'] },
   'hotbar': { label: 'Hotbar System', addons: ['tHotBar', 'tCrossBar'] },
   'party-list': { label: 'Party List', addons: ['XivParty', 'HXUI'] },
   'buff-timers': { label: 'Buff Timers', addons: ['statustimers', 'tTimers'] },
@@ -29,11 +29,9 @@ export const ADDON_CATALOGUE = [
   { name: 'aspect', description: 'Handles non-standard aspect ratios not available via in-game config', category: 'QoL / General' },
   { name: 'stepdialog', description: 'Manually invoke the key press to continue the current chat dialog', category: 'QoL / General' },
   { name: 'nomad', description: 'Enables mog house functionality in any zone', category: 'QoL / General' },
-  { name: 'toybox', description: 'Bundle of small UI tweaks — recast timers, inventory counts, giltracker, and more. Toggle each feature with /toybox.', category: 'QoL / General' },
   { name: 'castdelay', description: 'Blocks spells, ranged attacks, and item use until you stop moving — prevents wasted casts from input lag.', category: 'QoL / General', repo: 'ThornyFFXI/castdelay' },
   // --- Combat & Targeting ---
   { name: 'debuff', description: 'Enables cancelling status effects via a command', category: 'Combat & Targeting' },
-  { name: 'debuffed', description: 'Shows debuffs applied to your current target mob', category: 'Combat & Targeting' },
   { name: 'distance', description: 'Displays the distance between you and your target', category: 'Combat & Targeting' },
   { name: 'recast', description: 'Displays ability and spell recast times', category: 'Combat & Targeting' },
   { name: 'tparty', description: 'Displays party member TP amounts and target health percent', category: 'Combat & Targeting' },
@@ -41,14 +39,13 @@ export const ADDON_CATALOGUE = [
   { name: 'nokb', description: 'Disables knockback effects applied to the local player', category: 'Combat & Targeting' },
   { name: 'paranormal', description: 'Enables using nearly any game command while dead/unconscious', category: 'Combat & Targeting' },
   { name: 'trimspells', description: 'Changes the CTRL+M shortcut spell list to be trimmed to known spells', category: 'Combat & Targeting' },
-  { name: 'LuAshitacast', description: 'The gear-swapping engine for Ashita v4 — write Lua scripts that automatically change your equipment based on spells, abilities, and events. Essential for endgame players.', category: 'Combat & Targeting', repo: 'ThornyFFXI/LuAshitacast', useRelease: true, installAs: 'LuAshitacast' },
+  { name: 'LuAshitacast', description: 'The gear-swapping engine for Ashita v4 — write Lua scripts that automatically change your equipment based on spells, abilities, and events. Essential for endgame players.', category: 'Combat & Targeting', repo: 'ThornyFFXI/LuAshitacast', useRelease: true, releaseFolder: 'luashitacast', installAs: 'LuAshitacast' },
   { name: 'chains', description: 'Displays available skillchain paths and results based on your current weapons and party members. Helps plan and execute skillchains in real-time with an intuitive overlay.', category: 'Combat & Targeting', repo: 'loonsies/chains' },
   { name: 'ninjaTool', description: 'Monitors Ninja tool inventory and displays casting cooldowns in a wheel display. Helps you track tool consumption and recast timing.', category: 'Combat & Targeting', repo: 'm4thmatic/ninjaTool' },
   { name: 'HitPoints', description: 'Shows HP percentage on your current target and engaged enemies. Useful for knowing exactly when to weaponskill or use abilities.', category: 'Combat & Targeting', repo: 'ThornyFFXI/HitPoints', subdir: 'HitPoints', installAs: 'HitPoints', deps: ['gdifonts'], localDeps: { gdifonts: 'libs/gdifonts' } },
   { name: 'statustimers', description: 'Replaces the default tiny status icons with a fully customizable timer overlay. Shows buff/debuff durations for you and your party members with free placement.', category: 'Combat & Targeting', repo: 'HealsCodes/statustimers', useRelease: true, releaseFolder: 'statustimers', installAs: 'statustimers' },
-  { name: 'tTimers', description: 'Displays time remaining on buffs and debuffs you\'ve cast, plus recast timers for your spells and abilities. Clean, movable overlay.', category: 'Combat & Targeting', repo: 'ThornyFFXI/tTimers', useRelease: true, installAs: 'tTimers' },
+  { name: 'tTimers', description: 'Displays time remaining on buffs and debuffs you\'ve cast, plus recast timers for your spells and abilities. Clean, movable overlay.', category: 'Combat & Targeting', repo: 'ThornyFFXI/tTimers', useRelease: true, releaseFolder: 'tTimers', installAs: 'tTimers' },
   // --- UI / HUD ---
-  { name: 'ibar', description: 'Displays info about yourself and your current target', category: 'UI / HUD' },
   { name: 'equipmon', description: 'Displays currently equipped items on screen at all times', category: 'UI / HUD' },
   { name: 'invmon', description: 'Displays current inventory container space information', category: 'UI / HUD' },
   { name: 'crosshair', description: 'Draws position helper lines to move Ashita elements on screen', category: 'UI / HUD' },
@@ -63,9 +60,10 @@ export const ADDON_CATALOGUE = [
   { name: 'balloon', description: 'Displays NPC dialog text in speech bubbles above their heads instead of just the chat log. Makes conversations and cutscenes much easier to follow.', category: 'UI / HUD', repo: 'onimitch/ffxi-balloon-ashitav4', useRelease: true, installAs: 'Balloon', deps: ['gdifonts'], localDeps: { gdifonts: 'gdifonts' } },
   { name: 'TreasurePool', description: 'Shows the treasure pool in a movable, customizable window with lot/pass information and item details for everything your party has found.', category: 'UI / HUD', repo: 'ShiyoKozuki/TreasurePool' },
   { name: 'Emotes', description: 'Displays all available emotes in a browsable list so you don\'t need to remember the commands.', category: 'UI / HUD', repo: 'tirem/Emotes', subdir: 'Emotes', installAs: 'Emotes' },
+  { name: 'XICamera', description: 'Unlocks extended camera distance and zoom controls beyond the default limits. Bundled and ready to enable.', category: 'UI / HUD', repo: 'Hokuten85/XICamera', subdir: 'Ashita4/addons/xicamera', installAs: 'xicamera' },
   // --- Hotbars & Controls ---
   { name: 'tHotBar', description: 'Adds a visual hotbar to your screen for binding macros and abilities to keyboard shortcuts. Drag-and-drop setup with customizable size and layout.', category: 'Hotbars & Controls', repo: 'ThornyFFXI/tHotBar', useRelease: true, releaseFolder: 'thotbar', installAs: 'thotbar' },
-  { name: 'tCrossBar', description: 'Controller-friendly crossbar UI inspired by FFXIV. Maps abilities to a gamepad with a clean on-screen display. Requires Ashita 4.15+.', category: 'Hotbars & Controls', repo: 'ThornyFFXI/tCrossBar', useRelease: true, installAs: 'tCrossBar' },
+  { name: 'tCrossBar', description: 'Controller-friendly crossbar UI inspired by FFXIV. Maps abilities to a gamepad with a clean on-screen display. Requires Ashita 4.15+.', category: 'Hotbars & Controls', repo: 'ThornyFFXI/tCrossBar', useRelease: true, releaseFolder: 'tCrossBar', installAs: 'tCrossBar' },
   // --- Chat & Social ---
   { name: 'chatmon', description: 'Plays sounds as a reaction to certain chat and other helpful events', category: 'Chat & Social' },
   { name: 'chatfix', description: 'Fixes private server chat issues related to a client update', category: 'Chat & Social' },
@@ -78,21 +76,19 @@ export const ADDON_CATALOGUE = [
   { name: 'filterless', description: 'Disables the bad language filter for private servers', category: 'Chat & Social' },
   { name: 'autorespond', description: 'Auto-replies to tells with a configured message when enabled', category: 'Chat & Social' },
   { name: 'autojoin', description: 'Auto-responds to party invites based on config rules', category: 'Chat & Social' },
-  { name: 'bgamelog', description: 'Battle log customization with emphasis on combat messages', category: 'Chat & Social' },
   { name: 'tokens', description: 'Extends the parsable tokens in the chatlog', category: 'Chat & Social' },
   { name: 'cfhblock', description: 'Blocks call for help from working to prevent accidents', category: 'Chat & Social' },
   { name: 'Audible', description: 'Plays custom audio alerts triggered by in-game events like spell casts, ability readies, and battle actions.', category: 'Chat & Social', repo: 'ThornyFFXI/Audible' },
   // --- Maps & Navigation ---
   { name: 'allmaps', description: 'See every map via /map without needing the key items, including waypoints', category: 'Maps & Navigation' },
   { name: 'cartographer', description: 'See every map in the map menus when viewing non-current zone maps', category: 'Maps & Navigation' },
-  { name: 'minimap', description: 'Adds a configurable minimap to your screen', category: 'Maps & Navigation' },
   { name: 'minimapmon', description: 'Hides the Minimap plugin under certain conditions like standing still', category: 'Maps & Navigation' },
   { name: 'mapdot', description: 'Enables seeing enemies on the compass on all jobs', category: 'Maps & Navigation' },
   { name: 'drawdistance', description: 'Slash commands to alter the game scene rendering distances', category: 'Maps & Navigation' },
   { name: 'mipmap', description: 'Removes the recent SE patch that altered mipmap configuration', category: 'Maps & Navigation' },
   { name: 'boussole', description: 'In-game map replacement with pan, zoom, real-time party/alliance position tracking, custom map points, and custom PNG map support. Integrates with XIPivot.', category: 'Maps & Navigation', repo: 'loonsies/boussole' },
   // --- Blue Mage ---
-  { name: 'bluesets', description: 'UI for managing Blue Mage spell sets', category: 'Blue Mage' },
+  { name: 'blusets', description: 'UI for managing Blue Mage spell sets', category: 'Blue Mage' },
   { name: 'blucheck', description: 'Helper addon to track learned BLU spells with an in-game UI', category: 'Blue Mage' },
   { name: 'blumon', description: 'Monitors for learnt Blue Mage spells and announces them with color', category: 'Blue Mage' },
   // --- Crafting & Economy ---
@@ -100,12 +96,9 @@ export const ADDON_CATALOGUE = [
   { name: 'ahcolors', description: 'Changes the auction house listing colors to be easier to see', category: 'Crafting & Economy' },
   { name: 'ahgo', description: 'Enables opening the AH from anywhere and moving with it open', category: 'Crafting & Economy' },
   { name: 'itemwatch', description: 'Track and monitor items and key items on-screen', category: 'Crafting & Economy' },
-  { name: 'lotomatic', description: 'Treasure pool manager — auto lot/pass items', category: 'Crafting & Economy' },
   // --- Search & Scan ---
-  { name: 'find', description: 'Search for items across all of your storage containers', category: 'Search & Scan' },
   { name: 'filterscan', description: 'Allows filtering widescan results for specific entities', category: 'Search & Scan' },
   { name: 'watchdog', description: 'Enables widescan tracking of nearly anything with a command', category: 'Search & Scan' },
-  { name: 'seekhelp', description: 'Alternative /sea interface with advanced filtering', category: 'Search & Scan' },
   // --- Trusts & Pets ---
   { name: 'petinfo', description: 'Displays information about the player pet', category: 'Trusts & Pets' },
   { name: 'FancyTrusts', description: 'Fancy trust management UI — browse, summon, and organize your trusts without memorizing names or writing macros.', category: 'Trusts & Pets', repo: 'ThornyFFXI/FancyTrusts', subdir: 'FancyTrusts', installAs: 'FancyTrusts' },
@@ -128,31 +121,30 @@ export const ADDON_CATALOGUE = [
   { name: 'autologin', description: 'Automatically logs into a desired character slot', category: 'Automation & Scripting' },
   { name: 'logincmd', description: 'Executes a per-character script when logging in or switching characters', category: 'Automation & Scripting' },
   { name: 'repeater', description: 'Allows setting a command to be repeated automatically', category: 'Automation & Scripting' },
-  { name: 'shorthand', description: 'Write shortcuts for casting spells, JAs, weapon skills', category: 'Automation & Scripting' },
   { name: 'config', description: 'Enables slash commands to force-set game settings directly', category: 'Automation & Scripting' },
   { name: 'actionparse', description: 'Parses and displays incoming action packet information', category: 'Automation & Scripting' },
   { name: 'affinity', description: 'Allows setting the current process affinity mask in-game', category: 'Automation & Scripting' },
   { name: 'hideobs', description: 'Hides the game window from OBS display stream capturing', category: 'Automation & Scripting' },
   { name: 'ime', description: 'Allows non-Japanese clients to use the Japanese IME and character sets', category: 'Automation & Scripting' },
   // --- Libraries (auto-installed as dependencies) ---
-  { name: 'gdifonts', description: 'Font rendering library required by balloon and other addons.', category: 'Library', repo: 'onimitch/gdifonts', installAs: 'libs/gdifonts' },
+  { name: 'gdifonts', description: 'Font rendering library required by balloon and other addons. Not loadable on its own — consumed via require().', category: 'Library', repo: 'onimitch/gdifonts', installAs: 'libs/gdifonts', isLibrary: true },
 ];
 
 const ADDON_BUNDLES = [
   {
     name: 'Solo Essentials',
     desc: 'Gear swaps, hotbar, camera, and all the QoL you need for solo play',
-    addons: ['LuAshitacast', 'tHotBar', 'HXUI', 'tTimers', 'balloon', 'FancyTrusts', 'equipmon', 'fps', 'enternity', 'ibar', 'distance', 'instantchat', 'macrofix', 'quicksets', 'recast', 'invmon']
+    addons: ['LuAshitacast', 'tHotBar', 'HXUI', 'tTimers', 'balloon', 'FancyTrusts', 'equipmon', 'fps', 'enternity', 'distance', 'instantchat', 'macrofix', 'quicksets', 'recast', 'invmon']
   },
   {
     name: 'Party & Endgame',
     desc: 'Party list, skillchains, treasure pool, buffs, and target info for group content',
-    addons: ['LuAshitacast', 'tHotBar', 'XivParty', 'chains', 'TreasurePool', 'HitPoints', 'tTimers', 'balloon', 'debuffed', 'enternity', 'statustimers', 'recast', 'quicksets', 'distance', 'instantchat', 'macrofix', 'chatmon', 'tparty']
+    addons: ['LuAshitacast', 'tHotBar', 'XivParty', 'chains', 'TreasurePool', 'HitPoints', 'tTimers', 'balloon', 'enternity', 'statustimers', 'recast', 'quicksets', 'distance', 'instantchat', 'macrofix', 'chatmon', 'tparty']
   },
   {
     name: 'Crafting & Utility',
     desc: 'Crafting tracker, item search, loot management, AH tools, and logging',
-    addons: ['craftmon', 'itemwatch', 'lotomatic', 'equipmon', 'fps', 'logs', 'timestamp', 'balloon', 'enternity', 'instantah', 'instantchat', 'invmon', 'ahcolors', 'ahgo', 'macrofix', 'clock']
+    addons: ['craftmon', 'itemwatch', 'equipmon', 'fps', 'logs', 'timestamp', 'balloon', 'enternity', 'instantah', 'instantchat', 'invmon', 'ahcolors', 'ahgo', 'macrofix', 'clock']
   },
   {
     name: 'Controller Player',
@@ -165,26 +157,18 @@ const ADDON_HELP = {
   aspect:        { commands: ['/aspect'], usage: 'Set custom aspect ratio. /aspect to toggle or /aspect <width> <height> to set a specific ratio.' },
   autojoin:      { commands: ['/autojoin'], usage: 'Auto-accept party invites. /autojoin on|off to toggle, /autojoin whitelist <name> to add trusted players.' },
   autorespond:   { commands: ['/autorespond'], usage: 'Auto-reply to /tells. /autorespond on|off to toggle, /autorespond msg <text> to set the reply message.' },
-  bgamelog:      { commands: ['/bgamelog'], usage: 'Customize battle log display. /bgamelog to open the settings menu.' },
-  bluesets:      { commands: ['/bluesets'], usage: 'Blue Mage spell set manager. /bluesets to open the UI, /bluesets save <name> / load <name> to manage sets.' },
+  blusets:       { commands: ['/blusets'], usage: 'Blue Mage spell set manager. /blusets to open the UI, /blusets save <name> / load <name> to manage sets.' },
   craftmon:      { commands: ['/craftmon'], usage: 'Track crafting skill-ups. /craftmon to open the monitor. Automatically tracks synthesis results.' },
-  debuffed:      { commands: ['/debuffed'], usage: 'Show debuffs on your target. Displays automatically when you target a mob — no commands needed.' },
   enternity:     { commands: [], usage: 'Removes the Enter key requirement during cutscenes and NPC dialog. Works automatically — no commands needed.' },
   equipmon:      { commands: ['/equipmon'], usage: 'Show equipped gear on screen. /equipmon to toggle the overlay on/off.' },
-  find:          { commands: ['/find'], usage: 'Search inventory. /find <item name> searches all storage across your character.' },
   fps:           { commands: ['/fps'], usage: 'Show/control FPS. /fps to toggle the display, /fps set <number> to change the cap (30 or 60).' },
   hideconsole:   { commands: [], usage: 'Hides the Ashita boot console window. Works automatically on load — no commands needed.' },
-  ibar:          { commands: ['/ibar'], usage: 'Shows player and target info bars. /ibar to open settings. Displays automatically.' },
   itemwatch:     { commands: ['/itemwatch'], usage: 'Track items on screen. /itemwatch add <item> to track, /itemwatch clear to remove all, /itemwatch to open settings.' },
   links:         { commands: ['/links'], usage: 'Captures URLs from chat. /links to list captured URLs, click to open in browser.' },
   logs:          { commands: ['/logs'], usage: 'Saves chat logs to file. Works automatically — creates dated log files per character.' },
-  lotomatic:     { commands: ['/lotomatic'], usage: 'Auto lot/pass treasure. /lotomatic to open settings, /lotomatic lot <item> or pass <item> to set rules.' },
-  minimap:       { commands: ['/minimap'], usage: 'Toggle the minimap overlay. /minimap to show/hide, drag to reposition.' },
-  seekhelp:      { commands: ['/seekhelp', '/sh'], usage: 'Advanced player search. /seekhelp or /sh to open the search UI with filtering by job, level, zone.' },
-  shorthand:     { commands: ['/shorthand'], usage: 'Cast shortcuts. Use abbreviated spell names in macros, e.g. /ma cure4 <me> instead of /ma "Cure IV" <me>.' },
   stfu:          { commands: ['/stfu'], usage: 'Block spam messages. /stfu to toggle. Blocks common system spam and converts macro sound effects.' },
   timestamp:     { commands: ['/timestamp'], usage: 'Adds timestamps to chat. Works automatically — no commands needed after loading.' },
-  toybox:        { commands: ['/toybox'], usage: 'Collection of small UI tools. /toybox to open the settings menu and toggle individual features.' },
+  XICamera:      { commands: ['/xicamera'], usage: 'Unlock extended camera distance and zoom. /xicamera to open settings. Works automatically once enabled.' },
   LuAshitacast:  { commands: ['/lac'], usage: 'Gear-swap engine. /lac to show status, /lac disable/enable to toggle, /lac addset <name> to manage gear sets. Requires Lua scripts per job.' },
   chains:        { commands: ['/chains'], usage: 'Skillchain helper. /chains to toggle the overlay. Shows available skillchains based on your weapons and recent weaponskills.' },
   ninjaTool:     { commands: ['/ninjatool'], usage: 'Ninja tool tracker. /ninjatool to toggle the display. Shows tool counts and casting cooldown wheel.' },
@@ -249,7 +233,13 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
   const loadAddons = useCallback(async () => {
     if (!api) return;
     const result = await api.getAddons(config.ashitaPath);
-    setInstalledAddons(result.addons.map(a => a.name.toLowerCase()));
+    // Only count addons that actually have a loadable main Lua. Empty/half-extracted
+    // folders used to show as "Installed" here even when Ashita couldn't load them.
+    setInstalledAddons(
+      result.addons
+        .filter(a => a.hasMainLua)
+        .map(a => a.name.toLowerCase())
+    );
   }, [config.ashitaPath]);
 
   const loadEnabledFromProfile = useCallback(async () => {
@@ -268,6 +258,15 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
       if (m && m[1].trim()) { scriptName = m[1].trim(); break; }
     }
 
+    // Drop library entries (e.g. "libs/gdifonts") that a previous version may
+    // have saved — Ashita can't `/addon load` them and they only log errors.
+    const librarySet = new Set(
+      ADDON_CATALOGUE
+        .filter(a => a.isLibrary)
+        .map(a => (a.installAs || a.name).toLowerCase())
+    );
+    const stripLibs = (list) => list.filter(n => !librarySet.has(n));
+
     // Read the script file and extract /addon load lines
     const scriptPath = config.ashitaPath + '\\scripts\\' + scriptName;
     const scriptResult = await api.readFile(scriptPath);
@@ -277,7 +276,7 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
         const m = line.trim().match(/^\/addon\s+load\s+(\S+)/i);
         if (m) enabled.push(m[1].toLowerCase());
       }
-      setEnabledAddons(enabled);
+      setEnabledAddons(stripLibs(enabled));
       return;
     }
 
@@ -297,17 +296,21 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
         enabled.push(line.toLowerCase());
       }
     }
-    setEnabledAddons(enabled);
+    setEnabledAddons(stripLibs(enabled));
   }, [config.ashitaPath, config.activeProfile]);
 
   useEffect(() => { loadAddons(); }, [loadAddons]);
   useEffect(() => { loadEnabledFromProfile(); }, [loadEnabledFromProfile]);
 
-  // Listen for addon install progress
+  // Listen for addon install progress.
+  // Main emits events keyed by installAs (e.g. "libs/gdifonts"); the UI keys
+  // by display name (e.g. "gdifonts"), so remap via the catalogue.
   useEffect(() => {
     if (!api?.onAddonProgress) return;
     const unsub = api.onAddonProgress((addonName, percent, detail) => {
-      setInstalling(prev => ({ ...prev, [addonName]: { percent, detail } }));
+      const entry = ADDON_CATALOGUE.find(a => (a.installAs || a.name) === addonName);
+      const key = entry ? entry.name : addonName;
+      setInstalling(prev => ({ ...prev, [key]: { percent, detail } }));
     });
     return unsub;
   }, []);
@@ -330,7 +333,19 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
             : installedAddons.includes(depInstallName);
           if (!depInstalled) {
             setInstalling(prev => ({ ...prev, [addon.name]: { percent: 0, detail: `Installing dependency: ${depEntry.name}...` } }));
-            await api.installAddon(config.ashitaPath, depEntry.installAs || depEntry.name, depEntry.repo, depEntry.subdir, depEntry.useRelease, depEntry.releaseFolder, depEntry.isPlugin);
+            const depResult = await api.installAddon(config.ashitaPath, depEntry.installAs || depEntry.name, depEntry.repo, depEntry.subdir, depEntry.useRelease, depEntry.releaseFolder, depEntry.isPlugin);
+            if (!depResult || !depResult.success) {
+              setInstalling(prev => {
+                const next = { ...prev };
+                delete next[addon.name];
+                return next;
+              });
+              const errText = (depResult && depResult.error) || 'Unknown error';
+              setInstallMsg({ addonName: addon.name, success: false, text: `Dependency ${depEntry.name} failed: ${errText}` });
+              setTimeout(() => setInstallMsg(prev => prev?.addonName === addon.name ? null : prev), 5000);
+              loadAddons();
+              return;
+            }
           }
           // Copy dep into addon's local directory if localDeps specifies it
           if (addon.localDeps && addon.localDeps[depName]) {
@@ -384,8 +399,9 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
   const batchInstall = async (addonNames) => {
     if (!api || batchInstalling) return;
     setBatchInstalling(true);
-    const communityAddons = ADDON_CATALOGUE.filter(a => a.category === 'Community' && a.repo && addonNames.map(n => n.toLowerCase()).includes(a.name.toLowerCase()));
-    const toInstall = communityAddons.filter(a => !installedAddons.includes((a.installAs || a.name).toLowerCase()));
+    const wantedLower = addonNames.map(n => n.toLowerCase());
+    const selectable = ADDON_CATALOGUE.filter(a => a.repo && wantedLower.includes(a.name.toLowerCase()));
+    const toInstall = selectable.filter(a => !installedAddons.includes((a.installAs || a.name).toLowerCase()));
     for (const addon of toInstall) {
       await handleInstall(addon);
     }
@@ -420,6 +436,9 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
     if (!config.activeProfile) return;
     // Use the installAs name (actual folder name) for the script command
     const catalogEntry = ADDON_CATALOGUE.find(a => a.name === addonName);
+    // Libraries (e.g. gdifonts) are consumed via require() by other addons and must
+    // never appear in the /addon load list — ignore toggles on them.
+    if (catalogEntry?.isLibrary) return;
     const scriptName = (catalogEntry?.installAs || addonName).toLowerCase();
     // Block enabling uninstalled community addons (those with a repo that haven't been downloaded)
     if (catalogEntry?.repo && !installedAddons.includes(scriptName)) return;
@@ -429,10 +448,12 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
       newEnabled = enabledAddons.filter(a => a !== scriptName);
     } else {
       newEnabled = [...enabledAddons, scriptName];
-      // Auto-enable dependencies (e.g. gdifonts for HitPoints/balloon)
+      // Auto-enable non-library dependencies only. Library deps (gdifonts) are
+      // installed to addons/libs/ and pulled in via require(), not /addon load.
       if (catalogEntry?.deps) {
         for (const depName of catalogEntry.deps) {
           const depEntry = ADDON_CATALOGUE.find(a => a.name === depName);
+          if (depEntry?.isLibrary) continue;
           const depScript = (depEntry?.installAs || depName).toLowerCase();
           if (!newEnabled.includes(depScript)) {
             newEnabled.push(depScript);
@@ -450,7 +471,11 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
 
   const setAll = async (enable) => {
     if (!config.activeProfile) return;
-    const newEnabled = enable ? ADDON_CATALOGUE.filter(a => (!a.repo || installedAddons.includes((a.installAs || a.name).toLowerCase()))).map(a => (a.installAs || a.name).toLowerCase()) : [];
+    const newEnabled = enable
+      ? ADDON_CATALOGUE
+          .filter(a => !a.isLibrary && (!a.repo || installedAddons.includes((a.installAs || a.name).toLowerCase())))
+          .map(a => (a.installAs || a.name).toLowerCase())
+      : [];
     setEnabledAddons(newEnabled);
     await saveAddonsToProfile(newEnabled);
   };
@@ -888,9 +913,14 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
                     </div>
                     <p className="addon-desc">{addon.description}</p>
                     {addon.deps && (() => {
+                      // Libraries aren't /addon load-ed; they're required by the addon at runtime,
+                      // so they're only "missing" if not installed on disk, not if not enabled.
                       const missingDeps = isEnabled ? addon.deps.filter(depName => {
                         const depEntry = ADDON_CATALOGUE.find(a => a.name === depName);
                         const depScript = (depEntry?.installAs || depName).toLowerCase();
+                        if (depEntry?.isLibrary) {
+                          return !installedAddons.includes(depScript);
+                        }
                         return !enabledAddons.includes(depScript);
                       }) : [];
                       return <div className={`addon-deps-note${missingDeps.length ? ' addon-deps-missing' : ''}`}>
@@ -914,6 +944,8 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
                       <div className="addon-card-footer-left">
                         {addon.repo && !isInstalled ? (
                           <span className="addon-install-hint">Install to enable</span>
+                        ) : addon.isLibrary ? (
+                          <span className="addon-install-hint">Library — loaded by dependents</span>
                         ) : (
                           <>
                             <div className="toggle" onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleAddon(addon.name); }}>

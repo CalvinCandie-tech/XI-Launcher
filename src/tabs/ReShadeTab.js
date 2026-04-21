@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './ReShadeTab.css';
 import CollapsibleSection from '../components/CollapsibleSection';
 
@@ -91,8 +91,12 @@ function ReShadeTab({ config, updateConfig, onNavigate }) {
   const [dlMsg, setDlMsg] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [effects, setEffects] = useState(DEFAULT_EFFECTS);
+  const effectsRef = useRef(DEFAULT_EFFECTS);
+  const writeQueueRef = useRef(Promise.resolve());
 
   const ffxiPath = config?.ffxiPath || '';
+
+  useEffect(() => { effectsRef.current = effects; }, [effects]);
 
   const checkStatus = useCallback(async () => {
     if (!api || !ffxiPath) { setLoading(false); return; }
@@ -177,6 +181,14 @@ function ReShadeTab({ config, updateConfig, onNavigate }) {
     });
   })?.name || 'Custom';
 
+  const queueWrite = (newEffects) => {
+    effectsRef.current = newEffects;
+    setEffects(newEffects);
+    const next = writeQueueRef.current.then(() => api.writeReShadeConfig(ffxiPath, newEffects));
+    writeQueueRef.current = next.catch(() => {});
+    return next;
+  };
+
   const applyPreset = async (preset) => {
     const newEffects = {};
     for (const meta of EFFECT_META) {
@@ -186,17 +198,16 @@ function ReShadeTab({ config, updateConfig, onNavigate }) {
         newEffects[meta.key] = meta.hasSlider ? { enabled: false, value: DEFAULT_EFFECTS[meta.key].value } : { enabled: false };
       }
     }
-    setEffects(newEffects);
-    await api.writeReShadeConfig(ffxiPath, newEffects);
+    await queueWrite(newEffects);
   };
 
   const updateEffect = async (key, changes) => {
+    const current = effectsRef.current;
     const newEffects = {
-      ...effects,
-      [key]: { ...effects[key], ...changes },
+      ...current,
+      [key]: { ...current[key], ...changes },
     };
-    setEffects(newEffects);
-    await api.writeReShadeConfig(ffxiPath, newEffects);
+    await queueWrite(newEffects);
   };
 
   if (loading) {

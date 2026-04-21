@@ -34,6 +34,10 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
   const [laaMsg, setLaaMsg] = useState({ text: '', type: '' }); // type: success | error
   const [polExePath, setPolExePath] = useState('');
   const [profileOverlays, setProfileOverlays] = useState([]);
+  // Mirror of profileOverlays so saveProfileOverlays can merge against the
+  // latest value without tripping on stale closures in async handlers.
+  const profileOverlaysRef = useRef([]);
+  useEffect(() => { profileOverlaysRef.current = profileOverlays; }, [profileOverlays]);
   const [customMods, setCustomMods] = useState([]);
   const [customModUrl, setCustomModUrl] = useState('');
   const [customModStatus, setCustomModStatus] = useState({});
@@ -118,11 +122,18 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
     return cleanup;
   }, []);
 
-  const saveProfileOverlays = async (newOverlays) => {
+  // Accepts either a list (replace) or a (prev) => next mutator, so long-running
+  // handlers can merge against the *current* overlay list instead of a stale
+  // closure captured before an await.
+  const saveProfileOverlays = async (newOverlaysOrFn) => {
     if (!config.activeProfile) return;
-    setProfileOverlays(newOverlays);
+    const computed = typeof newOverlaysOrFn === 'function'
+      ? newOverlaysOrFn(profileOverlaysRef.current)
+      : newOverlaysOrFn;
+    profileOverlaysRef.current = computed;
+    setProfileOverlays(computed);
     const allOverlays = await api.storeGet('profileOverlays') || {};
-    allOverlays[config.activeProfile] = newOverlays;
+    allOverlays[config.activeProfile] = computed;
     await api.storeSet('profileOverlays', allOverlays);
   };
 
@@ -292,15 +303,19 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
     const result = await api.installCustomMod(config.ashitaPath, url);
     if (result.success) {
       const finalName = result.name;
+      const newEntry = { name: finalName, url, description: info.description || '', installedAt: new Date().toISOString() };
+      // Build the authoritative list inside the setter so the persisted copy
+      // matches the one we commit to state (was using a stale closure).
+      let persisted;
       setCustomMods(prev => {
-        const cleaned = prev.filter(m => m.name !== placeholderName && m.name !== info.name && m.name !== finalName);
-        cleaned.push({ name: finalName, url, description: info.description || '', installedAt: new Date().toISOString() });
-        return cleaned;
+        persisted = prev.filter(m => m.name !== placeholderName && m.name !== info.name && m.name !== finalName);
+        persisted.push(newEntry);
+        return persisted;
       });
-      await api.storeSet('customMods', customMods.filter(m => m.name !== placeholderName && m.name !== info.name && m.name !== result.name).concat([{ name: finalName, url, description: info.description || '', installedAt: new Date().toISOString() }]));
+      await api.storeSet('customMods', persisted);
 
-      if (config.activeProfile && !profileOverlays.includes(finalName)) {
-        await saveProfileOverlays([...profileOverlays, finalName]);
+      if (config.activeProfile) {
+        await saveProfileOverlays(prev => prev.includes(finalName) ? prev : [...prev, finalName]);
       }
 
       setCustomModStatus(prev => {
@@ -317,13 +332,16 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
   const removeCustomMod = async (modName) => {
     const result = await api.removeCustomMod(config.ashitaPath, modName);
     if (result.success) {
-      const updatedMods = customMods.filter(m => m.name !== modName);
-      setCustomMods(updatedMods);
-      await api.storeSet('customMods', updatedMods);
+      // Derive the persisted list from the current state (not the stale closure
+      // captured before `await api.removeCustomMod`).
+      let persisted;
+      setCustomMods(prev => {
+        persisted = prev.filter(m => m.name !== modName);
+        return persisted;
+      });
+      await api.storeSet('customMods', persisted);
 
-      if (profileOverlays.includes(modName)) {
-        await saveProfileOverlays(profileOverlays.filter(n => n !== modName));
-      }
+      await saveProfileOverlays(prev => prev.includes(modName) ? prev.filter(n => n !== modName) : prev);
 
       setCustomModStatus(prev => { const s = { ...prev }; delete s[modName]; return s; });
     }
@@ -355,24 +373,23 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
       result = await api.installHDPack(config.ashitaPath, pack.name, pack.url, subdir);
     }
     if (result.success) {
-      // Remove conflicting packs from overlays
-      let newOverlays = [...profileOverlays];
-      if (pack.conflictGroup && pack.conflictGroup !== 'hdtextures' && pack.conflictGroup !== 'ui') {
-        const conflicting = HD_PACKS
-          .filter(p => p.conflictGroup === pack.conflictGroup && p.name !== pack.name)
-          .map(p => p.name);
-        newOverlays = newOverlays.filter(name => !conflicting.includes(name));
-        // Clear done status on conflicting packs so they show as installable again
+      // Compute new overlays against the current list at resolve time, not the
+      // snapshot taken before the install await started.
+      const conflicting = (pack.conflictGroup && pack.conflictGroup !== 'hdtextures' && pack.conflictGroup !== 'ui')
+        ? HD_PACKS.filter(p => p.conflictGroup === pack.conflictGroup && p.name !== pack.name).map(p => p.name)
+        : [];
+      if (conflicting.length > 0) {
         setHdPackStatus(prev => {
           const updated = { ...prev };
           conflicting.forEach(name => { delete updated[name]; });
           return updated;
         });
       }
-      if (!newOverlays.includes(pack.name)) {
-        newOverlays.push(pack.name);
-      }
-      await saveProfileOverlays(newOverlays);
+      await saveProfileOverlays(prev => {
+        let next = prev.filter(name => !conflicting.includes(name));
+        if (!next.includes(pack.name)) next = [...next, pack.name];
+        return next;
+      });
       setHdPackStatus(prev => ({ ...prev, [pack.name]: { status: 'done', message: result.message, percent: 100 } }));
     } else {
       setHdPackStatus(prev => ({ ...prev, [pack.name]: { status: 'error', message: result.error, percent: 0 } }));

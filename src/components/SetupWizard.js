@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './SetupWizard.css';
 import { DEFAULT_PROFILE_INI } from '../utils/profileTemplates';
 import Modal from './Modal';
@@ -30,7 +30,24 @@ function SetupWizard({ config, updateConfig, onComplete }) {
   const [expandedCat, setExpandedCat] = useState(null);
 
   const STEPS = profileType === 'private' ? STEPS_PRIVATE : STEPS_RETAIL;
-  const currentStep = STEPS[step];
+  const currentStep = STEPS[step] || STEPS[STEPS.length - 1];
+
+  // Keep `step` pointing at the same named step when profileType toggles change STEPS length.
+  const prevProfileTypeRef = useRef(profileType);
+  const prevStepNameRef = useRef(currentStep);
+  useEffect(() => {
+    if (prevProfileTypeRef.current !== profileType) {
+      const prevName = prevStepNameRef.current;
+      const nextIdx = STEPS.indexOf(prevName);
+      if (nextIdx !== -1) {
+        if (nextIdx !== step) setStep(nextIdx);
+      } else {
+        setStep(s => Math.min(s, STEPS.length - 1));
+      }
+      prevProfileTypeRef.current = profileType;
+    }
+    prevStepNameRef.current = currentStep;
+  }, [profileType, currentStep, STEPS, step]);
 
   useEffect(() => {
     if (!api?.onAshitaInstallProgress) return;

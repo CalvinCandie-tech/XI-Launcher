@@ -200,7 +200,18 @@ function ScriptEditorTab({ config }) {
     <div className="script-editor-tab">
       <div className="panel script-toolbar">
         <div className="script-toolbar-left">
-          <select value={scriptName} onChange={e => setScriptName(e.target.value)} className="script-select">
+          <select
+            value={scriptName}
+            onChange={e => {
+              // Guard against silently discarding unsaved edits when the user
+              // switches scripts — the loader below overwrites scriptContent.
+              if (hasChanges && !window.confirm('You have unsaved changes in the current script. Switch without saving?')) {
+                return;
+              }
+              setScriptName(e.target.value);
+            }}
+            className="script-select"
+          >
             {scriptList.map(s => (
               <option key={s} value={s}>{s}{s === scriptName ? ' (active)' : ''}</option>
             ))}

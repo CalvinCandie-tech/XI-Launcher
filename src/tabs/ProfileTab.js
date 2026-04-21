@@ -96,8 +96,13 @@ function ProfileTab({ config, updateConfig }) {
   const createProfile = async () => {
     const name = newProfileName.trim();
     if (!name) return;
-    if (/[\\/:*?"<>|]/.test(name)) {
-      setProfileError('Profile name cannot contain \\ / : * ? " < > |');
+    // eslint-disable-next-line no-control-regex
+    if (/[\\/:*?"<>|\x00-\x1f]|\.\./.test(name)) {
+      setProfileError('Profile name cannot contain \\ / : * ? " < > | or ".."');
+      return;
+    }
+    if (name === '.' || name === '..') {
+      setProfileError('Profile name cannot be "." or ".."');
       return;
     }
     if (name.length > 60) {
@@ -146,6 +151,13 @@ function ProfileTab({ config, updateConfig }) {
       delete allOverlays[name];
       await api.storeSet('profileOverlays', allOverlays);
       setProfileOverlays(allOverlays);
+      // Clean up per-profile settings so deleted profiles don't leave orphan
+      // entries in electron-store (read back later if a new profile reuses the name).
+      const allProfileSettings = await api.storeGet('profileSettings') || {};
+      if (allProfileSettings[name]) {
+        delete allProfileSettings[name];
+        await api.storeSet('profileSettings', allProfileSettings);
+      }
       setConfirmDelete(null);
       await loadProfiles();
     }

@@ -393,6 +393,24 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
   const captureRef = useRef(null);
   const captureTimeoutRef = useRef(null);
   const prevGamepadState = useRef(null);
+  // Track all fire-and-forget setTimeouts so we can cancel them on unmount and
+  // avoid setState-after-unmount warnings from the auto-dismiss banners below.
+  const pendingTimeoutsRef = useRef(new Set());
+  const setAutoClearTimeout = useCallback((fn, ms) => {
+    const id = setTimeout(() => {
+      pendingTimeoutsRef.current.delete(id);
+      fn();
+    }, ms);
+    pendingTimeoutsRef.current.add(id);
+    return id;
+  }, []);
+  useEffect(() => {
+    return () => {
+      pendingTimeoutsRef.current.forEach(clearTimeout);
+      pendingTimeoutsRef.current.clear();
+      if (captureTimeoutRef.current) clearTimeout(captureTimeoutRef.current);
+    };
+  }, []);
   const [dirControlOpen, setDirControlOpen] = useState(null);
   const [gamepadTestOpen, setGamepadTestOpen] = useState(false);
   const gamepadTestRef = useRef(null);
@@ -638,7 +656,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
     if (!config?.activeProfile || !config?.ashitaPath || !api) {
       setApplyStatus('error');
       setApplyMessage('No active profile selected. Create a profile first.');
-      setTimeout(() => { setApplyStatus(''); setApplyMessage(''); }, 8000);
+      setAutoClearTimeout(() => { setApplyStatus(''); setApplyMessage(''); }, 8000);
       return;
     }
 
@@ -650,7 +668,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
       if (!profile.exists) {
         setApplyStatus('error');
         setApplyMessage('Profile not found.');
-        setTimeout(() => { setApplyStatus(''); setApplyMessage(''); }, 8000);
+        setAutoClearTimeout(() => { setApplyStatus(''); setApplyMessage(''); }, 8000);
         return;
       }
 
@@ -736,7 +754,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
       setApplyMessage(e.message || 'Failed to write profile.');
     }
 
-    setTimeout(() => { setApplyStatus(''); setApplyMessage(''); }, 8000);
+    setAutoClearTimeout(() => { setApplyStatus(''); setApplyMessage(''); }, 8000);
   };
 
   const applyPreset = (preset) => {
