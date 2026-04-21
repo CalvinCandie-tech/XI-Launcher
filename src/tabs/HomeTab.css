@@ -418,6 +418,12 @@
   gap: 8px;
 }
 
+.home-server-status-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 @keyframes crystal-pulse {
   0%, 100% { opacity: 0.85; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.05); }

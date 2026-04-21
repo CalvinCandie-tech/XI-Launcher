@@ -137,17 +137,23 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
     setMultiBoxLaunching(false);
   };
 
-  // Server status check
-  useEffect(() => {
-    if (!api?.checkServerStatus || !config.serverHost) { setServerStatus(null); return; }
-    const check = async () => {
+  // Server status — checked on demand only. Auto-polling was removed because
+  // probing the LSB login port with a TCP connect+destroy shows up in the
+  // connect server log as "stream truncated / Failed to handshake" for every
+  // poll (auth_session sees EOF mid-handshake).
+  const [checkingServer, setCheckingServer] = useState(false);
+  const checkServer = async () => {
+    if (!api?.checkServerStatus || !config.serverHost || checkingServer) return;
+    setCheckingServer(true);
+    try {
       const result = await api.checkServerStatus(config.serverHost, config.serverPort);
       setServerStatus(result);
-    };
-    check();
-    const interval = setInterval(check, 30000);
-    return () => clearInterval(interval);
-  }, [config.serverHost, config.serverPort]);
+    } finally {
+      setCheckingServer(false);
+    }
+  };
+  // Clear stale status when the target server changes
+  useEffect(() => { setServerStatus(null); }, [config.serverHost, config.serverPort]);
 
   // Listen for update download progress
   useEffect(() => {
@@ -302,16 +308,25 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
           )}
         </div>
 
-        {/* Server Status */}
-        {config.serverHost && serverStatus && (
+        {/* Server Status — on-demand only */}
+        {config.serverHost && (
           <div className="home-panel-section home-server-status">
             <div className="home-server-status-left">
-              <span className={`status-dot ${serverStatus.online ? 'status-dot-online' : 'status-dot-offline'}`} />
+              {serverStatus && (
+                <span className={`status-dot ${serverStatus.online ? 'status-dot-online' : 'status-dot-offline'}`} />
+              )}
               <span className="mono">{config.serverHost}</span>
             </div>
-            <span className={`pill ${serverStatus.online ? 'pill-green' : 'pill-red'}`}>
-              {serverStatus.online ? `Online (${serverStatus.latency}ms)` : 'Offline'}
-            </span>
+            <div className="home-server-status-right">
+              {serverStatus && (
+                <span className={`pill ${serverStatus.online ? 'pill-green' : 'pill-red'}`}>
+                  {serverStatus.online ? `Online (${serverStatus.latency}ms)` : 'Offline'}
+                </span>
+              )}
+              <button className="btn btn-ghost btn-sm" onClick={checkServer} disabled={checkingServer}>
+                {checkingServer ? 'Checking...' : serverStatus ? 'Recheck' : 'Check connection'}
+              </button>
+            </div>
           </div>
         )}
 
