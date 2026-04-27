@@ -60,6 +60,8 @@ aliases.silent = 0
 plugins.silent = 0
 
 [ashita.addons]
+enternity = 1
+cleancs = 1
 
 [ashita.polplugins]
 pivot = 1
