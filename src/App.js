@@ -675,7 +675,8 @@ function App() {
                                   catalogueEntry.subdir,
                                   catalogueEntry.useRelease,
                                   catalogueEntry.releaseFolder,
-                                  catalogueEntry.isPlugin
+                                  catalogueEntry.isPlugin,
+                                  catalogueEntry.ashitaRoot
                                 );
                                 setLaunchWarning(prev => ({
                                   ...prev,

@@ -179,8 +179,8 @@ contextBridge.exposeInMainWorld('xiAPI', {
 
   // Community addon install
   getPlugins: (ashitaPath) => ipcRenderer.invoke('get-plugins', ashitaPath),
-  installAddon: (ashitaPath, addonName, repo, subdir, useRelease, releaseFolder, isPlugin) => ipcRenderer.invoke('install-addon', ashitaPath, addonName, repo, subdir, useRelease, releaseFolder, isPlugin),
-  uninstallAddon: (ashitaPath, addonName, isPlugin) => ipcRenderer.invoke('uninstall-addon', ashitaPath, addonName, isPlugin),
+  installAddon: (ashitaPath, addonName, repo, subdir, useRelease, releaseFolder, isPlugin, ashitaRoot) => ipcRenderer.invoke('install-addon', ashitaPath, addonName, repo, subdir, useRelease, releaseFolder, isPlugin, ashitaRoot),
+  uninstallAddon: (ashitaPath, addonName, isPlugin, ashitaRoot) => ipcRenderer.invoke('uninstall-addon', ashitaPath, addonName, isPlugin, ashitaRoot),
   copyDir: (src, dest) => ipcRenderer.invoke('copy-dir', src, dest),
   onAddonProgress: (callback) => {
     const handler = (_, addonName, percent, detail) => callback(addonName, percent, detail);

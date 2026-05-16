@@ -2,6 +2,15 @@
   max-width: 100%;
 }
 
+.addons-credit {
+  margin: 24px 0 8px;
+  text-align: center;
+  font-size: 12px;
+  font-style: italic;
+  opacity: 0.55;
+}
+.addons-credit strong { font-style: normal; }
+
 .addons-toolbar {
   display: flex;
   align-items: center;

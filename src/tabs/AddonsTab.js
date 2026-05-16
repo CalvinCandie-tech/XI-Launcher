@@ -10,6 +10,7 @@ const ADDON_CONFLICTS = {
   'hotbar': { label: 'Hotbar System', addons: ['tHotBar', 'tCrossBar'] },
   'party-list': { label: 'Party List', addons: ['XivParty', 'HXUI'] },
   'buff-timers': { label: 'Buff Timers', addons: ['statustimers', 'tTimers'] },
+  'gear-swap': { label: 'Gear Swap Engine', addons: ['LuAshitacast', 'LegacyAC'] },
 };
 
 export const ADDON_CATALOGUE = [
@@ -30,6 +31,7 @@ export const ADDON_CATALOGUE = [
   { name: 'stepdialog', description: 'Manually invoke the key press to continue the current chat dialog', category: 'QoL / General' },
   { name: 'nomad', description: 'Enables mog house functionality in any zone', category: 'QoL / General' },
   { name: 'castdelay', description: 'Blocks spells, ranged attacks, and item use until you stop moving — prevents wasted casts from input lag.', category: 'QoL / General', repo: 'ThornyFFXI/castdelay' },
+  { name: 'Shorthand', description: 'Forgiving spell/ability/item input — type "//honormarch" or "/ma fire2" instead of full names and roman numerals. Partial target names, // prefix shortcut, auto-self-target for self-only spells. English clients only.', category: 'QoL / General', repo: 'ThornyFFXI/Shorthand', useRelease: true, isPlugin: true, ashitaRoot: true, installAs: 'Shorthand' },
   // --- Combat & Targeting ---
   { name: 'debuff', description: 'Enables cancelling status effects via a command', category: 'Combat & Targeting' },
   { name: 'distance', description: 'Displays the distance between you and your target', category: 'Combat & Targeting' },
@@ -40,6 +42,7 @@ export const ADDON_CATALOGUE = [
   { name: 'paranormal', description: 'Enables using nearly any game command while dead/unconscious', category: 'Combat & Targeting' },
   { name: 'trimspells', description: 'Changes the CTRL+M shortcut spell list to be trimmed to known spells', category: 'Combat & Targeting' },
   { name: 'LuAshitacast', description: 'The gear-swapping engine for Ashita v4 — write Lua scripts that automatically change your equipment based on spells, abilities, and events. Essential for endgame players.', category: 'Combat & Targeting', repo: 'ThornyFFXI/LuAshitacast', useRelease: true, releaseFolder: 'luashitacast', installAs: 'LuAshitacast' },
+  { name: 'LegacyAC', description: 'Ashitacast v3 ported to Ashita v4 — the XML-based gear-swap engine that pre-dates LuAshitacast. Use this if you have existing AC v3 XML profiles or prefer rule/condition tables to Lua.', category: 'Combat & Targeting', repo: 'ThornyFFXI/LegacyAC', useRelease: true, isPlugin: true, ashitaRoot: true, installAs: 'LegacyAC' },
   { name: 'chains', description: 'Displays available skillchain paths and results based on your current weapons and party members. Helps plan and execute skillchains in real-time with an intuitive overlay.', category: 'Combat & Targeting', repo: 'loonsies/chains' },
   { name: 'ninjaTool', description: 'Monitors Ninja tool inventory and displays casting cooldowns in a wheel display. Helps you track tool consumption and recast timing.', category: 'Combat & Targeting', repo: 'm4thmatic/ninjaTool' },
   { name: 'HitPoints', description: 'Shows HP percentage on your current target and engaged enemies. Useful for knowing exactly when to weaponskill or use abilities.', category: 'Combat & Targeting', repo: 'ThornyFFXI/HitPoints', subdir: 'HitPoints', installAs: 'HitPoints', deps: ['gdifonts'], localDeps: { gdifonts: 'libs/gdifonts' } },
@@ -61,6 +64,7 @@ export const ADDON_CATALOGUE = [
   { name: 'TreasurePool', description: 'Shows the treasure pool in a movable, customizable window with lot/pass information and item details for everything your party has found.', category: 'UI / HUD', repo: 'ShiyoKozuki/TreasurePool' },
   { name: 'Emotes', description: 'Displays all available emotes in a browsable list so you don\'t need to remember the commands.', category: 'UI / HUD', repo: 'tirem/Emotes', subdir: 'Emotes', installAs: 'Emotes' },
   { name: 'XICamera', description: 'Unlocks extended camera distance and zoom controls beyond the default limits. Bundled and ready to enable.', category: 'UI / HUD', repo: 'Hokuten85/XICamera', subdir: 'Ashita4/addons/xicamera', installAs: 'xicamera' },
+  { name: 'mobdb', description: 'On-screen monster info bar in the style of ibar — shows aggro type, links, sound/sight, weaknesses, immunities, and drop hints for your target. Bundled with default LSB data; importable from your own server SQL.', category: 'UI / HUD', repo: 'ThornyFFXI/mobdb', useRelease: true, installAs: 'mobdb' },
   // --- Hotbars & Controls ---
   { name: 'tHotBar', description: 'Adds a visual hotbar to your screen for binding macros and abilities to keyboard shortcuts. Drag-and-drop setup with customizable size and layout.', category: 'Hotbars & Controls', repo: 'ThornyFFXI/tHotBar', useRelease: true, releaseFolder: 'thotbar', installAs: 'thotbar' },
   { name: 'tCrossBar', description: 'Controller-friendly crossbar UI inspired by FFXIV. Maps abilities to a gamepad with a clean on-screen display. Requires Ashita 4.15+.', category: 'Hotbars & Controls', repo: 'ThornyFFXI/tCrossBar', useRelease: true, releaseFolder: 'tCrossBar', installAs: 'tCrossBar' },
@@ -126,6 +130,7 @@ export const ADDON_CATALOGUE = [
   { name: 'affinity', description: 'Allows setting the current process affinity mask in-game', category: 'Automation & Scripting' },
   { name: 'hideobs', description: 'Hides the game window from OBS display stream capturing', category: 'Automation & Scripting' },
   { name: 'ime', description: 'Allows non-Japanese clients to use the Japanese IME and character sets', category: 'Automation & Scripting' },
+  { name: 'Multisend', description: 'Multibox command bridge — send commands from one running client to all others without external servos. Includes follow, group commands, party/alliance broadcast, and same-PC clients sharing input.', category: 'Automation & Scripting', repo: 'ThornyFFXI/Multisend', useRelease: true, isPlugin: true, ashitaRoot: true, installAs: 'Multisend' },
   // --- Libraries (auto-installed as dependencies) ---
   { name: 'gdifonts', description: 'Font rendering library required by balloon and other addons. Not loadable on its own — consumed via require().', category: 'Library', repo: 'onimitch/gdifonts', installAs: 'libs/gdifonts', isLibrary: true },
 ];
@@ -170,6 +175,10 @@ const ADDON_HELP = {
   timestamp:     { commands: ['/timestamp'], usage: 'Adds timestamps to chat. Works automatically — no commands needed after loading.' },
   XICamera:      { commands: ['/xicamera'], usage: 'Unlock extended camera distance and zoom. /xicamera to open settings. Works automatically once enabled.' },
   LuAshitacast:  { commands: ['/lac'], usage: 'Gear-swap engine. /lac to show status, /lac disable/enable to toggle, /lac addset <name> to manage gear sets. Requires Lua scripts per job.' },
+  LegacyAC:      { commands: ['/la', '/legacyac'], usage: 'AC v3 gear-swap. /la load <Char_JOB.xml> to load a profile, /la addset <name> to capture current gear, /la naked to strip. XML profiles live in <ashita>/config/LegacyAC/ named <CharName>_<JOB>.xml.' },
+  Multisend:     { commands: ['/ms', '/mss', '/mst', '/msp', '/msa'], usage: 'Multibox bridge. /mss <cmd> to all chars, /mst <name> <cmd> to one, /msp <cmd> to party, /msa <cmd> to alliance. /ms follow on, /ms followme on to chain-follow. Groups in <ashita>/config/MultiSend.xml. Load every client.' },
+  Shorthand:     { commands: ['//'], usage: 'Type "//warp" instead of /ma "Warp" <me>, or "/ma fire2" instead of /ma "Fire II". Partial mob/PC names work as targets. Edit <ashita>/config/shorthand/settings.xml to add custom aliases. English clients only.' },
+  mobdb:         { commands: ['/mobdb', '/md'], usage: 'Mob info bar. Loads automatically and shows data on your current target. /mobdb config to style the bar and tokens, /md reset to recenter if offscreen. To use FFXI-Crystal data, drop your mob SQL into <ashita>/config/addons/mobdb/input/ and run /mobdb import lsb.' },
   chains:        { commands: ['/chains'], usage: 'Skillchain helper. /chains to toggle the overlay. Shows available skillchains based on your weapons and recent weaponskills.' },
   ninjaTool:     { commands: ['/ninjatool'], usage: 'Ninja tool tracker. /ninjatool to toggle the display. Shows tool counts and casting cooldown wheel.' },
   HXUI:          { commands: ['/hxui', '/xiui'], usage: 'Full HUD replacement. /hxui or /xiui to open settings. Drag elements to reposition. Replaces party list, HP/MP bars, target bar, and more.' },
@@ -235,11 +244,17 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
     const result = await api.getAddons(config.ashitaPath);
     // Only count addons that actually have a loadable main Lua. Empty/half-extracted
     // folders used to show as "Installed" here even when Ashita couldn't load them.
-    setInstalledAddons(
-      result.addons
-        .filter(a => a.hasMainLua)
-        .map(a => a.name.toLowerCase())
-    );
+    const luaInstalled = result.addons
+      .filter(a => a.hasMainLua)
+      .map(a => a.name.toLowerCase());
+    // Catalogued plugins (isPlugin: true) install a flat DLL under plugins/ — pick those
+    // up too so the "Installed" pill and toggle reflect reality for them.
+    let pluginInstalled = [];
+    try {
+      const pluginsResult = await api.getPlugins(config.ashitaPath);
+      pluginInstalled = (pluginsResult?.plugins || []).map(p => p.name.toLowerCase());
+    } catch {}
+    setInstalledAddons([...luaInstalled, ...pluginInstalled]);
   }, [config.ashitaPath]);
 
   const loadEnabledFromProfile = useCallback(async () => {
@@ -267,14 +282,24 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
     );
     const stripLibs = (list) => list.filter(n => !librarySet.has(n));
 
-    // Read the script file and extract /addon load lines
+    // Read the script file and extract /addon load lines, plus /load <plugin> for
+    // catalogued plugins (LegacyAC etc.). Plain /load thirdparty / /load addons must
+    // NOT be treated as addons — gate on the catalogued plugin set.
+    const pluginScriptNames = new Set(
+      ADDON_CATALOGUE
+        .filter(a => a.isPlugin)
+        .map(a => (a.installAs || a.name).toLowerCase())
+    );
     const scriptPath = config.ashitaPath + '\\scripts\\' + scriptName;
     const scriptResult = await api.readFile(scriptPath);
     if (scriptResult && scriptResult.content) {
       const enabled = [];
       for (const line of scriptResult.content.split('\n')) {
-        const m = line.trim().match(/^\/addon\s+load\s+(\S+)/i);
-        if (m) enabled.push(m[1].toLowerCase());
+        const trimmed = line.trim();
+        const m = trimmed.match(/^\/addon\s+load\s+(\S+)/i);
+        if (m) { enabled.push(m[1].toLowerCase()); continue; }
+        const p = trimmed.match(/^\/load\s+(\S+)/i);
+        if (p && pluginScriptNames.has(p[1].toLowerCase())) enabled.push(p[1].toLowerCase());
       }
       setEnabledAddons(stripLibs(enabled));
       return;
@@ -333,7 +358,7 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
             : installedAddons.includes(depInstallName);
           if (!depInstalled) {
             setInstalling(prev => ({ ...prev, [addon.name]: { percent: 0, detail: `Installing dependency: ${depEntry.name}...` } }));
-            const depResult = await api.installAddon(config.ashitaPath, depEntry.installAs || depEntry.name, depEntry.repo, depEntry.subdir, depEntry.useRelease, depEntry.releaseFolder, depEntry.isPlugin);
+            const depResult = await api.installAddon(config.ashitaPath, depEntry.installAs || depEntry.name, depEntry.repo, depEntry.subdir, depEntry.useRelease, depEntry.releaseFolder, depEntry.isPlugin, depEntry.ashitaRoot);
             if (!depResult || !depResult.success) {
               setInstalling(prev => {
                 const next = { ...prev };
@@ -364,7 +389,7 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
 
     setInstalling(prev => ({ ...prev, [addon.name]: { percent: 0, detail: 'Starting...' } }));
     setInstallMsg(null);
-    const result = await api.installAddon(config.ashitaPath, addon.installAs || addon.name, addon.repo, addon.subdir, addon.useRelease, addon.releaseFolder, addon.isPlugin);
+    const result = await api.installAddon(config.ashitaPath, addon.installAs || addon.name, addon.repo, addon.subdir, addon.useRelease, addon.releaseFolder, addon.isPlugin, addon.ashitaRoot);
     setInstalling(prev => {
       const next = { ...prev };
       delete next[addon.name];
@@ -383,7 +408,7 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
     if (!api) return;
     if (!window.confirm(`Uninstall ${addon.name}? This will delete all addon files.`)) return;
     const scriptName = (addon.installAs || addon.name);
-    const result = await api.uninstallAddon(config.ashitaPath, scriptName, addon.isPlugin);
+    const result = await api.uninstallAddon(config.ashitaPath, scriptName, addon.isPlugin, addon.ashitaRoot);
     if (result.success) {
       // Remove from enabled list
       const lower = scriptName.toLowerCase();
@@ -542,8 +567,21 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
         }
       }
 
-      // Remove all existing /addon load lines
-      const filtered = scriptLines.filter(l => !l.trim().toLowerCase().startsWith('/addon load '));
+      // Remove all existing /addon load lines, plus /load <plugin> for catalogued
+      // plugins. Other /load lines (thirdparty, addons, custom plugins not in the
+      // catalogue) are preserved.
+      const pluginScriptNames = new Set(
+        ADDON_CATALOGUE
+          .filter(a => a.isPlugin)
+          .map(a => (a.installAs || a.name).toLowerCase())
+      );
+      const filtered = scriptLines.filter(l => {
+        const t = l.trim().toLowerCase();
+        if (t.startsWith('/addon load ')) return false;
+        const m = t.match(/^\/load\s+(\S+)/);
+        if (m && pluginScriptNames.has(m[1])) return false;
+        return true;
+      });
 
       // Find where to insert addon load lines — after the last /load line (before /wait or /bind sections)
       let insertIdx = filtered.length;
@@ -555,8 +593,11 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
         }
       }
 
-      // Add a blank line before addon loads if needed
-      const addonLines = enabled.map(a => '/addon load ' + a);
+      // Add a blank line before addon loads if needed. Catalogued plugins use
+      // `/load NAME`; everything else uses `/addon load NAME`.
+      const addonLines = enabled.map(a =>
+        pluginScriptNames.has(a) ? '/load ' + a : '/addon load ' + a
+      );
       if (addonLines.length > 0) {
         // Insert with a blank line separator
         filtered.splice(insertIdx, 0, '', ...addonLines, '');
@@ -978,6 +1019,10 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="addons-credit">
+        Recommended addons &amp; plugins curated with thanks to <strong>Graves</strong> from LevelDownFFXI.
       </div>
     </div>
   );

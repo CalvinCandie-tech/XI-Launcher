@@ -3456,7 +3456,7 @@ function registerIPC() {
   });
 
   // Community addon install/update from GitHub
-  ipcMain.handle('install-addon', async (_, ashitaPath, addonName, repo, subdir, useRelease, releaseFolder, isPlugin) => {
+  ipcMain.handle('install-addon', async (_, ashitaPath, addonName, repo, subdir, useRelease, releaseFolder, isPlugin, ashitaRoot) => {
     try {
       const sendProgress = (percent, detail) => {
         try { mainWindow?.webContents?.send('addon-progress', addonName, percent, detail); } catch {}
@@ -3480,7 +3480,7 @@ function registerIPC() {
           // Pick the best .zip asset. Skip horizon-specific builds. When multiple
           // zips target different Ashita interface versions (e.g. "FindAll.1.18.-.Interface.4.30.zip"),
           // prefer the highest interface number so we match modern Ashita.
-          const zips = releaseInfo.assets.filter(a => a.name.endsWith('.zip') && !a.name.includes('horizon'));
+          const zips = releaseInfo.assets.filter(a => a.name.endsWith('.zip') && !/horizon/i.test(a.name));
           const pool = zips.length ? zips : releaseInfo.assets.filter(a => a.name.endsWith('.zip'));
           const score = (n) => {
             const m = n.match(/Interface[._-]?(\d+)[._-](\d+)/i);
@@ -3597,55 +3597,97 @@ function registerIPC() {
         }
       }
 
-      sendProgress(78, `Installing to ${isPlugin ? 'plugins' : 'addons'} folder...`);
+      let fileCount = 0;
 
-      // Determine destination: plugins/ for plugins, addons/ for addons
-      const destBase = isPlugin ? 'plugins' : 'addons';
-      const destDir = path.join(ashitaPath, destBase, addonName);
-      if (!isAllowedPath(destDir)) return { success: false, error: 'Invalid addon destination path' };
-
-      // Back up user config files before overwriting
-      const configBackupDir = path.join(os.tmpdir(), 'xi-addon-backup-' + addonName + '-' + Date.now());
-      const configPatterns = ['config', 'settings', 'data'];
-      const configExts = ['.ini', '.json', '.lua', '.xml'];
-      const configExclude = ['manifest.json', 'package.json'];
-      if (fs.existsSync(destDir)) {
-        sendProgress(79, 'Preserving config files...');
-        const backupFile = (dir, rel) => {
-          const entries = fs.readdirSync(dir, { withFileTypes: true });
-          for (const ent of entries) {
-            const fullPath = path.join(dir, ent.name);
-            const relPath = path.join(rel, ent.name);
+      if (ashitaRoot) {
+        // Ashita-root layout: the zip mirrors the Ashita install root (plugins/, resources/,
+        // scripts/, etc.). Merge each subtree into <ashitaPath>/<subdir>/ and track every
+        // written file in a manifest so uninstall can remove exactly what we placed.
+        sendProgress(78, 'Installing to Ashita install...');
+        const rootSubdirs = ['plugins', 'addons', 'resources', 'scripts', 'config', 'polplugins'];
+        const manifest = [];
+        const copyTracked = (src, dest) => {
+          if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+          for (const ent of fs.readdirSync(src, { withFileTypes: true })) {
+            const srcPath = path.join(src, ent.name);
+            const destPath = path.join(dest, ent.name);
             if (ent.isDirectory()) {
-              if (configPatterns.includes(ent.name.toLowerCase())) {
-                // Back up entire config/settings/data directories
-                const backupDest = path.join(configBackupDir, relPath);
-                fs.mkdirSync(backupDest, { recursive: true });
-                copyRecursive(fullPath, backupDest);
-              } else {
-                backupFile(fullPath, relPath);
-              }
-            } else if (configExts.includes(path.extname(ent.name).toLowerCase()) && !configExclude.includes(ent.name.toLowerCase())) {
-              const backupDest = path.join(configBackupDir, relPath);
-              fs.mkdirSync(path.dirname(backupDest), { recursive: true });
-              fs.copyFileSync(fullPath, backupDest);
+              copyTracked(srcPath, destPath);
+            } else {
+              fs.copyFileSync(srcPath, destPath);
+              manifest.push(destPath);
             }
           }
         };
-        try { backupFile(destDir, ''); } catch (e) { console.error('[install-addon] config backup:', e.message); }
-        fs.rmSync(destDir, { recursive: true, force: true });
-      }
-      fs.mkdirSync(destDir, { recursive: true });
+        for (const sub of rootSubdirs) {
+          const srcSub = path.join(innerDir, sub);
+          if (!fs.existsSync(srcSub) || !fs.statSync(srcSub).isDirectory()) continue;
+          const destSub = path.join(ashitaPath, sub);
+          if (!isAllowedPath(destSub)) {
+            return { success: false, error: `Invalid destination path: ${sub}` };
+          }
+          copyTracked(srcSub, destSub);
+        }
+        if (manifest.length === 0) {
+          return { success: false, error: 'Zip had no recognised Ashita root subdirs (plugins, resources, scripts, config).' };
+        }
+        if (store) {
+          const manifests = store.get('addonManifests', {});
+          manifests[addonName] = manifest;
+          store.set('addonManifests', manifests);
+        }
+        fileCount = manifest.length;
+      } else {
+        sendProgress(78, `Installing to ${isPlugin ? 'plugins' : 'addons'} folder...`);
 
-      copyRecursive(innerDir, destDir);
+        // Determine destination: plugins/ for plugins, addons/ for addons
+        const destBase = isPlugin ? 'plugins' : 'addons';
+        const destDir = path.join(ashitaPath, destBase, addonName);
+        if (!isAllowedPath(destDir)) return { success: false, error: 'Invalid addon destination path' };
 
-      // Restore backed up config files
-      if (fs.existsSync(configBackupDir)) {
-        sendProgress(85, 'Restoring config files...');
-        try { copyRecursive(configBackupDir, destDir); } catch (e) { console.error('[install-addon] config restore:', e.message); }
-        try { fs.rmSync(configBackupDir, { recursive: true, force: true }); } catch {}
+        // Back up user config files before overwriting
+        const configBackupDir = path.join(os.tmpdir(), 'xi-addon-backup-' + addonName + '-' + Date.now());
+        const configPatterns = ['config', 'settings', 'data'];
+        const configExts = ['.ini', '.json', '.lua', '.xml'];
+        const configExclude = ['manifest.json', 'package.json'];
+        if (fs.existsSync(destDir)) {
+          sendProgress(79, 'Preserving config files...');
+          const backupFile = (dir, rel) => {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const ent of entries) {
+              const fullPath = path.join(dir, ent.name);
+              const relPath = path.join(rel, ent.name);
+              if (ent.isDirectory()) {
+                if (configPatterns.includes(ent.name.toLowerCase())) {
+                  // Back up entire config/settings/data directories
+                  const backupDest = path.join(configBackupDir, relPath);
+                  fs.mkdirSync(backupDest, { recursive: true });
+                  copyRecursive(fullPath, backupDest);
+                } else {
+                  backupFile(fullPath, relPath);
+                }
+              } else if (configExts.includes(path.extname(ent.name).toLowerCase()) && !configExclude.includes(ent.name.toLowerCase())) {
+                const backupDest = path.join(configBackupDir, relPath);
+                fs.mkdirSync(path.dirname(backupDest), { recursive: true });
+                fs.copyFileSync(fullPath, backupDest);
+              }
+            }
+          };
+          try { backupFile(destDir, ''); } catch (e) { console.error('[install-addon] config backup:', e.message); }
+          fs.rmSync(destDir, { recursive: true, force: true });
+        }
+        fs.mkdirSync(destDir, { recursive: true });
+
+        copyRecursive(innerDir, destDir);
+
+        // Restore backed up config files
+        if (fs.existsSync(configBackupDir)) {
+          sendProgress(85, 'Restoring config files...');
+          try { copyRecursive(configBackupDir, destDir); } catch (e) { console.error('[install-addon] config restore:', e.message); }
+          try { fs.rmSync(configBackupDir, { recursive: true, force: true }); } catch {}
+        }
+        fileCount = countFiles(destDir);
       }
-      const fileCount = countFiles(destDir);
 
       sendProgress(100, `Installed — ${fileCount} files`);
 
@@ -3688,8 +3730,53 @@ function registerIPC() {
   });
 
   // Uninstall an addon/plugin
-  ipcMain.handle('uninstall-addon', async (_, ashitaPath, addonName, isPlugin) => {
+  ipcMain.handle('uninstall-addon', async (_, ashitaPath, addonName, isPlugin, ashitaRoot) => {
     try {
+      if (ashitaRoot) {
+        // Ashita-root install: read the manifest written at install time and delete
+        // each tracked file. Never blindly rm a shared dir (plugins/, resources/, …).
+        if (!store) return { success: false, error: 'Manifest storage unavailable.' };
+        const manifests = store.get('addonManifests', {});
+        const manifest = manifests[addonName];
+        if (!manifest || !Array.isArray(manifest) || manifest.length === 0) {
+          return { success: false, error: 'No install manifest found for ' + addonName + '.' };
+        }
+        const installRoot = path.resolve(ashitaPath);
+        let removed = 0;
+        const touchedDirs = new Set();
+        for (const filePath of manifest) {
+          if (!isAllowedPath(filePath)) continue;
+          try {
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+              removed++;
+            }
+          } catch (e) { console.error('[uninstall-addon] file:', e.message); }
+          touchedDirs.add(path.dirname(filePath));
+        }
+        // Prune empty parent dirs up to (but not including) the Ashita root subdirs.
+        const sortedDirs = [...touchedDirs].sort((a, b) => b.length - a.length);
+        for (const dir of sortedDirs) {
+          let cur = dir;
+          while (cur && cur.startsWith(installRoot + path.sep) && path.dirname(cur) !== installRoot) {
+            try {
+              if (fs.existsSync(cur) && fs.readdirSync(cur).length === 0) {
+                fs.rmdirSync(cur);
+              } else {
+                break;
+              }
+            } catch { break; }
+            cur = path.dirname(cur);
+          }
+        }
+        delete manifests[addonName];
+        store.set('addonManifests', manifests);
+        const shas = store.get('addonUpdateSHAs', {});
+        delete shas[addonName];
+        store.set('addonUpdateSHAs', shas);
+        return { success: true, message: `${addonName} uninstalled — ${removed} files removed.` };
+      }
+
       const base = isPlugin ? 'plugins' : 'addons';
       const addonDir = path.join(ashitaPath, base, addonName);
       if (!isAllowedPath(addonDir)) return { success: false, error: 'Invalid addon path' };
@@ -3755,7 +3842,16 @@ function registerIPC() {
             }
 
             if (remoteTag !== stored.tag) {
-              updates.push({ name: addon.name, repo: addon.repo, subdir: addon.subdir || null });
+              updates.push({
+                name: addon.name,
+                installAs: addon.installAs || null,
+                repo: addon.repo,
+                subdir: addon.subdir || null,
+                useRelease: !!addon.useRelease,
+                releaseFolder: addon.releaseFolder || null,
+                isPlugin: !!addon.isPlugin,
+                ashitaRoot: !!addon.ashitaRoot,
+              });
             }
           } else {
             const commits = await githubGet(`/repos/${addon.repo}/commits?per_page=1`);
@@ -3776,7 +3872,16 @@ function registerIPC() {
             }
 
             if (remoteSha !== stored.sha) {
-              updates.push({ name: addon.name, repo: addon.repo, subdir: addon.subdir || null });
+              updates.push({
+                name: addon.name,
+                installAs: addon.installAs || null,
+                repo: addon.repo,
+                subdir: addon.subdir || null,
+                useRelease: !!addon.useRelease,
+                releaseFolder: addon.releaseFolder || null,
+                isPlugin: !!addon.isPlugin,
+                ashitaRoot: !!addon.ashitaRoot,
+              });
             }
           }
         } catch (e) {
