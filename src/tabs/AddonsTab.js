@@ -1,17 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Modal from '../components/Modal';
+import { CONFLICT_GROUPS } from '../utils/conflicts';
 import './AddonsTab.css';
 
 const api = window.xiAPI;
-
-// Conflict groups — addons in the same group may conflict
-const ADDON_CONFLICTS = {
-  'hud-bars': { label: 'HUD / Player Bars', addons: ['HXUI', 'XIVBar'] },
-  'hotbar': { label: 'Hotbar System', addons: ['tHotBar', 'tCrossBar'] },
-  'party-list': { label: 'Party List', addons: ['XivParty', 'HXUI'] },
-  'buff-timers': { label: 'Buff Timers', addons: ['statustimers', 'tTimers'] },
-  'gear-swap': { label: 'Gear Swap Engine', addons: ['LuAshitacast', 'LegacyAC'] },
-};
 
 export const ADDON_CATALOGUE = [
   // --- QoL / General ---
@@ -31,7 +23,6 @@ export const ADDON_CATALOGUE = [
   { name: 'stepdialog', description: 'Manually invoke the key press to continue the current chat dialog', category: 'QoL / General' },
   { name: 'nomad', description: 'Enables mog house functionality in any zone', category: 'QoL / General' },
   { name: 'castdelay', description: 'Blocks spells, ranged attacks, and item use until you stop moving — prevents wasted casts from input lag.', category: 'QoL / General', repo: 'ThornyFFXI/castdelay' },
-  { name: 'Shorthand', description: 'Forgiving spell/ability/item input — type "//honormarch" or "/ma fire2" instead of full names and roman numerals. Partial target names, // prefix shortcut, auto-self-target for self-only spells. English clients only.', category: 'QoL / General', repo: 'ThornyFFXI/Shorthand', useRelease: true, isPlugin: true, ashitaRoot: true, installAs: 'Shorthand' },
   // --- Combat & Targeting ---
   { name: 'debuff', description: 'Enables cancelling status effects via a command', category: 'Combat & Targeting' },
   { name: 'distance', description: 'Displays the distance between you and your target', category: 'Combat & Targeting' },
@@ -42,7 +33,6 @@ export const ADDON_CATALOGUE = [
   { name: 'paranormal', description: 'Enables using nearly any game command while dead/unconscious', category: 'Combat & Targeting' },
   { name: 'trimspells', description: 'Changes the CTRL+M shortcut spell list to be trimmed to known spells', category: 'Combat & Targeting' },
   { name: 'LuAshitacast', description: 'The gear-swapping engine for Ashita v4 — write Lua scripts that automatically change your equipment based on spells, abilities, and events. Essential for endgame players.', category: 'Combat & Targeting', repo: 'ThornyFFXI/LuAshitacast', useRelease: true, releaseFolder: 'luashitacast', installAs: 'LuAshitacast' },
-  { name: 'LegacyAC', description: 'Ashitacast v3 ported to Ashita v4 — the XML-based gear-swap engine that pre-dates LuAshitacast. Use this if you have existing AC v3 XML profiles or prefer rule/condition tables to Lua.', category: 'Combat & Targeting', repo: 'ThornyFFXI/LegacyAC', useRelease: true, isPlugin: true, ashitaRoot: true, installAs: 'LegacyAC' },
   { name: 'chains', description: 'Displays available skillchain paths and results based on your current weapons and party members. Helps plan and execute skillchains in real-time with an intuitive overlay.', category: 'Combat & Targeting', repo: 'loonsies/chains' },
   { name: 'ninjaTool', description: 'Monitors Ninja tool inventory and displays casting cooldowns in a wheel display. Helps you track tool consumption and recast timing.', category: 'Combat & Targeting', repo: 'm4thmatic/ninjaTool' },
   { name: 'HitPoints', description: 'Shows HP percentage on your current target and engaged enemies. Useful for knowing exactly when to weaponskill or use abilities.', category: 'Combat & Targeting', repo: 'ThornyFFXI/HitPoints', subdir: 'HitPoints', installAs: 'HitPoints', deps: ['gdifonts'], localDeps: { gdifonts: 'libs/gdifonts' } },
@@ -130,7 +120,6 @@ export const ADDON_CATALOGUE = [
   { name: 'affinity', description: 'Allows setting the current process affinity mask in-game', category: 'Automation & Scripting' },
   { name: 'hideobs', description: 'Hides the game window from OBS display stream capturing', category: 'Automation & Scripting' },
   { name: 'ime', description: 'Allows non-Japanese clients to use the Japanese IME and character sets', category: 'Automation & Scripting' },
-  { name: 'Multisend', description: 'Multibox command bridge — send commands from one running client to all others without external servos. Includes follow, group commands, party/alliance broadcast, and same-PC clients sharing input.', category: 'Automation & Scripting', repo: 'ThornyFFXI/Multisend', useRelease: true, isPlugin: true, ashitaRoot: true, installAs: 'Multisend' },
   // --- Libraries (auto-installed as dependencies) ---
   { name: 'gdifonts', description: 'Font rendering library required by balloon and other addons. Not loadable on its own — consumed via require().', category: 'Library', repo: 'onimitch/gdifonts', installAs: 'libs/gdifonts', isLibrary: true },
 ];
@@ -175,9 +164,6 @@ const ADDON_HELP = {
   timestamp:     { commands: ['/timestamp'], usage: 'Adds timestamps to chat. Works automatically — no commands needed after loading.' },
   XICamera:      { commands: ['/xicamera'], usage: 'Unlock extended camera distance and zoom. /xicamera to open settings. Works automatically once enabled.' },
   LuAshitacast:  { commands: ['/lac'], usage: 'Gear-swap engine. /lac to show status, /lac disable/enable to toggle, /lac addset <name> to manage gear sets. Requires Lua scripts per job.' },
-  LegacyAC:      { commands: ['/la', '/legacyac'], usage: 'AC v3 gear-swap. /la load <Char_JOB.xml> to load a profile, /la addset <name> to capture current gear, /la naked to strip. XML profiles live in <ashita>/config/LegacyAC/ named <CharName>_<JOB>.xml.' },
-  Multisend:     { commands: ['/ms', '/mss', '/mst', '/msp', '/msa'], usage: 'Multibox bridge. /mss <cmd> to all chars, /mst <name> <cmd> to one, /msp <cmd> to party, /msa <cmd> to alliance. /ms follow on, /ms followme on to chain-follow. Groups in <ashita>/config/MultiSend.xml. Load every client.' },
-  Shorthand:     { commands: ['//'], usage: 'Type "//warp" instead of /ma "Warp" <me>, or "/ma fire2" instead of /ma "Fire II". Partial mob/PC names work as targets. Edit <ashita>/config/shorthand/settings.xml to add custom aliases. English clients only.' },
   mobdb:         { commands: ['/mobdb', '/md'], usage: 'Mob info bar. Loads automatically and shows data on your current target. /mobdb config to style the bar and tokens, /md reset to recenter if offscreen. To use FFXI-Crystal data, drop your mob SQL into <ashita>/config/addons/mobdb/input/ and run /mobdb import lsb.' },
   chains:        { commands: ['/chains'], usage: 'Skillchain helper. /chains to toggle the overlay. Shows available skillchains based on your weapons and recent weaponskills.' },
   ninjaTool:     { commands: ['/ninjatool'], usage: 'Ninja tool tracker. /ninjatool to toggle the display. Shows tool counts and casting cooldown wheel.' },
@@ -203,6 +189,8 @@ const ADDON_HELP = {
 function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
   const [installedAddons, setInstalledAddons] = useState([]);
   const [enabledAddons, setEnabledAddons] = useState([]);
+  // Every script-active name (lowercase) — addons + plugins — for cross-tab conflict checks.
+  const [enabledScriptsAll, setEnabledScriptsAll] = useState([]);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [installing, setInstalling] = useState({});   // { addonName: { percent, detail } }
@@ -294,14 +282,19 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
     const scriptResult = await api.readFile(scriptPath);
     if (scriptResult && scriptResult.content) {
       const enabled = [];
+      const all = [];
       for (const line of scriptResult.content.split('\n')) {
         const trimmed = line.trim();
         const m = trimmed.match(/^\/addon\s+load\s+(\S+)/i);
-        if (m) { enabled.push(m[1].toLowerCase()); continue; }
+        if (m) { enabled.push(m[1].toLowerCase()); all.push(m[1].toLowerCase()); continue; }
         const p = trimmed.match(/^\/load\s+(\S+)/i);
-        if (p && pluginScriptNames.has(p[1].toLowerCase())) enabled.push(p[1].toLowerCase());
+        if (p) {
+          all.push(p[1].toLowerCase());
+          if (pluginScriptNames.has(p[1].toLowerCase())) enabled.push(p[1].toLowerCase());
+        }
       }
       setEnabledAddons(stripLibs(enabled));
+      setEnabledScriptsAll(all);
       return;
     }
 
@@ -728,17 +721,18 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
         </div>
       </div>
 
-      {/* Conflict warnings */}
+      {/* Conflict warnings — checks union of enabled addons + plugins so cross-tab
+          overlap (e.g. LegacyAC plugin vs LuAshitacast addon) still surfaces here. */}
       {(() => {
+        const enabledSet = new Set([...enabledAddons, ...enabledScriptsAll]);
         const warnings = [];
-        for (const [groupId, group] of Object.entries(ADDON_CONFLICTS)) {
-          const enabledInGroup = group.addons.filter(name => {
-            const cat = ADDON_CATALOGUE.find(a => a.name === name);
-            const scriptName = (cat?.installAs || name).toLowerCase();
-            return enabledAddons.includes(scriptName);
-          });
-          if (enabledInGroup.length > 1) {
-            warnings.push({ id: groupId, label: group.label, addons: enabledInGroup });
+        for (const [groupId, group] of Object.entries(CONFLICT_GROUPS)) {
+          const hitIdx = group.scripts
+            .map((s, i) => enabledSet.has(s) ? i : -1)
+            .filter(i => i >= 0);
+          if (hitIdx.length > 1) {
+            const labels = hitIdx.map(i => group.displayNames[i]);
+            warnings.push({ id: groupId, label: group.label, scripts: labels });
           }
         }
         if (warnings.length === 0) return null;
@@ -747,7 +741,7 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
             <div className="addon-conflicts-title">Potential Addon Conflicts</div>
             {warnings.map(w => (
               <div key={w.id} className="addon-conflicts-item">
-                <strong>{w.label}:</strong> {w.addons.join(' + ')} — these may overlap. Consider disabling one.
+                <strong>{w.label}:</strong> {w.scripts.join(' + ')} — these may overlap. Consider disabling one.
               </div>
             ))}
           </div>

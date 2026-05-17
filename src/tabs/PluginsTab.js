@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { CONFLICT_GROUPS } from '../utils/conflicts';
 import './PluginsTab.css';
 
 const api = window.xiAPI;
 
-const PLUGIN_CATALOGUE = [
+export const PLUGIN_CATALOGUE = [
   // Core — ship with Ashita, almost always needed
   { name: 'addons', desc: 'Core addon engine — required for any Lua addon to work. Must be loaded before any /addon load commands.', category: 'Core', required: true },
   { name: 'thirdparty', desc: 'Enables third-party memory reads used by many addons for player/target/party data. Required by most UI addons.', category: 'Core', required: true },
@@ -16,11 +17,17 @@ const PLUGIN_CATALOGUE = [
   // Community — downloaded separately
   { name: 'FindAll', desc: 'Instant inventory search across all characters and storage. Much faster than the built-in /find.', category: 'Community', repo: 'ThornyFFXI/FindAll', useRelease: true },
   { name: 'EquipViewer', desc: 'Overlays your currently equipped gear on screen in a translucent window.', category: 'Community', repo: 'ProjectTako/EquipViewer', subdir: 'plugins' },
+  { name: 'Shorthand', desc: 'Forgiving spell/ability/item input — type "//honormarch" or "/ma fire2" instead of full names and roman numerals. Partial target names, // prefix shortcut, auto-self-target for self-only spells. English clients only.', category: 'Community', repo: 'ThornyFFXI/Shorthand', useRelease: true, ashitaRoot: true, installAs: 'Shorthand' },
+  { name: 'LegacyAC', desc: 'Ashitacast v3 ported to Ashita v4 — the XML-based gear-swap engine that pre-dates LuAshitacast. Use this if you have existing AC v3 XML profiles or prefer rule/condition tables to Lua.', category: 'Community', repo: 'ThornyFFXI/LegacyAC', useRelease: true, ashitaRoot: true, installAs: 'LegacyAC' },
+  { name: 'Multisend', desc: 'Multibox command bridge — send commands from one running client to all others without external servos. Includes follow, group commands, party/alliance broadcast, and same-PC clients sharing input.', category: 'Community', repo: 'ThornyFFXI/Multisend', useRelease: true, ashitaRoot: true, installAs: 'Multisend' },
 ];
 
 function PluginsTab({ config }) {
   const [installedPlugins, setInstalledPlugins] = useState([]);
   const [enabledPlugins, setEnabledPlugins] = useState([]);
+  // /addon load <name> entries — captured here only so the conflict banner can spot
+  // cross-tab overlap (e.g. LegacyAC plugin vs LuAshitacast addon). Not used for toggles.
+  const [enabledAddons, setEnabledAddons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [installStatus, setInstallStatus] = useState({});
 
@@ -48,11 +55,16 @@ function PluginsTab({ config }) {
     const scriptResult = await api.readFile(scriptPath);
     if (scriptResult?.content) {
       const enabled = [];
+      const addonsEnabled = [];
       for (const line of scriptResult.content.split('\n')) {
-        const m = line.trim().match(/^\/load\s+(\S+)/i);
-        if (m) enabled.push(m[1].toLowerCase());
+        const trimmed = line.trim();
+        const m = trimmed.match(/^\/load\s+(\S+)/i);
+        if (m) { enabled.push(m[1].toLowerCase()); continue; }
+        const a = trimmed.match(/^\/addon\s+load\s+(\S+)/i);
+        if (a) addonsEnabled.push(a[1].toLowerCase());
       }
       setEnabledPlugins(enabled);
+      setEnabledAddons(addonsEnabled);
     }
   }, [config?.ashitaPath, config?.activeProfile]);
 
@@ -138,7 +150,16 @@ function PluginsTab({ config }) {
     if (!plugin.repo || installStatus[plugin.name]?.installing) return;
     setInstallStatus(prev => ({ ...prev, [plugin.name]: { installing: true, message: 'Downloading...' } }));
 
-    const result = await api.installAddon(config.ashitaPath, plugin.name, plugin.repo, plugin.subdir, plugin.useRelease, null, true);
+    const result = await api.installAddon(
+      config.ashitaPath,
+      plugin.installAs || plugin.name,
+      plugin.repo,
+      plugin.subdir,
+      plugin.useRelease,
+      null,
+      true,
+      plugin.ashitaRoot,
+    );
     if (result.success) {
       setInstallStatus(prev => ({ ...prev, [plugin.name]: { installing: false, message: result.message, success: true } }));
       await loadInstalled();
@@ -213,6 +234,36 @@ function PluginsTab({ config }) {
       <div className="plugins-warning panel">
         Plugins are DLL modules loaded via <code className="mono">/load</code> in your script. Core plugins (addons, thirdparty) are required for most functionality. Changes take effect next launch.
       </div>
+
+      {/* Conflict warnings — same logic as AddonsTab, but reading both lists from
+          this side so a plugin enable can flag overlap with an enabled addon. */}
+      {(() => {
+        const enabledSet = new Set([...enabledPlugins, ...enabledAddons]);
+        const warnings = [];
+        for (const [groupId, group] of Object.entries(CONFLICT_GROUPS)) {
+          const hitIdx = group.scripts
+            .map((s, i) => enabledSet.has(s) ? i : -1)
+            .filter(i => i >= 0);
+          if (hitIdx.length > 1) {
+            warnings.push({
+              id: groupId,
+              label: group.label,
+              names: hitIdx.map(i => group.displayNames[i]),
+            });
+          }
+        }
+        if (warnings.length === 0) return null;
+        return (
+          <div className="addon-conflicts-banner panel addon-conflicts-panel">
+            <div className="addon-conflicts-title">Potential Addon / Plugin Conflicts</div>
+            {warnings.map(w => (
+              <div key={w.id} className="addon-conflicts-item">
+                <strong>{w.label}:</strong> {w.names.join(' + ')} — these may overlap. Consider disabling one.
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {categories.map(cat => {
         const plugins = filteredCatalogue.filter(p => p.category === cat);

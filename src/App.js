@@ -9,7 +9,7 @@ import SettingsTab from './tabs/SettingsTab';
 import XIPivotTab from './tabs/XIPivotTab';
 import DgVoodooTab from './tabs/DgVoodooTab';
 import ReShadeTab from './tabs/ReShadeTab';
-import PluginsTab from './tabs/PluginsTab';
+import PluginsTab, { PLUGIN_CATALOGUE } from './tabs/PluginsTab';
 import ServerBrowserTab from './tabs/ServerBrowserTab';
 // ScriptEditorTab is now embedded in ProfileTab
 import SetupWizard from './components/SetupWizard';
@@ -17,6 +17,15 @@ import UpdateModal from './components/UpdateModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import Modal from './components/Modal';
 import { ADDON_CATALOGUE } from './tabs/AddonsTab';
+
+// Both catalogues need to be queried wherever a name might map to either a
+// /addon load entry or a /load entry (update check, missing-on-launch warning).
+// Stamp isPlugin onto plugin entries so the launch-warning install button picks
+// the right install path even for entries that don't declare it themselves.
+const COMBINED_CATALOGUE = [
+  ...ADDON_CATALOGUE,
+  ...PLUGIN_CATALOGUE.map(p => ({ ...p, isPlugin: true })),
+];
 
 const api = window.xiAPI;
 
@@ -196,7 +205,7 @@ function App() {
   // Check for addon updates on startup
   useEffect(() => {
     if (!api?.checkAddonUpdates || !config?.ashitaPath) return;
-    const repoAddons = ADDON_CATALOGUE.filter(a => a.repo);
+    const repoAddons = COMBINED_CATALOGUE.filter(a => a.repo);
     api.checkAddonUpdates(repoAddons).then(result => {
       if (result?.updates?.length > 0) {
         setAddonUpdates(result.updates);
@@ -206,7 +215,7 @@ function App() {
 
   const handleManualAddonCheck = async () => {
     if (!api?.checkAddonUpdates) return { updates: [] };
-    const repoAddons = ADDON_CATALOGUE.filter(a => a.repo);
+    const repoAddons = COMBINED_CATALOGUE.filter(a => a.repo);
     const result = await api.checkAddonUpdates(repoAddons, true);
     if (result?.updates?.length > 0) {
       setAddonUpdates(result.updates);
@@ -632,7 +641,7 @@ function App() {
             </p>
             <div className="launch-warning-list">
               {launchWarning.missing.map(m => {
-                const catalogueEntry = ADDON_CATALOGUE.find(a =>
+                const catalogueEntry = COMBINED_CATALOGUE.find(a =>
                   (a.installAs || a.name).toLowerCase() === m.name.toLowerCase() ||
                   a.name.toLowerCase() === m.name.toLowerCase()
                 );
