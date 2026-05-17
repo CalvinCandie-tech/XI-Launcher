@@ -1,6 +1,6 @@
 {
   "name": "xi-launcher",
-  "version": "1.0.20",
+  "version": "1.0.21",
   "main": "electron/main.js",
   "homepage": "./",
   "scripts": {
