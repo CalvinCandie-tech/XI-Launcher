@@ -536,97 +536,14 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
       <div className="section-header">Memory Cache</div>
       <div className="panel">
         <p className="xipivot-hint">
-          The memory cache keeps recently loaded DAT files in RAM so they don't need to be re-read from disk.
-          This speeds up zone transitions and model loading, especially on HDDs.
-          {laaStatus.patched ? (
-            <> You have the <strong className="xipivot-text-green">4 GB patch</strong> applied, so you have more room to work with —
-            but FFXI still shares that memory with addons, plugins, and the game itself. A cache size of 512–1024 MB is a good range.</>
-          ) : (
-            <> Be careful with large HD packs — FFXI is a 32-bit game limited to <strong className="xipivot-text-red">2 GB RAM</strong> by default,
-            so setting this too high can cause crashes. Apply the <strong>4 GB RAM Patch</strong> below to double the available memory.</>
-          )}
+          <strong>Memory cache was removed in XIPivot v4.</strong> Earlier XIPivot versions could keep recently loaded DAT files in RAM
+          to speed up zone transitions, but the upstream plugin (<a href="#" onClick={e => { e.preventDefault(); api?.openExternal('https://github.com/HealsCodes/XIPivot'); }}>HealsCodes/XIPivot</a>) deleted the feature in v4. The plugin now rewrites <code className="mono">pivot.ini</code> on every game launch
+          and strips any <code className="mono">[cache]</code> section — so cache settings can't be persisted, regardless of what the launcher writes.
         </p>
-        <div className={`setting-row ${pivotConfig.cacheEnabled ? 'xipivot-border-bottom' : 'xipivot-no-border'}`}>
-          <div className="setting-info">
-            <span className="setting-name">Enable Cache</span>
-            <span className="setting-hint-inline">
-              Recommended: <strong className="xipivot-text-green">ON</strong> if you use any HD texture packs or experience slow zone transitions.
-              When enabled, XIPivot stores DAT files it has already loaded in RAM so the game doesn't re-read them from disk every time.
-              This makes repeated zone-ins, model loads, and menu opens noticeably faster — especially on mechanical hard drives (HDDs).
-              If you're on an SSD with no HD packs, you can leave this off.
-            </span>
-          </div>
-          <label className="toggle">
-            <input type="checkbox" checked={pivotConfig.cacheEnabled} onChange={e => saveConfig({ cacheEnabled: e.target.checked })} />
-            <span className="toggle-slider" />
-          </label>
-        </div>
-        {pivotConfig.cacheEnabled && (
-          <>
-            <div className="cache-setting-block">
-              <span className="setting-name">Cache Size (MB)</span>
-              <span className="setting-hint-inline xipivot-mb-6">
-                {laaStatus.patched
-                  ? <>With the <strong className="xipivot-text-green">4 GB patch</strong> applied, you can safely go higher.
-                    Recommended: <strong>512 MB</strong> for 1–2 small overlays, <strong>768–1024 MB</strong> for multiple HD packs like AshenbubsHD.
-                    Don't exceed 1536 MB — the game, addons, and plugins also need room in the 4 GB address space.</>
-                  : <>Without the 4 GB patch, FFXI is capped at 2 GB total RAM.
-                    Recommended: <strong>256 MB</strong> for light use, <strong>512 MB max</strong> to stay safe.
-                    Going higher risks out-of-memory crashes, especially with multiple addons loaded.
-                    Apply the <strong>4 GB RAM Patch</strong> below to unlock more headroom.</>
-                }
-              </span>
-              <div className="cache-options">
-                {[
-                  { value: 128, label: '128 MB', tag: 'Minimal' },
-                  { value: 256, label: '256 MB', tag: 'Light' },
-                  { value: 512, label: '512 MB', tag: 'Recommended' },
-                  { value: 768, label: '768 MB', tag: 'HD Packs' },
-                  { value: 1024, label: '1024 MB', tag: 'Multiple HD' },
-                  { value: 1536, label: '1536 MB', tag: 'Heavy Use' },
-                  { value: 2048, label: '2048 MB', tag: 'Maximum' }
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    className={`cache-option-btn ${pivotConfig.cacheSize === opt.value ? 'active' : ''}`}
-                    onClick={() => saveConfig({ cacheSize: opt.value })}
-                  >
-                    <span className="cache-option-value mono">{opt.label}</span>
-                    <span className="cache-option-tag">{opt.tag}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="cache-setting-block xipivot-no-border">
-              <span className="setting-name">Max Age</span>
-              <span className="setting-hint-inline xipivot-mb-6">
-                How long an unused DAT stays in the cache before it gets removed to free up RAM.
-                Recommended: <strong>10 min</strong> for most players. Lower to <strong>2–5 min</strong> if you're tight on memory,
-                or increase to <strong>30–60 min</strong> if you revisit the same zones frequently and have RAM to spare.
-              </span>
-              <div className="cache-options">
-                {[
-                  { value: 60, label: '1 min', tag: 'Low Memory' },
-                  { value: 120, label: '2 min', tag: 'Conservative' },
-                  { value: 300, label: '5 min', tag: 'Light Use' },
-                  { value: 600, label: '10 min', tag: 'Recommended' },
-                  { value: 900, label: '15 min', tag: 'Extended' },
-                  { value: 1800, label: '30 min', tag: 'Long Sessions' },
-                  { value: 3600, label: '1 hour', tag: 'Maximum' }
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    className={`cache-option-btn ${pivotConfig.cacheMaxAge === opt.value ? 'active' : ''}`}
-                    onClick={() => saveConfig({ cacheMaxAge: opt.value })}
-                  >
-                    <span className="cache-option-value mono">{opt.label}</span>
-                    <span className="cache-option-tag">{opt.tag}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
+        <p className="xipivot-hint xipivot-hint-small">
+          If you need DAT caching, your best options are: keep your FFXI install on an SSD,
+          or use Windows' built-in file cache (it does most of the same job once you've zoned a few times).
+        </p>
       </div>
 
       <div className="section-header">4GB RAM Patch (Large Address Aware)</div>
