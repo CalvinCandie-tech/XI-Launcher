@@ -112,7 +112,7 @@
 
 .plugin-card.plugin-enabled {
   border-color: transparent;
-  background: var(--active-bg);
+  background: var(--card-bg);
   box-shadow: var(--active-glow);
   position: relative;
 }
@@ -153,6 +153,9 @@
   line-height: 1.45;
   margin-bottom: 12px;
   flex: 1;
+}
+.plugin-card.plugin-enabled .plugin-desc {
+  color: var(--text-bright);
 }
 
 .plugin-card-footer {

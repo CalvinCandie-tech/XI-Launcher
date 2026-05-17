@@ -213,7 +213,7 @@
 }
 .addon-card.enabled {
   border-color: transparent;
-  background: var(--active-bg);
+  background: var(--card-bg);
   box-shadow: var(--active-glow);
   position: relative;
 }
@@ -269,6 +269,9 @@
   line-height: 1.4;
   margin-bottom: 12px;
   flex: 1;
+}
+.addon-card.enabled .addon-desc {
+  color: var(--text-bright);
 }
 
 .addon-card-footer {

@@ -660,6 +660,104 @@ function registerIPC() {
     return result.filePaths[0];
   });
 
+  ipcMain.handle('import-custom-plugin', async () => {
+    const ashitaPath = store?.get('ashitaPath');
+    if (!ashitaPath) return { error: 'Ashita path not configured.' };
+    const pluginsDir = path.join(ashitaPath, 'plugins');
+    if (!isAllowedPath(pluginsDir)) return { error: 'Invalid Ashita path.' };
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Import Plugin',
+      properties: ['openFile', 'openDirectory'],
+      filters: [{ name: 'Ashita Plugin', extensions: ['dll'] }]
+    });
+    if (result.canceled) return { canceled: true };
+
+    const selected = result.filePaths[0];
+    let stat;
+    try { stat = fs.statSync(selected); }
+    catch { return { error: 'Could not read selected path.' }; }
+
+    let dlls;
+    if (stat.isDirectory()) {
+      dlls = fs.readdirSync(selected)
+        .filter(f => f.toLowerCase().endsWith('.dll'))
+        .map(f => path.join(selected, f));
+      if (dlls.length === 0) return { error: 'No .dll file found in that folder.' };
+    } else {
+      dlls = [selected];
+    }
+
+    if (!fs.existsSync(pluginsDir)) fs.mkdirSync(pluginsDir, { recursive: true });
+    const imported = [];
+    const skipped = [];
+    for (const src of dlls) {
+      const name = path.basename(src);
+      const dest = path.join(pluginsDir, name);
+      if (fs.existsSync(dest)) {
+        const confirm = await dialog.showMessageBox(mainWindow, {
+          type: 'question',
+          buttons: ['Replace', 'Skip'],
+          defaultId: 1,
+          title: 'Plugin Already Installed',
+          message: `${name} is already installed. Replace it?`
+        });
+        if (confirm.response !== 0) { skipped.push(name.replace(/\.dll$/i, '')); continue; }
+      }
+      try {
+        fs.copyFileSync(src, dest);
+        imported.push(name.replace(/\.dll$/i, ''));
+      } catch (e) {
+        skipped.push(name.replace(/\.dll$/i, ''));
+      }
+    }
+    return { imported, skipped };
+  });
+
+  ipcMain.handle('import-custom-addon', async () => {
+    const ashitaPath = store?.get('ashitaPath');
+    if (!ashitaPath) return { error: 'Ashita path not configured.' };
+    const addonsDir = path.join(ashitaPath, 'addons');
+    if (!isAllowedPath(addonsDir)) return { error: 'Invalid Ashita path.' };
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Import Addon',
+      properties: ['openDirectory']
+    });
+    if (result.canceled) return { canceled: true };
+
+    const selected = result.filePaths[0];
+    const rawName = path.basename(selected);
+    const folderName = sanitizeName(rawName);
+    if (!folderName) return { error: 'Invalid addon folder name.' };
+
+    const hasEntry =
+      fs.existsSync(path.join(selected, `${folderName}.lua`)) ||
+      fs.existsSync(path.join(selected, 'main.lua'));
+    if (!hasEntry) {
+      return { error: `No .lua entry point found — expected ${folderName}.lua or main.lua.` };
+    }
+
+    const dest = path.join(addonsDir, folderName);
+    if (fs.existsSync(dest)) {
+      const confirm = await dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        buttons: ['Replace', 'Skip'],
+        defaultId: 1,
+        title: 'Addon Already Installed',
+        message: `${folderName} is already installed. Replace it?`
+      });
+      if (confirm.response !== 0) return { skipped: folderName };
+    }
+
+    try {
+      copyRecursive(selected, dest);
+    } catch (e) {
+      return { error: `Failed to copy addon: ${e.message}` };
+    }
+    return { imported: folderName };
+  });
+
   ipcMain.handle('read-dir', async (_, dirPath) => {
     try {
       if (!isAllowedPath(dirPath)) return { exists: false, files: [] };

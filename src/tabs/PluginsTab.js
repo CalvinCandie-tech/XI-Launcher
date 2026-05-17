@@ -173,6 +173,23 @@ function PluginsTab({ config }) {
 
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
+  const [importMsg, setImportMsg] = useState(null); // { success: bool, text: string }
+
+  const handleImportPlugin = async () => {
+    if (!config?.ashitaPath) return;
+    const result = await api.importCustomPlugin();
+    if (!result || result.canceled) return;
+    if (result.error) {
+      setImportMsg({ success: false, text: result.error });
+      return;
+    }
+    await loadInstalled();
+    if (result.imported?.length > 0) {
+      const names = result.imported.join(', ');
+      setImportMsg({ success: true, text: `${names} imported. Toggle it on when ready.` });
+      setTimeout(() => setImportMsg(null), 4000);
+    }
+  };
 
   if (loading) return (
     <div className="plugins-tab plugins-tab-loading">
@@ -227,9 +244,16 @@ function PluginsTab({ config }) {
             onChange={e => setSearch(e.target.value)}
             className="plugins-search"
           />
+          <button className="btn btn-ghost btn-sm" onClick={handleImportPlugin}>+ Import</button>
           <button className="btn btn-ghost btn-sm" onClick={() => { loadInstalled(); loadEnabled(); }}>&#8635; Refresh</button>
         </div>
       </div>
+
+      {importMsg && (
+        <div className={`plugin-status-msg ${importMsg.success ? 'success' : 'error'}`} style={{ margin: '0 0 8px' }}>
+          {importMsg.text}
+        </div>
+      )}
 
       <div className="plugins-warning panel">
         Plugins are DLL modules loaded via <code className="mono">/load</code> in your script. Core plugins (addons, thirdparty) are required for most functionality. Changes take effect next launch.

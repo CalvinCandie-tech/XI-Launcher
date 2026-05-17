@@ -188,6 +188,7 @@ const ADDON_HELP = {
 
 function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
   const [installedAddons, setInstalledAddons] = useState([]);
+  const [installedPluginNames, setInstalledPluginNames] = useState([]);
   const [enabledAddons, setEnabledAddons] = useState([]);
   // Every script-active name (lowercase) — addons + plugins — for cross-tab conflict checks.
   const [enabledScriptsAll, setEnabledScriptsAll] = useState([]);
@@ -204,6 +205,23 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
   const [pendingBundle, setPendingBundle] = useState(null);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [checkMsg, setCheckMsg] = useState('');
+  const [importMsg, setImportMsg] = useState(null); // { success: bool, text: string }
+
+  const handleImportAddon = async () => {
+    if (!config?.ashitaPath) return;
+    const result = await api.importCustomAddon();
+    if (!result || result.canceled) return;
+    if (result.error) {
+      setImportMsg({ success: false, text: result.error });
+      return;
+    }
+    await loadAddons();
+    if (result.imported) {
+      setImportMsg({ success: true, text: `${result.imported} imported. Toggle it on when ready.` });
+      setTimeout(() => setImportMsg(null), 4000);
+    }
+  };
+
   const savePendingRef = useRef(null);
   const saveInProgressRef = useRef(false);
   const customBundles = config.customBundles || [];
@@ -243,6 +261,7 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
       pluginInstalled = (pluginsResult?.plugins || []).map(p => p.name.toLowerCase());
     } catch {}
     setInstalledAddons([...luaInstalled, ...pluginInstalled]);
+    setInstalledPluginNames(pluginInstalled);
   }, [config.ashitaPath]);
 
   const loadEnabledFromProfile = useCallback(async () => {
@@ -670,7 +689,10 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
   const visibleCatalogue = ADDON_CATALOGUE;
   const categories = [...new Set(visibleCatalogue.map(a => a.category))].sort();
 
-
+  const catalogueNames = new Set(
+    ADDON_CATALOGUE.map(a => (a.installAs || a.name).toLowerCase())
+  );
+  const unlistedInstalled = installedAddons.filter(n => !catalogueNames.has(n) && !installedPluginNames.includes(n));
 
   return (
     <div className="addons-tab">
@@ -712,6 +734,7 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
               <option key={cat} value={cat}>{cat} ({visibleCatalogue.filter(a => a.category === cat).length})</option>
             ))}
           </select>
+          <button className="btn btn-ghost btn-sm" onClick={handleImportAddon}>+ Import</button>
           <button className="btn btn-ghost btn-sm" onClick={loadAddons}>↻</button>
           <button className="btn btn-ghost btn-sm" onClick={installAllCommunity} disabled={batchInstalling}>
             {batchInstalling ? '◌ Installing...' : '↓ Install All'}
@@ -720,6 +743,12 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
           <button className="btn btn-ghost btn-sm" onClick={() => setAll(true)}>Enable All</button>
         </div>
       </div>
+
+      {importMsg && (
+        <div className={`addon-install-msg ${importMsg.success ? 'success' : 'error'}`} style={{ margin: '0 0 8px' }}>
+          {importMsg.text}
+        </div>
+      )}
 
       {/* Conflict warnings — checks union of enabled addons + plugins so cross-tab
           overlap (e.g. LegacyAC plugin vs LuAshitacast addon) still surfaces here. */}
@@ -1014,6 +1043,35 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
           </div>
         ))}
       </div>
+
+      {unlistedInstalled.length > 0 && (
+        <div>
+          <div className="section-header">Custom / Detected</div>
+          <div className="addons-grid">
+            {unlistedInstalled.map(name => {
+              const isEnabled = enabledAddons.includes(name);
+              return (
+                <div key={name} className={`addon-card ${isEnabled ? 'enabled' : ''}`}>
+                  <div className="addon-card-header">
+                    <span className="addon-name mono">{name}</span>
+                    <span className="addon-installed-tag">Detected</span>
+                  </div>
+                  <p className="addon-desc">Addon found in your addons folder.</p>
+                  <div className="addon-card-footer">
+                    <div className="addon-card-footer-left">
+                      <div className="toggle" onClick={() => toggleAddon(name)}>
+                        <input type="checkbox" checked={isEnabled} readOnly />
+                        <span className="toggle-slider" />
+                      </div>
+                      <span className="addon-status-label">{isEnabled ? 'Enabled' : 'Disabled'}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="addons-credit">
         Recommended addons &amp; plugins curated with thanks to <strong>Graves</strong> from LevelDownFFXI.

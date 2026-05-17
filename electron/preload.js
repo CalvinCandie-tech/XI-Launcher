@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('xiAPI', {
 
   // File system
   browseFolder: (defaultPath) => ipcRenderer.invoke('browse-folder', defaultPath),
+  importCustomPlugin: () => ipcRenderer.invoke('import-custom-plugin'),
+  importCustomAddon:  () => ipcRenderer.invoke('import-custom-addon'),
   readDir: (path) => ipcRenderer.invoke('read-dir', path),
   readFile: (path) => ipcRenderer.invoke('read-file', path),
   writeFile: (path, content) => ipcRenderer.invoke('write-file', path, content),
