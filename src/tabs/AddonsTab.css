@@ -13,6 +13,12 @@
 
 .addons-toolbar {
   display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.addons-toolbar-row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
 }
@@ -36,23 +42,33 @@
 
 .addons-toolbar-right {
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 380px;
+  gap: 6px;
+}
+
+.addons-toolbar-actions {
+  display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .addons-search {
-  width: clamp(180px, 25%, 300px);
+  width: 100%;
   font-size: 13px !important;
-  padding: 6px 10px !important;
+  padding: 7px 12px !important;
+  color: var(--text-bright) !important;
 }
 
 .addons-category-filter {
+  width: 100%;
   font-size: 13px;
-  padding: 6px 10px;
+  padding: 7px 12px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg-deepest);
-  color: var(--text-secondary);
+  color: var(--text-bright);
   cursor: pointer;
 }
 .addons-category-filter:focus {

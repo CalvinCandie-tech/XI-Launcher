@@ -215,37 +215,41 @@ function PluginsTab({ config }) {
   return (
     <div className="plugins-tab">
       <div className="panel plugins-status-bar">
-        <div className="plugins-status-items">
-          <span className="pill pill-teal">{installedPlugins.length} installed</span>
-          <span className="pill pill-green">{enabledPlugins.length} enabled</span>
-          <span className="mono plugins-profile-label">
-            Profile: {config?.activeProfile || 'None'}
-          </span>
-          <div className="plugins-filters">
-            {allFilters.map(f => (
-              <button
-                key={f}
-                className={`plugins-filter-pill ${categoryFilter === f ? 'active' : ''}`}
-                onClick={() => setCategoryFilter(f)}
-              >
-                {f}
-                <span className="plugins-filter-count">
-                  {f === 'All' ? PLUGIN_CATALOGUE.length : PLUGIN_CATALOGUE.filter(p => p.category === f).length}
-                </span>
-              </button>
-            ))}
+        <div className="plugins-status-bar-row">
+          <div className="plugins-status-items">
+            <span className="pill pill-teal">{installedPlugins.length} installed</span>
+            <span className="pill pill-green">{enabledPlugins.length} enabled</span>
+            <span className="mono plugins-profile-label">
+              Profile: {config?.activeProfile || 'None'}
+            </span>
+          </div>
+          <div className="plugins-search-wrapper">
+            <input
+              type="text"
+              placeholder="Search plugins..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="plugins-search"
+            />
+            <div className="plugins-filters">
+              {allFilters.map(f => (
+                <button
+                  key={f}
+                  className={`plugins-filter-pill ${categoryFilter === f ? 'active' : ''}`}
+                  onClick={() => setCategoryFilter(f)}
+                >
+                  {f}
+                  <span className="plugins-filter-count">
+                    {f === 'All' ? PLUGIN_CATALOGUE.length : PLUGIN_CATALOGUE.filter(p => p.category === f).length}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-        <div className="plugins-search-wrapper">
-          <input
-            type="text"
-            placeholder="Search plugins..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="plugins-search"
-          />
-          <button className="btn btn-ghost btn-sm" onClick={handleImportPlugin}>+ Import</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => { loadInstalled(); loadEnabled(); }}>&#8635; Refresh</button>
+        <div className="plugins-status-bar-actions">
+          <button className="btn btn-primary btn-sm" onClick={handleImportPlugin}>+ Import</button>
+          <button className="btn btn-primary btn-sm" onClick={() => { loadInstalled(); loadEnabled(); }}>&#8635; Refresh</button>
         </div>
       </div>
 

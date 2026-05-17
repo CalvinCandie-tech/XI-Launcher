@@ -1,0 +1,89 @@
+<h2>ReShade Preset Layout</h2>
+<p class="subtitle">How should the 4 preset tiers be presented?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Horizontal Cards (current style)</h3>
+      <p>4 cards in a row, click to select. Same layout as current presets but with the new tiers. Each card shows the name, a short description, and a subtle icon or color accent indicating intensity level.</p>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <div style="flex:1;padding:12px;background:rgba(58,184,200,0.08);border:1px solid rgba(58,184,200,0.3);border-radius:6px;text-align:center;">
+          <div style="color:#c8a84e;font-weight:700;font-size:13px;">Clean</div>
+          <div style="color:#999;font-size:11px;margin-top:4px;">AA + Sharp</div>
+        </div>
+        <div style="flex:1;padding:12px;background:rgba(58,184,200,0.08);border:1px solid rgba(58,184,200,0.3);border-radius:6px;text-align:center;">
+          <div style="color:#c8a84e;font-weight:700;font-size:13px;">Vivid</div>
+          <div style="color:#999;font-size:11px;margin-top:4px;">+ Color boost</div>
+        </div>
+        <div style="flex:1;padding:12px;background:rgba(58,184,200,0.08);border:1px solid rgba(58,184,200,0.3);border-radius:6px;text-align:center;">
+          <div style="color:#c8a84e;font-weight:700;font-size:13px;">Cinematic</div>
+          <div style="color:#999;font-size:11px;margin-top:4px;">+ Atmosphere</div>
+        </div>
+        <div style="flex:1;padding:12px;background:rgba(58,184,200,0.08);border:1px solid rgba(58,184,200,0.3);border-radius:6px;text-align:center;">
+          <div style="color:#c8a84e;font-weight:700;font-size:13px;">Screenshot</div>
+          <div style="color:#999;font-size:11px;margin-top:4px;">+ DOF + Full</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Stacked Intensity Slider</h3>
+      <p>A single horizontal bar showing the 4 tiers as steps on a scale from minimal to maximum. Click a tier to jump to it. Feels like a "quality" dial — intuitive for non-technical users.</p>
+      <div style="margin-top:12px;padding:16px;background:rgba(20,20,28,0.6);border-radius:6px;">
+        <div style="display:flex;align-items:center;gap:0;position:relative;">
+          <div style="position:absolute;top:50%;left:0;right:0;height:4px;background:linear-gradient(90deg,rgba(58,184,200,0.3),rgba(200,168,78,0.3));transform:translateY(-50%);border-radius:2px;"></div>
+          <div style="flex:1;text-align:center;position:relative;z-index:1;">
+            <div style="width:16px;height:16px;border-radius:50%;background:#3ab8c8;margin:0 auto 6px;border:2px solid #3ab8c8;"></div>
+            <div style="color:#3ab8c8;font-size:12px;font-weight:600;">Clean</div>
+          </div>
+          <div style="flex:1;text-align:center;position:relative;z-index:1;">
+            <div style="width:16px;height:16px;border-radius:50%;background:transparent;margin:0 auto 6px;border:2px solid #666;"></div>
+            <div style="color:#999;font-size:12px;">Vivid</div>
+          </div>
+          <div style="flex:1;text-align:center;position:relative;z-index:1;">
+            <div style="width:16px;height:16px;border-radius:50%;background:transparent;margin:0 auto 6px;border:2px solid #666;"></div>
+            <div style="color:#999;font-size:12px;">Cinematic</div>
+          </div>
+          <div style="flex:1;text-align:center;position:relative;z-index:1;">
+            <div style="width:16px;height:16px;border-radius:50%;background:transparent;margin:0 auto 6px;border:2px solid #666;"></div>
+            <div style="color:#999;font-size:12px;">Screenshot</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Vertical List with Descriptions</h3>
+      <p>Each tier is a full-width row showing the name, description, and which effects are included. More informative — users can see exactly what each tier enables before selecting.</p>
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">
+        <div style="padding:10px 14px;background:rgba(58,184,200,0.08);border:1px solid rgba(58,184,200,0.3);border-radius:6px;display:flex;align-items:center;gap:12px;">
+          <div style="color:#c8a84e;font-weight:700;min-width:80px;">Clean</div>
+          <div style="color:#999;font-size:12px;flex:1;">SMAA + LumaSharpen + Clarity</div>
+          <div style="color:#3ab8c8;font-size:11px;">3 effects</div>
+        </div>
+        <div style="padding:10px 14px;background:rgba(20,20,28,0.4);border:1px solid rgba(100,100,120,0.2);border-radius:6px;display:flex;align-items:center;gap:12px;">
+          <div style="color:#c8a84e;font-weight:700;min-width:80px;">Vivid</div>
+          <div style="color:#999;font-size:12px;flex:1;">Clean + Vibrance + Colourfulness</div>
+          <div style="color:#3ab8c8;font-size:11px;">5 effects</div>
+        </div>
+        <div style="padding:10px 14px;background:rgba(20,20,28,0.4);border:1px solid rgba(100,100,120,0.2);border-radius:6px;display:flex;align-items:center;gap:12px;">
+          <div style="color:#c8a84e;font-weight:700;min-width:80px;">Cinematic</div>
+          <div style="color:#999;font-size:12px;flex:1;">Vivid + Bloom + MXAO + Vignette + FilmGrain</div>
+          <div style="color:#3ab8c8;font-size:11px;">9 effects</div>
+        </div>
+        <div style="padding:10px 14px;background:rgba(20,20,28,0.4);border:1px solid rgba(100,100,120,0.2);border-radius:6px;display:flex;align-items:center;gap:12px;">
+          <div style="color:#c8a84e;font-weight:700;min-width:80px;">Screenshot</div>
+          <div style="color:#999;font-size:12px;flex:1;">Cinematic + DepthOfField + FakeHDR + LiftGammaGain</div>
+          <div style="color:#3ab8c8;font-size:11px;">12 effects</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

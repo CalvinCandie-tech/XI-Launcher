@@ -14,8 +14,20 @@
 
 .plugins-status-bar {
   display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.plugins-status-bar-row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.plugins-status-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .plugins-status-items {
@@ -26,15 +38,15 @@
 }
 
 .plugins-search {
-  width: clamp(140px, 20%, 220px);
+  width: 100%;
   font-size: 13px !important;
-  padding: 6px 10px !important;
+  padding: 7px 12px !important;
+  color: var(--text-bright) !important;
 }
 
 .plugins-filters {
   display: flex;
   gap: 6px;
-  margin-left: 4px;
 }
 
 .plugins-filter-pill {
@@ -223,8 +235,10 @@
 
 .plugins-search-wrapper {
   display: flex;
-  gap: 8px;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 380px;
+  gap: 6px;
 }
 
 .pill-sm {

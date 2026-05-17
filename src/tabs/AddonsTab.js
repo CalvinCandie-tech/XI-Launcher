@@ -706,41 +706,45 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
         </button>
       </div>
       <div className="panel addons-toolbar">
-        <div className="addons-toolbar-left">
-          <span className="addons-enabled-count cinzel">{enabledAddons.length}</span>
-          <div className="addons-toolbar-labels">
-            <span className="addon-active-label">Active</span>
+        <div className="addons-toolbar-row">
+          <div className="addons-toolbar-left">
+            <span className="addons-enabled-count cinzel">{enabledAddons.length}</span>
+            <div className="addons-toolbar-labels">
+              <span className="addon-active-label">Active</span>
+            </div>
+            <button className="btn btn-primary addon-help-btn" onClick={() => setShowHelp(true)}>Active Addon Help</button>
+            {!config.activeProfile && (
+              <span className="pill pill-red addon-no-profile-pill">No profile selected</span>
+            )}
           </div>
-          <button className="btn btn-primary addon-help-btn" onClick={() => setShowHelp(true)}>Active Addon Help</button>
-          {!config.activeProfile && (
-            <span className="pill pill-red addon-no-profile-pill">No profile selected</span>
-          )}
+          <div className="addons-toolbar-right">
+            <input
+              type="text"
+              placeholder="Search addons..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="addons-search"
+            />
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              className="addons-category-filter"
+            >
+              <option value="All">All ({visibleCatalogue.length})</option>
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat} ({visibleCatalogue.filter(a => a.category === cat).length})</option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div className="addons-toolbar-right">
-          <input
-            type="text"
-            placeholder="Search addons..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="addons-search"
-          />
-          <select
-            value={categoryFilter}
-            onChange={e => setCategoryFilter(e.target.value)}
-            className="addons-category-filter"
-          >
-            <option value="All">All ({visibleCatalogue.length})</option>
-            {categories.map(cat => (
-              <option key={cat} value={cat}>{cat} ({visibleCatalogue.filter(a => a.category === cat).length})</option>
-            ))}
-          </select>
-          <button className="btn btn-ghost btn-sm" onClick={handleImportAddon}>+ Import</button>
-          <button className="btn btn-ghost btn-sm" onClick={loadAddons}>↻</button>
-          <button className="btn btn-ghost btn-sm" onClick={installAllCommunity} disabled={batchInstalling}>
+        <div className="addons-toolbar-actions">
+          <button className="btn btn-primary btn-sm" onClick={handleImportAddon}>+ Import</button>
+          <button className="btn btn-primary btn-sm" onClick={loadAddons}>↻ Refresh</button>
+          <button className="btn btn-primary btn-sm" onClick={installAllCommunity} disabled={batchInstalling}>
             {batchInstalling ? '◌ Installing...' : '↓ Install All'}
           </button>
-          <button className="btn btn-ghost btn-sm" onClick={() => setAll(false)}>Disable All</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => setAll(true)}>Enable All</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setAll(false)}>Disable All</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setAll(true)}>Enable All</button>
         </div>
       </div>
 
