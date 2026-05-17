@@ -20,6 +20,8 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
   const [multiBoxLaunching, setMultiBoxLaunching] = useState(false);
   const [multiBoxLog, setMultiBoxLog] = useState('');
   const [serverStatus, setServerStatus] = useState(null); // { online, latency }
+  const [serverPickerOpen, setServerPickerOpen] = useState(false);
+  const serverPickerRef = useRef(null);
   const [updateDlStatus, setUpdateDlStatus] = useState(''); // '' | 'downloading' | 'installing' | 'error'
   const [updateDlProgress, setUpdateDlProgress] = useState({ percent: 0, detail: '' });
   const [updateDlError, setUpdateDlError] = useState('');
@@ -36,6 +38,18 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [profileDropdownOpen]);
+
+  // Close server picker when clicking outside
+  useEffect(() => {
+    if (!serverPickerOpen) return;
+    const handleClickOutside = (e) => {
+      if (serverPickerRef.current && !serverPickerRef.current.contains(e.target)) {
+        setServerPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [serverPickerOpen]);
 
   useEffect(() => {
     if (!api?.getStartupWarnings) return;
@@ -221,7 +235,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
               <span className="home-update-title">Update Available</span>
               <div className="home-update-row-right">
                 <span className="pill pill-gold pill-xs">v{updateInfo.latest}</span>
-                <button className="home-update-dismiss" onClick={onDismissUpdate} aria-label="Dismiss">✕</button>
+                <button className="home-update-dismiss" onClick={() => { setUpdateDlStatus(''); setUpdateDlProgress({ percent: 0, detail: '' }); setUpdateDlError(''); onDismissUpdate(); }} aria-label="Dismiss">✕</button>
               </div>
             </div>
             {updateInfo.releaseNotes && (
@@ -308,27 +322,6 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
           )}
         </div>
 
-        {/* Server Status — on-demand only */}
-        {config.serverHost && (
-          <div className="home-panel-section home-server-status">
-            <div className="home-server-status-left">
-              {serverStatus && (
-                <span className={`status-dot ${serverStatus.online ? 'status-dot-online' : 'status-dot-offline'}`} />
-              )}
-              <span className="mono">{config.serverHost}</span>
-            </div>
-            <div className="home-server-status-right">
-              {serverStatus && (
-                <span className={`pill ${serverStatus.online ? 'pill-green' : 'pill-red'}`}>
-                  {serverStatus.online ? `Online (${serverStatus.latency}ms)` : 'Offline'}
-                </span>
-              )}
-              <button className="btn btn-ghost btn-sm" onClick={checkServer} disabled={checkingServer}>
-                {checkingServer ? 'Checking...' : serverStatus ? 'Recheck' : 'Check connection'}
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Status section — only show when something needs attention */}
         {(!status.ashita || !status.ffxi || !status.xiloader) && (
@@ -430,6 +423,47 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
                 onClick={() => updateConfig('useXiloader', true)}
               >xiloader</button>
             </div>
+            {config.serverHost && (
+              <div className="home-conn-section">
+                <div className="home-server-picker-wrap" ref={serverPickerRef}>
+                  <div className="home-conn-host mono" onClick={() => setServerPickerOpen(o => !o)}>
+                    <span>{config.serverHost}</span>
+                    <span className="home-conn-host-caret">{serverPickerOpen ? '▴' : '▾'}</span>
+                  </div>
+                  {serverPickerOpen && (
+                    <div className="home-server-picker">
+                      {(config.favoriteServers || []).length === 0 ? (
+                        <div className="home-server-picker-empty">
+                          No favorites yet — star a server in the Servers tab
+                        </div>
+                      ) : (config.favoriteServers || []).map((s, i) => (
+                        <div
+                          key={i}
+                          className={`home-server-picker-item${s.host === config.serverHost ? ' active' : ''}`}
+                          onClick={() => {
+                            updateConfig('serverHost', s.host);
+                            if (s.port) updateConfig('serverPort', s.port);
+                            setServerStatus(null);
+                            setServerPickerOpen(false);
+                          }}
+                        >
+                          <span className="home-server-picker-name">{s.name}</span>
+                          <span className="home-server-picker-host mono">{s.host}{s.port ? ':' + s.port : ''}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="home-conn-check-row">
+                  <button className="btn btn-ghost home-conn-btn" onClick={checkServer} disabled={checkingServer}>
+                    {checkingServer ? 'Checking...' : 'Check connection'}
+                  </button>
+                  <div className={`home-conn-status-box${!serverStatus ? '' : serverStatus.online ? ' online' : ' offline'}`}>
+                    {!serverStatus ? '—' : serverStatus.online ? `Online (${serverStatus.latency}ms)` : 'Offline'}
+                  </div>
+                </div>
+              </div>
+            )}
             <button
               className="btn btn-primary home-start-btn"
               disabled={isLaunching || !config.activeProfile}
@@ -497,7 +531,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
 
         {setupComplete && (
           <div className="home-panel-section home-panel-divider home-panel-center">
-            <button className="btn btn-ghost btn-sm" onClick={handleManualCheck}>
+            <button className="btn btn-ghost btn-sm" onClick={handleManualCheck} disabled={!!updateDlStatus}>
               {manualCheckMsg || 'Check for Updates'}
             </button>
             {onShowWizard && (

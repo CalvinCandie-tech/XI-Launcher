@@ -26,8 +26,9 @@
 }
 
 .topnav-tab:hover {
-  color: var(--text-primary);
+  color: var(--gold);
   background: rgba(255, 255, 255, 0.03);
+  text-shadow: 0 0 12px rgba(200, 160, 60, 0.4);
 }
 
 .topnav-tab.active {

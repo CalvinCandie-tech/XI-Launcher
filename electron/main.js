@@ -922,8 +922,8 @@ function registerIPC() {
 
       sendProgress(0, 'Starting download...');
 
-      const tmpDir = path.join(os.tmpdir(), 'xi-launcher-update');
-      if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+      // Use a timestamped dir so we never collide with a locked previous extraction
+      const tmpDir = path.join(os.tmpdir(), `xi-launcher-update-${Date.now()}`);
       fs.mkdirSync(tmpDir, { recursive: true });
 
       const tmpFile = path.join(tmpDir, 'update.zip');
@@ -1022,28 +1022,33 @@ function registerIPC() {
         try { if (fs.existsSync(errorMarker)) fs.unlinkSync(errorMarker); } catch {}
         const batContent = [
           '@echo off',
-          // Wait for the Electron process to fully exit
+          // Wait for the Electron process to fully exit — hard limit 30 seconds
+          // Uses ping instead of timeout.exe (ping works in consoleless sessions)
+          // Uses findstr.exe with full path to avoid Git/WSL find.exe shadowing
           `set "EXE_NAME=${path.basename(exePath)}"`,
+          'set /a WAIT_COUNT=0',
           ':waitloop',
-          'tasklist /FI "IMAGENAME eq %EXE_NAME%" 2>NUL | find /I "%EXE_NAME%" >NUL',
+          'tasklist /FI "IMAGENAME eq %EXE_NAME%" 2>NUL | %SystemRoot%\\System32\\findstr.exe /I /C:"%EXE_NAME%" >NUL',
           'if not errorlevel 1 (',
-          '  timeout /t 1 /nobreak >NUL',
+          '  set /a WAIT_COUNT+=1',
+          '  if %WAIT_COUNT% GEQ 30 goto docopy',
+          '  ping -n 2 127.0.0.1 >NUL',
           '  goto waitloop',
           ')',
+          ':docopy',
           // Robocopy: mirror sourceDir into appRoot so files removed upstream are cleaned up.
           // /MIR = mirror (copy + purge extras), /R:3 /W:1 = retry, /XD = exclude dirs (protects runtime/),
           // /NFL /NDL /NJH /NJS = quiet. Robocopy exit codes: 0-7 success, 8+ failure.
-          `robocopy "${sourceDir}" "${appRoot}" /MIR /R:3 /W:1 /XD runtime node_modules /NFL /NDL /NJH /NJS`,
+          `robocopy "${sourceDir}" "${appRoot}" /MIR /R:3 /W:1 /XD runtime node_modules /XF *.json *.log /NFL /NDL /NJH /NJS`,
           'set RC_EXIT=%errorlevel%',
           'if %RC_EXIT% GEQ 8 (',
           `  echo Robocopy failed with exit code %RC_EXIT% while copying update files. > "${errorMarker}"`,
           `  echo Source: ${sourceDir} >> "${errorMarker}"`,
           `  echo Dest: ${appRoot} >> "${errorMarker}"`,
           ')',
-          // Clean up temp directory (do this regardless so we don't leak disk)
-          `rmdir /S /Q "${tmpDir}" 2>NUL`,
-          // Relaunch the app so the user isn't stranded — if the copy failed they'll see a startup warning
+          // Relaunch first, then clean up — rmdir last so it doesn't delete this script mid-run
           `start "" "${exePath}"`,
+          `rmdir /S /Q "${tmpDir}" 2>NUL`,
         ].join('\r\n');
         fs.writeFileSync(batPath, batContent, 'utf-8');
 
@@ -1053,6 +1058,8 @@ function registerIPC() {
           stdio: 'ignore',
           windowsHide: true,
         });
+        // Confirm the process actually launched before we commit to exiting
+        if (!child.pid) throw new Error('Failed to launch update installer — update aborted.');
         child.unref();
       } finally {
         process.noAsar = prevNoAsar;
@@ -1066,12 +1073,12 @@ function registerIPC() {
       }, 1000);
 
       return { success: true };
+      // updateInProgress intentionally NOT released on success — app.exit(0) fires in 1s
+      // and a concurrent download attempt in that window would be dangerous.
     } catch (e) {
+      updateInProgress = false;
       sendProgress(0, '');
       return { success: false, error: friendlyError(e, 'App update') };
-    } finally {
-      // Released on error or early-return; success path calls app.exit(0) anyway.
-      updateInProgress = false;
     }
   });
 

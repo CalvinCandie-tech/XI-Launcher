@@ -277,13 +277,14 @@
 
 /* Start Game */
 .home-panel-launch {
-  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .home-launch-toggle {
   display: flex;
   gap: 4px;
-  margin-bottom: 8px;
 }
 
 .home-launch-toggle .btn {
@@ -405,23 +406,118 @@
   margin-top: 4px;
 }
 
-/* Server status row */
-.home-server-status {
+/* Server picker dropdown */
+.home-server-picker-wrap {
+  position: relative;
+}
+
+.home-conn-host {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-deepest);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-bright);
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s;
+}
+.home-conn-host:hover {
+  border-color: var(--border-bright);
 }
 
-.home-server-status-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.home-conn-host-caret {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-left: 8px;
 }
 
-.home-server-status-right {
+.home-server-picker {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--bg-card);
+  border: 1px solid var(--border-bright);
+  border-radius: 7px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+.home-server-picker-empty {
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.home-server-picker-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.home-server-picker-item:last-child { border-bottom: none; }
+.home-server-picker-item:hover { background: var(--bg-hover); }
+.home-server-picker-item.active { background: var(--active-bg); }
+
+.home-server-picker-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.home-server-picker-host {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Connection check — below Ashita/xiloader toggle */
+.home-conn-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.home-conn-check-row {
+  display: flex;
+  gap: 4px;
+}
+
+.home-conn-btn {
+  flex: 1;
+}
+
+.home-conn-status-box {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-card-alpha);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.home-conn-status-box.online {
+  border-color: var(--green-border);
+  background: var(--green-alpha);
+  color: var(--green);
+}
+.home-conn-status-box.offline {
+  border-color: var(--red-border);
+  background: var(--red-alpha);
+  color: var(--red);
 }
 
 @keyframes crystal-pulse {
