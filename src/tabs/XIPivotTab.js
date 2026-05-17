@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './XIPivotTab.css';
+import Modal from '../components/Modal';
 
 const api = window.xiAPI;
 
@@ -44,6 +45,9 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
   const [customModError, setCustomModError] = useState('');
   const [customModAdding, setCustomModAdding] = useState(false);
   const [modFolderStatus, setModFolderStatus] = useState({});
+  // When the user pastes a non-github URL we hold it here and show a confirm modal
+  // before downloading. Direct zips can carry arbitrary DLLs into the FFXI process.
+  const [pendingUntrustedMod, setPendingUntrustedMod] = useState(null); // { url, host } | null
 
   const checkLAA = useCallback(async () => {
     if (!api || !config.ffxiPath) return;
@@ -270,6 +274,18 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
     }
     setCustomModError('');
 
+    // Gate non-github sources behind an explicit confirm — these get extracted
+    // straight into polplugins/DATs and any DLL inside will be loaded by FFXI.
+    let host = '';
+    try { host = new URL(url).hostname.toLowerCase(); } catch {}
+    if (host && host !== 'github.com') {
+      setPendingUntrustedMod({ url, host });
+      return;
+    }
+    await performInstallCustomMod(url);
+  };
+
+  const performInstallCustomMod = async (url) => {
     // Show a placeholder card immediately so the user sees something happen
     const placeholderName = url.replace(/\/$/, '').split('/').pop() || 'custom-mod';
     const placeholder = { name: placeholderName, url, description: 'Fetching info...', installedAt: new Date().toISOString() };
@@ -945,6 +961,37 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
         </div>
       )}
 
+      {pendingUntrustedMod && (
+        <Modal onClose={() => setPendingUntrustedMod(null)} ariaLabel="Confirm untrusted mod install">
+          <div className="modal-content" style={{ maxWidth: 540 }}>
+            <h3 style={{ marginTop: 0 }}>⚠ Install from outside GitHub?</h3>
+            <p>
+              This URL is hosted on <strong>{pendingUntrustedMod.host}</strong>, not GitHub.
+              The launcher will download a zip from that host and extract it into your
+              FFXI DAT mods folder. <strong>A DAT mod can include DLLs that load directly
+              into the FFXI process</strong> — only continue if you trust the source.
+            </p>
+            <p style={{ wordBreak: 'break-all', fontSize: '0.85em', opacity: 0.8 }}>
+              {pendingUntrustedMod.url}
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+              <button className="btn btn-ghost" onClick={() => setPendingUntrustedMod(null)}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  const { url } = pendingUntrustedMod;
+                  setPendingUntrustedMod(null);
+                  performInstallCustomMod(url);
+                }}
+              >
+                Install anyway
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

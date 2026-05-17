@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, safeStorage, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, safeStorage, session, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -105,6 +105,10 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 // Active HD pack download streams — keyed by packName for pause/resume/cancel
 const activeDownloads = {};
 
+// Single-flight guard for the self-updater so double-clicks don't race on the
+// shared tmpdir (the handler rmSync's it before writing).
+let updateInProgress = false;
+
 // Runtime folder — always relative to the app root so bundled files stay in one place
 const appRoot = isDev ? path.join(__dirname, '..') : path.dirname(app.getPath('exe'));
 const runtimeDir = path.join(appRoot, 'runtime');
@@ -130,6 +134,30 @@ function validateRegValue(value) {
 }
 function escapePSString(str) {
   return String(str).replace(/'/g, "''").replace(/`/g, '``').replace(/\$/g, '`$').replace(/"/g, '`"');
+}
+// Run a PowerShell command without going through cmd.exe — avoids the fragile
+// double-layer of quoting (PS single-quote + cmd double-quote) that exec() forced.
+function runPowerShell(psCmd, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psCmd], {
+      shell: false,
+      windowsHide: true,
+    });
+    let stderr = '';
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try { child.kill(); } catch {}
+    }, timeoutMs);
+    child.stderr?.on('data', (c) => { stderr += c.toString(); });
+    child.on('error', (err) => { clearTimeout(timer); reject(err); });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (timedOut) return reject(new Error(`PowerShell timed out after ${timeoutMs}ms`));
+      if (code !== 0) return reject(new Error(stderr.trim() || `PowerShell exited with code ${code}`));
+      resolve();
+    });
+  });
 }
 // Detect permission/elevation errors and return a user-friendly message
 function friendlyError(e, context) {
@@ -318,11 +346,65 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '..', 'build', 'index.html'));
   }
 
+  // Any in-window navigation outside our own origin/file is suspicious — block it.
+  // Renderer should use xiAPI.openExternal for outbound links.
+  const isInternalUrl = (url) => {
+    try {
+      const u = new URL(url);
+      if (u.protocol === 'file:') return true;
+      if (isDev && u.origin === 'http://localhost:3000') return true;
+      return false;
+    } catch { return false; }
+  };
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://'))) {
+      shell.openExternal(url).catch(() => {});
+    }
+    return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!isInternalUrl(url)) {
+      event.preventDefault();
+      if (url.startsWith('https://') || url.startsWith('http://')) {
+        shell.openExternal(url).catch(() => {});
+      }
+    }
+  });
+
   mainWindow.on('close', (e) => {
     if (minimizeToTray && tray) {
       e.preventDefault();
       mainWindow.hide();
     }
+  });
+}
+
+// Renderer CSP — only applied to the packaged build. Skipped in dev so CRA's
+// HMR (websocket + eval) keeps working.
+function registerCSP() {
+  if (isDev) return;
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self'",
+    // React injects <style> tags at runtime; CRA bundles styles inline too. Google Fonts loads a stylesheet.
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data: blob:",
+    "media-src 'self' file: blob:",
+    "connect-src 'self' https://api.github.com https://github.com https://objects.githubusercontent.com",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'"
+  ].join('; ');
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [csp]
+      }
+    });
   });
 }
 
@@ -415,6 +497,7 @@ app.whenReady().then(async () => {
   }
 
   await deployBundledXiloader();
+  registerCSP();
   createWindow();
   createTray();
   minimizeToTray = store.get('minimizeToTray') || false;
@@ -648,9 +731,26 @@ function registerIPC() {
       try { mainWindow?.webContents?.send('update-download-progress', percent, detail); } catch {}
     };
 
+    if (updateInProgress) return { success: false, error: 'An update is already in progress.' };
+    updateInProgress = true;
+
     try {
       if (!downloadUrl) return { success: false, error: 'No download URL provided' };
       if (isDev) return { success: false, error: 'Updates cannot be installed in development mode' };
+
+      // Pin updater to this project's GitHub releases only. The renderer should never
+      // be able to point us at an arbitrary zip — robocopy /MIR over appRoot would
+      // effectively self-replace the launcher.
+      try {
+        const u = new URL(downloadUrl);
+        const expectedPrefix = `/${UPDATE_REPO.toLowerCase()}/releases/download/`;
+        if (u.protocol !== 'https:' || u.hostname !== 'github.com'
+            || !u.pathname.toLowerCase().startsWith(expectedPrefix)) {
+          return { success: false, error: 'Refused: update URL must be a GitHub release asset for this project.' };
+        }
+      } catch {
+        return { success: false, error: 'Refused: malformed update URL.' };
+      }
 
       sendProgress(0, 'Starting download...');
 
@@ -801,6 +901,9 @@ function registerIPC() {
     } catch (e) {
       sendProgress(0, '');
       return { success: false, error: friendlyError(e, 'App update') };
+    } finally {
+      // Released on error or early-return; success path calls app.exit(0) anyway.
+      updateInProgress = false;
     }
   });
 
@@ -1205,12 +1308,7 @@ function registerIPC() {
         if (opts.hairpin) args.push('--hairpin');
         const argStr = args.map(a => `'${escapePSString(a)}'`).join(',');
         const psCmd = `Start-Process -FilePath '${escapePSString(exe)}' ${argStr ? `-ArgumentList ${argStr}` : ''} -WorkingDirectory '${escapePSString(opts.xiloaderPath)}' -Verb RunAs`;
-        await new Promise((resolve, reject) => {
-          exec(`powershell -Command "${psCmd}"`, { timeout: 15000 }, (err) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
+        await runPowerShell(psCmd, 15000);
         // Watch for game exit and notify renderer
         watchForGameExit('pol.exe', profileKey);
         return { success: true, message: 'xiloader launched' };
@@ -1226,12 +1324,7 @@ function registerIPC() {
           ? `-ArgumentList '""${escapePSString(iniName)}""'`
           : `-ArgumentList '${escapePSString(iniName)}'`;
         const psCmd = `Start-Process -FilePath '${escapePSString(exe)}' ${argStr} -WorkingDirectory '${escapePSString(opts.ashitaPath)}' -Verb RunAs`;
-        await new Promise((resolve, reject) => {
-          exec(`powershell -Command "${psCmd}"`, { timeout: 15000 }, (err) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
+        await runPowerShell(psCmd, 15000);
         // Watch for game exit and notify renderer
         watchForGameExit('pol.exe', profileKey);
         return { success: true, message: `Ashita launched with profile: ${opts.profileName}` };
