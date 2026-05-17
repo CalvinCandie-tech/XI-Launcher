@@ -1778,6 +1778,57 @@ function registerIPC() {
     }
   });
 
+  // Surgical update — replace ONLY the [overlays] section, byte-preserve everything else
+  // (including [cache], [settings], comments, and any unknown sections the user added by hand).
+  // Used by the pre-launch flow so we never clobber cache settings just to swap overlays.
+  ipcMain.handle('update-xipivot-overlays', async (_, ashitaPath, overlays) => {
+    const iniPath = path.join(ashitaPath, 'config', 'pivot', 'pivot.ini');
+    try {
+      // No file yet (XIPivot not installed) — nothing to update; skip silently.
+      if (!fs.existsSync(iniPath)) return { success: true, skipped: true };
+
+      const original = fs.readFileSync(iniPath, 'utf-8');
+      const eol = original.includes('\r\n') ? '\r\n' : '\n';
+      const lines = original.split(/\r?\n/);
+      const overlayBlock = (overlays || []).map((name, i) => `${i}=${name}`);
+
+      // Find [overlays] section bounds: start = section header line index,
+      // end = next section header or EOF. Inclusive of header, exclusive of next header.
+      let startIdx = -1;
+      let endIdx = lines.length;
+      for (let i = 0; i < lines.length; i++) {
+        const t = lines[i].trim();
+        if (startIdx === -1 && /^\[overlays\]\s*$/i.test(t)) {
+          startIdx = i;
+          continue;
+        }
+        if (startIdx !== -1 && /^\[[^\]]+\]\s*$/.test(t)) {
+          endIdx = i;
+          break;
+        }
+      }
+
+      let out;
+      if (startIdx === -1) {
+        // No [overlays] section at all — append one at the end.
+        const sep = lines.length && lines[lines.length - 1].trim() !== '' ? eol : '';
+        out = original + sep + eol + '[overlays]' + eol + overlayBlock.join(eol) + eol;
+      } else {
+        // Drop everything between the section header (exclusive) and the next section
+        // header (exclusive), keep one trailing blank line for readability.
+        const before = lines.slice(0, startIdx + 1);  // through [overlays]
+        const after = lines.slice(endIdx);            // next section onwards
+        const middle = overlayBlock.length ? [...overlayBlock, ''] : [''];
+        out = [...before, ...middle, ...after].join(eol);
+      }
+
+      fs.writeFileSync(iniPath, out, 'utf-8');
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: friendlyError(e, 'Updating XIPivot overlays') };
+    }
+  });
+
   // XIPivot auto-download and install
   ipcMain.handle('install-xipivot', async (_, ashitaPath) => {
 

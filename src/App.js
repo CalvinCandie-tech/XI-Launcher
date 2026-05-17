@@ -387,15 +387,11 @@ function App() {
     }
 
 
-    // Restore XIPivot config
-    if (snapshot.xipivot) {
-      try {
-        await api.writeXIPivotConfig(currentCfg.ashitaPath, {
-          exists: true,
-          ...snapshot.xipivot
-        });
-      } catch (e) { console.error('Failed to restore XIPivot config:', e); }
-    }
+    // Note: we intentionally do NOT restore snapshot.xipivot to pivot.ini here.
+    // Cache settings are global, and per-profile overlays are restored via the
+    // dedicated profileOverlays store + the pre-launch surgical write in doLaunch.
+    // Restoring snapshot.xipivot was the source of issue #1 — stale cache values
+    // got written back over the user's current settings on profile switch.
 
     setConfig(prev => ({ ...prev, ...updates }));
   }, []);
@@ -467,14 +463,12 @@ function App() {
     setIsLaunching(true);
     setLaunchLog('');
     try {
-      // Write active profile's overlays to pivot.ini before launch
+      // Write active profile's overlays to pivot.ini before launch.
+      // Surgical update — only the [overlays] section is replaced, [cache] and
+      // [settings] are byte-preserved. Fixes issue #1 (cache values reset on launch).
       const profileOverlays = await api.storeGet('profileOverlays') || {};
       const overlays = profileOverlays[config.activeProfile] || [];
-      const pivotCfg = await api.readXIPivotConfig(config.ashitaPath);
-      await api.writeXIPivotConfig(config.ashitaPath, {
-        ...pivotCfg,
-        overlays
-      });
+      await api.updateXIPivotOverlays(config.ashitaPath, overlays);
 
       const result = await api.launchGame({
         ashitaPath: config.ashitaPath,

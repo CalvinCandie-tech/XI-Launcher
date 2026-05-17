@@ -111,6 +111,7 @@ contextBridge.exposeInMainWorld('xiAPI', {
   },
   readXIPivotConfig: (ashitaPath) => ipcRenderer.invoke('read-xipivot-config', ashitaPath),
   writeXIPivotConfig: (ashitaPath, config) => ipcRenderer.invoke('write-xipivot-config', ashitaPath, config),
+  updateXIPivotOverlays: (ashitaPath, overlays) => ipcRenderer.invoke('update-xipivot-overlays', ashitaPath, overlays),
 
   // Custom DAT mods
   installCustomMod: (ashitaPath, url) => ipcRenderer.invoke('install-custom-mod', ashitaPath, url),
