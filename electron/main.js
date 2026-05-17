@@ -135,6 +135,76 @@ function validateRegValue(value) {
 function escapePSString(str) {
   return String(str).replace(/'/g, "''").replace(/`/g, '``').replace(/\$/g, '`$').replace(/"/g, '`"');
 }
+// Merge [section, key, value] updates into an existing INI file content,
+// preserving comments, ordering, unknown keys, and unknown sections. Missing
+// keys are inserted right after their section header; missing sections are
+// appended at the end. Round-trips CRLF/LF intact.
+// Uses an array signature (not "Section.Key" strings) because ReShade section
+// names contain dots (e.g. "Bloom.fx") and a dotted string key would be ambiguous.
+function applyIniSettings(existing, entries /* Array<[section, key, value]> */) {
+  if (!entries || entries.length === 0) return existing;
+  const eol = existing.includes('\r\n') ? '\r\n' : '\n';
+  const lines = existing.split(/\r?\n/);
+
+  // Build a lookup keyed by section -> Map<key, value> for O(1) match per line.
+  const wantBySection = new Map();
+  for (const [section, key, value] of entries) {
+    if (!wantBySection.has(section)) wantBySection.set(section, new Map());
+    wantBySection.get(section).set(key, String(value));
+  }
+  const seenBySection = new Map();
+  for (const section of wantBySection.keys()) seenBySection.set(section, new Set());
+
+  let currentSection = '';
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const sectionMatch = trimmed.match(/^\[([^\]]+)\]\s*$/);
+    if (sectionMatch) { currentSection = sectionMatch[1]; continue; }
+    if (!currentSection || trimmed.startsWith(';') || trimmed.startsWith('#')) continue;
+    const want = wantBySection.get(currentSection);
+    if (!want) continue;
+    const kvMatch = line.match(/^(\s*)([A-Za-z0-9_]+)(\s*=\s*).*$/);
+    if (!kvMatch) continue;
+    const [, indent, key, sep] = kvMatch;
+    if (want.has(key)) {
+      lines[i] = `${indent}${key}${sep}${want.get(key)}`;
+      seenBySection.get(currentSection).add(key);
+    }
+  }
+
+  // Compute missing keys per section, grouped for insertion.
+  const missingBySection = new Map();
+  for (const [section, want] of wantBySection) {
+    const seen = seenBySection.get(section);
+    const missing = [...want.entries()].filter(([k]) => !seen.has(k));
+    if (missing.length) missingBySection.set(section, missing);
+  }
+  if (missingBySection.size === 0) return lines.join(eol);
+
+  const existingSections = new Set();
+  for (const l of lines) {
+    const m = l.trim().match(/^\[([^\]]+)\]\s*$/);
+    if (m) existingSections.add(m[1]);
+  }
+
+  for (const [section, kvs] of missingBySection) {
+    if (existingSections.has(section)) {
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim() === `[${section}]`) {
+          lines.splice(i + 1, 0, ...kvs.map(([k, v]) => `${k} = ${v}`));
+          break;
+        }
+      }
+    } else {
+      if (lines.length && lines[lines.length - 1].trim() !== '') lines.push('');
+      lines.push(`[${section}]`, ...kvs.map(([k, v]) => `${k} = ${v}`), '');
+    }
+  }
+
+  return lines.join(eol);
+}
+
 // Run a PowerShell command without going through cmd.exe — avoids the fragile
 // double-layer of quoting (PS single-quote + cmd double-quote) that exec() forced.
 function runPowerShell(psCmd, timeoutMs = 15000) {
@@ -3165,11 +3235,41 @@ function registerIPC() {
         ''
       ];
 
-      const conf = confLines.join('\r\n');
+      const fullTemplate = confLines.join('\r\n');
+
+      // [section, key, value] entries. Only these keys get rewritten when an
+      // existing dgVoodoo.conf is present — anything else the user added
+      // (unknown sections, comments, hand-tuned values we don't model) is preserved.
+      const managed = [
+        ['General',     'OutputAPI',                outputAPI === 'd3d12' ? 'bestavailable' : 'd3d11_fl11_0'],
+        ['General',     'ScalingMode',              scalingMode],
+        ['General',     'CaptureMouse',             captureMouse ? 'true' : 'false'],
+        ['GeneralExt',  'Resampling',               resampling],
+        ['GeneralExt',  'FullscreenAttributes',     fullscreenAttr === 'fake' ? 'fake' : ''],
+        ['GeneralExt',  'FPSLimit',                 fpsLimit],
+        ['DirectX',     'VRAM',                     vram],
+        ['DirectX',     'Filtering',                afValue],
+        ['DirectX',     'Mipmapping',               mipmapping],
+        ['DirectX',     'KeepFilterIfPointSampled', keepFilter ? 'true' : 'false'],
+        ['DirectX',     'Resolution',               resValue],
+        ['DirectX',     'Antialiasing',             msaa === 'off' ? 'appdriven' : msaa],
+        ['DirectX',     'ForceVerticalSync',        vsync ? 'true' : 'false'],
+        ['DirectX',     'FastVideoMemoryAccess',    fastVram ? 'true' : 'false'],
+        ['DirectX',     'dgVoodooWatermark',        watermark ? 'true' : 'false'],
+        ['DirectXExt',  'DepthBuffersBitDepth',     depthBuffer],
+      ];
 
       const dirs = getDgVoodooTargetDirs(ffxiPath);
       for (const dir of dirs) {
-        fs.writeFileSync(path.join(dir, 'dgVoodoo.conf'), conf, 'utf8');
+        const target = path.join(dir, 'dgVoodoo.conf');
+        if (fs.existsSync(target)) {
+          // Surgical update — preserve user edits, comments, unknown sections.
+          const existing = fs.readFileSync(target, 'utf-8');
+          fs.writeFileSync(target, applyIniSettings(existing, managed), 'utf8');
+        } else {
+          // First-time write — full canonical template.
+          fs.writeFileSync(target, fullTemplate, 'utf8');
+        }
       }
 
       // Also update the global dgVoodoo conf in AppData (overrides per-game settings)
@@ -3504,29 +3604,48 @@ function registerIPC() {
         liftGammaGain:    { technique: 'LiftGammaGain@LiftGammaGain.fx' },
       };
 
-      // Build Techniques line from enabled effects
-      const techniques = [];
+      // Build the launcher's enabled techniques list. We only know about EFFECT_MAP
+      // entries — any other techniques the user added by hand must be preserved.
+      const launcherEnabledTech = [];
       for (const [key, map] of Object.entries(EFFECT_MAP)) {
-        if (effects[key]?.enabled) techniques.push(map.technique);
+        if (effects[key]?.enabled) launcherEnabledTech.push(map.technique);
+      }
+      const launcherKnownTech = new Set(Object.values(EFFECT_MAP).map(m => m.technique));
+
+      const presetPath = path.join(dllDir, 'ReShadePreset.ini');
+      let existing = fs.existsSync(presetPath)
+        ? fs.readFileSync(presetPath, 'utf-8')
+        : 'PreprocessorDefinitions=\r\nTechniques=\r\nTechniqueSorting=\r\n';
+
+      // Merge Techniques line: keep user-added techniques, replace the launcher-managed ones.
+      const techMatch = existing.match(/^Techniques=(.*)$/m);
+      const existingTech = techMatch ? techMatch[1].split(',').map(s => s.trim()).filter(Boolean) : [];
+      const userOnlyTech = existingTech.filter(t => !launcherKnownTech.has(t));
+      const finalTech = [...launcherEnabledTech, ...userOnlyTech];
+      const techList = finalTech.join(',');
+
+      if (/^Techniques=.*$/m.test(existing)) {
+        existing = existing.replace(/^Techniques=.*$/m, `Techniques=${techList}`);
+      } else {
+        existing = `Techniques=${techList}\r\n` + existing;
+      }
+      if (/^TechniqueSorting=.*$/m.test(existing)) {
+        existing = existing.replace(/^TechniqueSorting=.*$/m, `TechniqueSorting=${techList}`);
+      } else {
+        existing = existing.replace(/^(Techniques=.*)$/m, `$1\r\nTechniqueSorting=${techList}`);
       }
 
-      // Build INI sections for effects that have slider values
-      const sectionLines = [];
+      // Surgical update for slider values — preserves any unknown keys in those
+      // sections and any unknown sections the user added.
+      const managed = [];
       for (const [key, map] of Object.entries(EFFECT_MAP)) {
         if (map.iniSection && map.iniKey && effects[key]?.value !== undefined) {
-          sectionLines.push('', `[${map.iniSection}]`, `${map.iniKey}=${effects[key].value.toFixed(6)}`);
+          managed.push([map.iniSection, map.iniKey, effects[key].value.toFixed(6)]);
         }
       }
+      const merged = applyIniSettings(existing, managed);
 
-      const presetLines = [
-        'PreprocessorDefinitions=',
-        `Techniques=${techniques.join(',')}`,
-        `TechniqueSorting=${techniques.join(',')}`,
-        ...sectionLines,
-        '',
-      ];
-
-      fs.writeFileSync(path.join(dllDir, 'ReShadePreset.ini'), presetLines.join('\r\n'), 'utf8');
+      fs.writeFileSync(presetPath, merged, 'utf8');
 
       return { success: true };
     } catch (e) {

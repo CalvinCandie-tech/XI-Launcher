@@ -65,32 +65,34 @@ export function setSectionValues(content, sectionName, updates) {
     if (lines[i].trim().match(/^\[.+\]$/)) { endIdx = i; break; }
   }
 
-  // Parse existing entries preserving order
-  const entries = {};
-  const order = [];
-  for (let i = secIdx + 1; i < endIdx; i++) {
-    const line = lines[i].trim();
-    const eqIdx = line.indexOf('=');
-    if (eqIdx > 0) {
-      const key = line.slice(0, eqIdx).trim();
-      entries[key] = line.slice(eqIdx + 1).trim();
-      order.push(key);
+  // Replace matching key lines in place; track which keys were seen so we can
+  // append new ones at the end of the section. Comments and blank lines inside
+  // the section are preserved byte-for-byte.
+  const sectionLines = lines.slice(secIdx + 1, endIdx);
+  const seen = new Set();
+  for (let i = 0; i < sectionLines.length; i++) {
+    const line = sectionLines[i];
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith(';') || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx <= 0) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    if (Object.prototype.hasOwnProperty.call(updates, key)) {
+      sectionLines[i] = `${key} = ${String(updates[key])}`;
+      seen.add(key);
     }
   }
 
-  // Apply updates
+  // Append any keys we didn't find in the existing section
+  const toAppend = [];
   for (const [key, value] of Object.entries(updates)) {
-    entries[key] = String(value);
-    if (!order.includes(key)) order.push(key);
+    if (!seen.has(key)) toAppend.push(`${key} = ${String(value)}`);
   }
 
-  // Rebuild
   const before = lines.slice(0, secIdx + 1);
   const after = lines.slice(endIdx);
-  const sectionLines = order.map(k => `${k} = ${entries[k]}`);
-  // Only add blank line separator if the next line isn't already empty
   const needsSeparator = after.length > 0 && after[0].trim() !== '';
-  return [...before, ...sectionLines, ...(needsSeparator ? [''] : []), ...after].join('\n');
+  return [...before, ...sectionLines, ...toAppend, ...(needsSeparator ? [''] : []), ...after].join('\n');
 }
 
 /**
