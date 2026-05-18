@@ -1050,47 +1050,59 @@ function registerIPC() {
 
         sendProgress(95, 'Preparing restart...');
 
-        // Write a batch script that waits for the app to exit, copies files, then relaunches.
-        // This avoids EBUSY errors from overwriting files locked by the running process.
+        // Write a PowerShell script that waits for the app to exit, copies
+        // files, then relaunches. PowerShell instead of cmd/batch because
+        // Node's `windowsHide: true` only hides the immediate child — when
+        // the batch fired tasklist|findstr those grandchildren allocated
+        // their own visible consoles (users reported seeing a flashing
+        // `findstr.exe /I /C:"XI Launcher.exe"` window during updates).
+        // PowerShell with -WindowStyle Hidden hides the whole flow including
+        // any sub-processes it spawns, and Wait-Process collapses the polling
+        // loop into one syscall.
         const exePath = app.getPath('exe');
-        const batPath = path.join(tmpDir, 'update.bat');
+        const exeName = path.basename(exePath);
+        const exeBaseName = exeName.replace(/\.exe$/i, '');
+        const ps1Path = path.join(tmpDir, 'update.ps1');
         const errorMarker = path.join(runtimeDir, 'update-error.log');
         // Pre-remove any stale marker so a successful run doesn't leave one behind
         try { if (fs.existsSync(errorMarker)) fs.unlinkSync(errorMarker); } catch {}
-        const batContent = [
-          '@echo off',
-          // Wait for the Electron process to fully exit — hard limit 30 seconds
-          // Uses ping instead of timeout.exe (ping works in consoleless sessions)
-          // Uses findstr.exe with full path to avoid Git/WSL find.exe shadowing
-          `set "EXE_NAME=${path.basename(exePath)}"`,
-          'set /a WAIT_COUNT=0',
-          ':waitloop',
-          'tasklist /FI "IMAGENAME eq %EXE_NAME%" 2>NUL | %SystemRoot%\\System32\\findstr.exe /I /C:"%EXE_NAME%" >NUL',
-          'if not errorlevel 1 (',
-          '  set /a WAIT_COUNT+=1',
-          '  if %WAIT_COUNT% GEQ 30 goto docopy',
-          '  ping -n 2 127.0.0.1 >NUL',
-          '  goto waitloop',
-          ')',
-          ':docopy',
-          // Robocopy: mirror sourceDir into appRoot so files removed upstream are cleaned up.
-          // /MIR = mirror (copy + purge extras), /R:3 /W:1 = retry, /XD = exclude dirs (protects runtime/),
-          // /NFL /NDL /NJH /NJS = quiet. Robocopy exit codes: 0-7 success, 8+ failure.
-          `robocopy "${sourceDir}" "${appRoot}" /MIR /R:3 /W:1 /XD runtime node_modules /XF *.json *.log /NFL /NDL /NJH /NJS`,
-          'set RC_EXIT=%errorlevel%',
-          'if %RC_EXIT% GEQ 8 (',
-          `  echo Robocopy failed with exit code %RC_EXIT% while copying update files. > "${errorMarker}"`,
-          `  echo Source: ${sourceDir} >> "${errorMarker}"`,
-          `  echo Dest: ${appRoot} >> "${errorMarker}"`,
-          ')',
-          // Relaunch first, then clean up — rmdir last so it doesn't delete this script mid-run
-          `start "" "${exePath}"`,
-          `rmdir /S /Q "${tmpDir}" 2>NUL`,
+        // PowerShell single-quoted strings literal-escape '$' and backticks,
+        // so we only need to double-up embedded single quotes for safety.
+        const psQuote = (s) => "'" + String(s).replace(/'/g, "''") + "'";
+        const psContent = [
+          '$ErrorActionPreference = "SilentlyContinue"',
+          // Wait up to 30s for the launcher to exit. Get-Process by base name
+          // (no .exe). If multiple instances are running (rare), wait for all.
+          `$procs = Get-Process -Name ${psQuote(exeBaseName)}`,
+          'if ($procs) {',
+          '  try { $procs | Wait-Process -Timeout 30 } catch {}',
+          '}',
+          // Mirror sourceDir into appRoot. /XD protects runtime/ (music, user
+          // xiloader, ashita), /XF protects loose config files at appRoot.
+          `$rc = & robocopy ${psQuote(sourceDir)} ${psQuote(appRoot)} /MIR /R:3 /W:1 /XD runtime node_modules /XF *.json *.log /NFL /NDL /NJH /NJS`,
+          'if ($LASTEXITCODE -ge 8) {',
+          `  $errLines = @(`,
+          `    "Robocopy failed with exit code $LASTEXITCODE while copying update files.",`,
+          `    "Source: ${sourceDir.replace(/\\/g, '\\\\')}",`,
+          `    "Dest: ${appRoot.replace(/\\/g, '\\\\')}"`,
+          '  )',
+          `  $errLines | Out-File -FilePath ${psQuote(errorMarker)} -Encoding utf8`,
+          '}',
+          // Relaunch before cleanup so the tmpdir delete can't race the script.
+          `Start-Process -FilePath ${psQuote(exePath)}`,
+          `Remove-Item -Recurse -Force ${psQuote(tmpDir)} -ErrorAction SilentlyContinue`,
         ].join('\r\n');
-        fs.writeFileSync(batPath, batContent, 'utf-8');
+        fs.writeFileSync(ps1Path, psContent, 'utf-8');
 
-        // Launch the batch script detached so it survives app exit
-        const child = spawn('cmd.exe', ['/c', batPath], {
+        // Launch the PowerShell script detached + hidden so the user sees no
+        // console window at any point during the update flow.
+        const child = spawn('powershell.exe', [
+          '-NoProfile',
+          '-NonInteractive',
+          '-WindowStyle', 'Hidden',
+          '-ExecutionPolicy', 'Bypass',
+          '-File', ps1Path,
+        ], {
           detached: true,
           stdio: 'ignore',
           windowsHide: true,
