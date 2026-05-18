@@ -95,7 +95,8 @@ async function initStore() {
       serverPort: '',
       loginUser: '',
       loginPass: '',
-      lastLaunched: null
+      lastLaunched: null,
+      githubToken: ''
     }
   });
 }
@@ -233,6 +234,17 @@ function runPowerShell(psCmd, timeoutMs = 15000) {
 function friendlyError(e, context) {
   const msg = e.message || String(e);
   const code = e.code || '';
+  // GitHub rate-limit 403s look identical to permission denials in the raw
+  // message — give them their own branch so the user gets actionable advice
+  // (wait, or paste a PAT in Settings) instead of "access denied, run as admin"
+  // which is the wrong fix for a quota error.
+  if (e.statusCode === 403 && /api\.github\.com|GitHub/i.test(msg)) {
+    const hasToken = (() => { try { return !!(store?.get('githubToken') || '').trim(); } catch { return false; } })();
+    if (hasToken) {
+      return `${context || 'GitHub request'} failed — your saved GitHub token was rejected (HTTP 403). Check Settings → GitHub Token: the token may be expired, revoked, or missing the public_repo scope.`;
+    }
+    return `${context || 'GitHub request'} failed — GitHub rate limited this IP (60 requests/hour without a token). Either wait ~1 hour, or paste a free GitHub Personal Access Token into Settings → GitHub Token (bumps quota to 5000/hour). Create one at https://github.com/settings/tokens — no scopes needed for public repos.`;
+  }
   const isPermission = code === 'EPERM' || code === 'EACCES'
     || /access.*(denied|is denied)/i.test(msg)
     || /elevation/i.test(msg)
@@ -258,24 +270,49 @@ async function retryAsync(fn, { retries = 3, delay = 1000, label = 'Download' } 
   }
 }
 
-// GitHub API GET with timeout. Rejects on network error, timeout, or non-2xx.
-// Returns the parsed JSON body.
-function githubGet(apiPath, { timeoutMs = 10000 } = {}) {
+// In-memory cache for GitHub API GETs. Same apiPath within TTL returns the
+// stored value instead of hitting the API again — drastically cuts requests
+// during a "install everything" session where the catalogue shares deps
+// (gdifonts, etc.) across multiple addons. TTL is 1h, matching GitHub's
+// rate-limit window so cache misses naturally re-spread across the window.
+const GITHUB_CACHE_TTL_MS = 60 * 60 * 1000;
+const githubCache = new Map();
+
+// GitHub API GET with timeout, in-memory cache, and optional Bearer auth.
+// Rejects on network error, timeout, or non-2xx. Returns the parsed JSON body.
+//
+// Pass `force: true` to skip the cache (e.g. for fresh release checks after an
+// upgrade). The token is read from electron-store at call time so users can
+// add one mid-session and the next request picks it up — no relaunch needed.
+function githubGet(apiPath, { timeoutMs = 10000, force = false } = {}) {
+  if (!force) {
+    const cached = githubCache.get(apiPath);
+    if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.value);
+  }
+  const token = (store?.get('githubToken') || '').trim();
+  const headers = {
+    'User-Agent': 'XI-Launcher',
+    Accept: 'application/vnd.github+json'
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
   return new Promise((resolve, reject) => {
-    const req = https.get({
-      hostname: 'api.github.com',
-      path: apiPath,
-      headers: { 'User-Agent': 'XI-Launcher', Accept: 'application/vnd.github+json' }
-    }, (res) => {
+    const req = https.get({ hostname: 'api.github.com', path: apiPath, headers }, (res) => {
       if (res.statusCode && res.statusCode >= 400) {
         res.resume();
-        return reject(new Error(`GitHub ${apiPath} returned HTTP ${res.statusCode}`));
+        // Tag the error with the status so friendlyError can detect rate-limit
+        // 403s and surface the "add a PAT" advice instead of a raw HTTP code.
+        const err = new Error(`GitHub ${apiPath} returned HTTP ${res.statusCode}`);
+        err.statusCode = res.statusCode;
+        return reject(err);
       }
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch { reject(new Error(`Invalid JSON from ${apiPath}`)); }
+        try {
+          const parsed = JSON.parse(data);
+          githubCache.set(apiPath, { value: parsed, expiresAt: Date.now() + GITHUB_CACHE_TTL_MS });
+          resolve(parsed);
+        } catch { reject(new Error(`Invalid JSON from ${apiPath}`)); }
       });
       res.on('error', reject);
     });

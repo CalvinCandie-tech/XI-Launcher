@@ -388,6 +388,12 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
   const [gpuDetecting, setGpuDetecting] = useState(false);
   const [noProfile, setNoProfile] = useState(false);
   const [minimizeToTray, setMinimizeToTray] = useState(false);
+  const [githubToken, setGithubToken] = useState('');
+  const [githubTokenStatus, setGithubTokenStatus] = useState('');
+  useEffect(() => {
+    if (!api?.storeGet) return;
+    api.storeGet('githubToken').then(v => setGithubToken(v || ''));
+  }, []);
   const [drawMob, setDrawMob] = useState('0');
   const [drawWorld, setDrawWorld] = useState('0');
   const [drawPending, setDrawPending] = useState(false);
@@ -1563,6 +1569,55 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
             <input type="checkbox" checked={minimizeToTray} readOnly />
             <span className="toggle-slider" />
           </div>
+        </div>
+
+        <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.5rem' }}>
+          <div className="setting-info">
+            <span className="setting-name">GitHub Token (optional)</span>
+            <span className="setting-hint-inline">
+              Lifts GitHub API rate-limiting from 60 → 5000 requests/hour. Without one, installing many addons in a row can fail with "HTTP 403" errors until the next hour. Token is stored locally only.{' '}
+              <a href="#" onClick={(e) => { e.preventDefault(); if (api?.openExternal) api.openExternal('https://github.com/settings/tokens'); }}>
+                Create a token →
+              </a>{' '}
+              (no scopes needed for public repos — leave them all unchecked)
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <input
+              type="password"
+              value={githubToken}
+              placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+              onChange={e => setGithubToken(e.target.value)}
+              style={{ flex: 1, fontFamily: 'monospace' }}
+            />
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={async () => {
+                if (!api?.storeSet) return;
+                await api.storeSet('githubToken', githubToken.trim());
+                setGithubTokenStatus(githubToken.trim() ? 'Saved — rate-limit raised to 5000/hr.' : 'Cleared — falling back to 60/hr unauthenticated.');
+                setTimeout(() => setGithubTokenStatus(''), 6000);
+              }}
+            >
+              Save
+            </button>
+            {githubToken && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={async () => {
+                  setGithubToken('');
+                  if (api?.storeSet) await api.storeSet('githubToken', '');
+                  setGithubTokenStatus('Cleared — falling back to 60/hr unauthenticated.');
+                  setTimeout(() => setGithubTokenStatus(''), 6000);
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          {githubTokenStatus && (
+            <span className="setting-hint-inline" style={{ color: 'var(--ok, #6c6)' }}>{githubTokenStatus}</span>
+          )}
         </div>
       </div>
 
