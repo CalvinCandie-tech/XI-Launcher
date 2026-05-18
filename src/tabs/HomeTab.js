@@ -130,7 +130,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
         ashitaPath: config.ashitaPath,
         profileName,
         useXiloader: !!config.useXiloader,
-        xiloaderPath: config.xiloaderPath,
+        xiloaderPath: profileSettings.xiloaderPath || config.xiloaderPath,
         serverName: profileSettings.serverHost || config.serverHost,
         serverPort: profileSettings.serverPort || config.serverPort,
         loginUser: profileSettings.loginUser || config.loginUser,

@@ -250,7 +250,12 @@ const DINPUT_BUTTONS = [
 
 const DEFAULT_XINPUT_PADSIN = [
   13, 9, 10, 12, 2, 0, 14, 3, 15, -1, 8, 11, -1,
-  33, 33, 32, 32, 36, 36, 35, 35, 6, 7, 5, 1, -1, 4
+  -33, 33, -32, 32, 36, -36, 35, -35, 6, 7, 5, 4, -1, -1
+];
+
+const DEFAULT_DINPUT_PADSIN = [
+  10, 6, 11, 7, 0, 1, 9, 2, 8, -1, 4, 5, -1,
+  -33, 33, -32, 32, 37, -37, 34, -34, -41, 41, -40, 40, -1, -1
 ];
 
 // Web Gamepad API to FFXI button ID mapping
@@ -538,7 +543,12 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
 
   const getPadsin = () => {
     const raw = getValue('padsin000');
-    if (!raw || raw === '-1') return Array(27).fill(-1);
+    // When the profile defers to the registry (-1), seed the editor with the
+    // mode-appropriate retail-style defaults so editing one button doesn't
+    // overwrite a working FFXiPadConfig setup with 27 zeros.
+    if (!raw || raw === '-1') {
+      return [...(isXInput() ? DEFAULT_XINPUT_PADSIN : DEFAULT_DINPUT_PADSIN)];
+    }
     return String(raw).split(',').map(v => parseInt(v.trim(), 10));
   };
 
@@ -561,7 +571,16 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
   useEffect(() => { isXInputRef.current = isXInput; setPadsinButtonRef.current = setPadsinButton; });
 
   const applyDefaultPadsin = () => {
-    setPending('padsin000', DEFAULT_XINPUT_PADSIN.join(','));
+    setPending('padsin000', (isXInput() ? DEFAULT_XINPUT_PADSIN : DEFAULT_DINPUT_PADSIN).join(','));
+  };
+
+  // Defer all pad config to the registry written by FFXiPadConfig.exe.
+  // Writes a single `-1` (not 27 -1s), which is how Ashita interprets
+  // "use the real registry value" per its boot-config docs.
+  const applyRegistryDefer = () => {
+    setPending('padmode000', '-1');
+    setPending('padsin000', '-1');
+    setPending('padguid000', '-1');
   };
 
   const startCapture = (idx) => {
@@ -1498,9 +1517,12 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
             <div className="gp-presets">
               <span className="gp-presets-label">Predefined Setups</span>
               <div className="gp-presets-buttons">
-                {isXInput() && (
-                  <button className="gp-preset-btn" onClick={applyDefaultPadsin}>XInput (F)</button>
-                )}
+                <button className="gp-preset-btn" onClick={applyDefaultPadsin}>
+                  {isXInput() ? 'XInput Defaults' : 'DirectInput Defaults'}
+                </button>
+                <button className="gp-preset-btn" onClick={applyRegistryDefer} title="Defer all gamepad config to whatever FFXiPadConfig.exe wrote to the registry. Use this if XIloader works but Ashita doesn't.">
+                  Use Registry (FFXiPadConfig)
+                </button>
                 <button className="gp-preset-btn" onClick={() => setPending('padsin000', Array(27).fill(-1).join(','))}>
                   Clear All
                 </button>

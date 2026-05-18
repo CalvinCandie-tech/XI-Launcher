@@ -470,11 +470,20 @@ function App() {
       const overlays = profileOverlays[config.activeProfile] || [];
       await api.updateXIPivotOverlays(config.ashitaPath, overlays);
 
+      // Per-profile xiloader override — for servers (often 75-cap) that need a
+      // different xiloader version than the launcher's bundled one. Falls back
+      // to the global path when unset.
+      let profileXiloaderPath = '';
+      try {
+        const ps = await api.loadProfileSettings(config.activeProfile);
+        if (ps?.xiloaderPath) profileXiloaderPath = ps.xiloaderPath;
+      } catch (e) { console.error('Failed to load profile settings', e); }
+
       const result = await api.launchGame({
         ashitaPath: config.ashitaPath,
         profileName: config.activeProfile,
         useXiloader,
-        xiloaderPath: config.xiloaderPath,
+        xiloaderPath: profileXiloaderPath || config.xiloaderPath,
         serverName: config.serverHost,
         serverPort: config.serverPort,
         loginUser: config.loginUser,

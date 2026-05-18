@@ -26,11 +26,73 @@ function ProfileTab({ config, updateConfig }) {
   const [showScriptEditor, setShowScriptEditor] = useState(false);
   const [profileOverlays, setProfileOverlays] = useState({});
   const [modPopover, setModPopover] = useState(null); // profile name or null
+  const [profileXiloader, setProfileXiloader] = useState('');
+  const [profileXiloaderExists, setProfileXiloaderExists] = useState(false);
+  const [profileXiloaderStatus, setProfileXiloaderStatus] = useState('');
+
+  // Profile we're editing the per-profile xiloader override for.
+  const targetProfile = config.activeProfile || selectedProfile;
 
   useEffect(() => {
     if (!api) return;
     api.storeGet('profileOverlays').then(data => setProfileOverlays(data || {}));
   }, [config.activeProfile]);
+
+  // Load the per-profile xiloader override whenever the target profile changes,
+  // and check the file actually exists so we can flag stale paths in the UI.
+  useEffect(() => {
+    if (!api || !targetProfile) {
+      setProfileXiloader('');
+      setProfileXiloaderExists(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const ps = await api.loadProfileSettings(targetProfile);
+        const stored = ps?.xiloaderPath || '';
+        if (cancelled) return;
+        setProfileXiloader(stored);
+        if (stored) {
+          const ok = await api.pathExists(stored.replace(/\//g, '\\') + '\\xiloader.exe');
+          if (!cancelled) setProfileXiloaderExists(ok);
+        } else {
+          setProfileXiloaderExists(false);
+        }
+      } catch (e) {
+        console.error('Failed to load per-profile xiloader path', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [targetProfile]);
+
+  const saveProfileXiloader = async (newPath) => {
+    if (!api || !targetProfile) return;
+    try {
+      const existing = (await api.loadProfileSettings(targetProfile)) || {};
+      await api.saveProfileSettings(targetProfile, { ...existing, xiloaderPath: newPath || '' });
+      setProfileXiloader(newPath || '');
+      if (newPath) {
+        const ok = await api.pathExists(newPath.replace(/\//g, '\\') + '\\xiloader.exe');
+        setProfileXiloaderExists(ok);
+        setProfileXiloaderStatus(ok
+          ? `Custom xiloader set for "${targetProfile}". Click Apply to Profile to update the boot file.`
+          : `Path saved, but xiloader.exe was not found at ${newPath}. Pick the folder that contains xiloader.exe.`);
+      } else {
+        setProfileXiloaderExists(false);
+        setProfileXiloaderStatus(`Cleared. "${targetProfile}" will use the launcher's bundled xiloader.`);
+      }
+      setTimeout(() => setProfileXiloaderStatus(''), 8000);
+    } catch (e) {
+      setProfileXiloaderStatus(`Error: ${e.message || e}`);
+    }
+  };
+
+  const browseProfileXiloader = async () => {
+    if (!api) return;
+    const picked = await api.browseFolder(profileXiloader || config.xiloaderPath);
+    if (picked) await saveProfileXiloader(picked);
+  };
 
   useEffect(() => {
     if (!api?.onXiloaderDownloadProgress) return;
@@ -564,6 +626,45 @@ function ProfileTab({ config, updateConfig }) {
           </div>
         </div>
 
+        <details className="server-group profile-xiloader-override">
+          <summary className="server-group-label" style={{ cursor: 'pointer' }}>
+            Advanced: Custom xiloader for this profile (optional)
+          </summary>
+          <div style={{ marginTop: '0.5rem' }}>
+            <p className="field-hint" style={{ marginBottom: '0.5rem' }}>
+              Most users can ignore this. Some private servers (often 75-cap) need a specific xiloader version that differs from the launcher's bundled one. Pick the folder containing the <code>xiloader.exe</code> you want to use for <strong>{targetProfile || 'this profile'}</strong>. Leave blank to use the launcher default.
+            </p>
+            {!targetProfile && (
+              <p className="field-hint" style={{ color: 'var(--warn, #c90)' }}>
+                Select or activate a profile above to configure a per-profile xiloader.
+              </p>
+            )}
+            <div className="server-group-row" style={{ alignItems: 'flex-end', gap: '0.5rem' }}>
+              <div className="field-row" style={{ flex: 1 }}>
+                <label>xiloader folder for this profile</label>
+                <input
+                  type="text"
+                  value={profileXiloader}
+                  placeholder={config.xiloaderPath ? `(default: ${config.xiloaderPath})` : 'Pick the folder containing xiloader.exe'}
+                  onChange={e => setProfileXiloader(e.target.value)}
+                  onBlur={() => saveProfileXiloader(profileXiloader)}
+                  disabled={!targetProfile}
+                />
+              </div>
+              <button className="btn btn-sm btn-ghost" onClick={browseProfileXiloader} disabled={!targetProfile}>Browse</button>
+              <button className="btn btn-sm btn-ghost" onClick={() => saveProfileXiloader('')} disabled={!targetProfile || !profileXiloader}>Use Default</button>
+            </div>
+            {profileXiloader && (
+              <p className="field-hint" style={{ marginTop: '0.5rem', color: profileXiloaderExists ? 'var(--ok, #6c6)' : 'var(--err, #c66)' }}>
+                {profileXiloaderExists ? '✓ Found xiloader.exe' : '⚠ xiloader.exe not found in this folder'}
+              </p>
+            )}
+            {profileXiloaderStatus && (
+              <p className="field-hint" style={{ marginTop: '0.5rem' }}>{profileXiloaderStatus}</p>
+            )}
+          </div>
+        </details>
+
         {config.serverHost && (
           <div className="server-summary">
             <span className="server-summary-label">Ready to connect to</span>
@@ -580,11 +681,21 @@ function ProfileTab({ config, updateConfig }) {
               if (!api || !targetProfile) return;
               const result = await api.readProfile(config.ashitaPath, targetProfile);
               if (!result.content) return;
+
+              // Per-profile xiloader override wins over the global setting.
+              // Lets 75-cap or custom-fork users wire a specific xiloader to one
+              // profile without affecting any others.
+              let xiloaderDir = config.xiloaderPath;
+              try {
+                const ps = await api.loadProfileSettings(targetProfile);
+                if (ps?.xiloaderPath) xiloaderDir = ps.xiloaderPath;
+              } catch (e) { console.error('Failed to load profile settings', e); }
+
               const lines = result.content.split('\n');
               const updated = lines.map(line => {
                 const trimmed = line.replace(/\s/g, '');
-                if (trimmed.startsWith('file=') && config.xiloaderPath) {
-                  const xiloaderExe = config.xiloaderPath.replace(/\//g, '\\') + '\\xiloader.exe';
+                if (trimmed.startsWith('file=') && xiloaderDir) {
+                  const xiloaderExe = xiloaderDir.replace(/\//g, '\\') + '\\xiloader.exe';
                   return `file         = ${xiloaderExe}`;
                 }
                 if (trimmed.startsWith('command=') && config.serverHost) {

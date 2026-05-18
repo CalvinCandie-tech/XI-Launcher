@@ -73,6 +73,7 @@ export const ADDON_CATALOGUE = [
   { name: 'tokens', description: 'Extends the parsable tokens in the chatlog', category: 'Chat & Social' },
   { name: 'cfhblock', description: 'Blocks call for help from working to prevent accidents', category: 'Chat & Social' },
   { name: 'Audible', description: 'Plays custom audio alerts triggered by in-game events like spell casts, ability readies, and battle actions.', category: 'Chat & Social', repo: 'ThornyFFXI/Audible' },
+  { name: 'FancyChat', description: 'Full chat replacement — 7 sortable tabs (All/Combat/LS/Party/Tell/Shout/Custom), compact icon-based combat log, timestamps, clickable URLs, hover previews for items/abilities/spells, BigMode full-screen view, gamepad navigation, bundled zone maps via Ctrl+click any chat line, per-tab log export, /tell sounds, and word alerts. Load it LAST in your default script — not compatible with other chat-rewriting addons.', category: 'Chat & Social', repo: 'ariel-logos/FancyChat', useRelease: true, installAs: 'fancychat' },
   // --- Maps & Navigation ---
   { name: 'allmaps', description: 'See every map via /map without needing the key items, including waypoints', category: 'Maps & Navigation' },
   { name: 'cartographer', description: 'See every map in the map menus when viewing non-current zone maps', category: 'Maps & Navigation' },
