@@ -1,0 +1,92 @@
+.captain-modal {
+  width: 700px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.captain-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.captain-modal-title {
+  margin: 0;
+  font-size: 16px;
+  color: var(--gold);
+}
+
+.captain-modal-banner {
+  background: var(--bg-deepest);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.captain-modal-banner code {
+  color: var(--gold);
+  font-family: monospace;
+}
+
+.captain-modal-section-title {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+
+.captain-section-caution {
+  color: #e8a020;
+}
+
+.captain-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.captain-addon-card {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.captain-addon-caution {
+  border-color: #e8a020;
+}
+
+.captain-addon-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.captain-addon-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.captain-risk-badge {
+  font-size: 13px;
+}
+
+.captain-addon-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 0;
+  line-height: 1.4;
+}
