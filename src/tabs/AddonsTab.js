@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Modal from '../components/Modal';
+import CaptainModal from '../components/CaptainModal';
 import { CONFLICT_GROUPS } from '../utils/conflicts';
 import './AddonsTab.css';
 
@@ -186,6 +187,13 @@ const ADDON_HELP = {
   Emotes:        { commands: ['/emotes'], usage: 'Emote browser. /emotes to open the list. Browse and click to use any emote without remembering commands.' },
 };
 
+const CAPTAIN_ENTRY = {
+  name: 'captain',
+  description: 'Packet capture & analysis suite for LandSandBoat development',
+  repo: 'sruon/captain',
+  useRelease: true,
+  installAs: 'captain',
+};
 
 function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
   const [installedAddons, setInstalledAddons] = useState([]);
@@ -207,6 +215,7 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [checkMsg, setCheckMsg] = useState('');
   const [importMsg, setImportMsg] = useState(null); // { success: bool, text: string }
+  const [showCaptainModal, setShowCaptainModal] = useState(false);
 
   const handleImportAddon = async () => {
     if (!config?.ashitaPath) return;
@@ -691,9 +700,12 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
   const categories = [...new Set(visibleCatalogue.map(a => a.category))].sort();
 
   const catalogueNames = new Set(
-    ADDON_CATALOGUE.map(a => (a.installAs || a.name).toLowerCase())
+    [...ADDON_CATALOGUE, CAPTAIN_ENTRY].map(a => (a.installAs || a.name).toLowerCase())
   );
   const unlistedInstalled = installedAddons.filter(n => !catalogueNames.has(n) && !installedPluginNames.includes(n));
+
+  const isCaptainInstalled = installedAddons.includes('captain');
+  const isCaptainEnabled = enabledAddons.includes('captain');
 
   return (
     <div className="addons-tab">
@@ -754,6 +766,56 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
           {importMsg.text}
         </div>
       )}
+
+      {/* Captain — pinned dev tools card */}
+      <div className="captain-pinned-card panel">
+        <div className="captain-pinned-body">
+          <span className="captain-pinned-icon">👨‍✈️</span>
+          <div className="captain-pinned-info">
+            <span className="captain-pinned-name cinzel">Captain</span>
+            <span className="captain-pinned-desc">Packet capture &amp; analysis suite for LandSandBoat development</span>
+          </div>
+          <div className="captain-pinned-actions">
+            {isCaptainInstalled && (
+              <>
+                <div className="toggle" onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleAddon('captain'); }}>
+                  <input type="checkbox" checked={isCaptainEnabled} readOnly />
+                  <span className="toggle-slider" />
+                </div>
+                <span className="addon-status-label">{isCaptainEnabled ? 'Enabled' : 'Disabled'}</span>
+              </>
+            )}
+            {installing['captain'] ? (
+              <div className="addon-progress">
+                <div className="addon-progress-bar">
+                  <div className="addon-progress-fill" style={{ width: `${installing['captain'].percent}%` }} />
+                </div>
+                <span className="addon-progress-text">{installing['captain'].detail}</span>
+              </div>
+            ) : (
+              <button
+                className={`btn btn-sm ${isCaptainInstalled ? 'btn-ghost' : 'btn-primary'}`}
+                onClick={() => handleInstall(CAPTAIN_ENTRY)}
+              >
+                {isCaptainInstalled ? '↻ Update' : '↓ Install'}
+              </button>
+            )}
+            <button
+              className="btn btn-ghost btn-sm captain-gear-btn"
+              onClick={() => setShowCaptainModal(true)}
+              title="Sub-addon reference"
+            >
+              ⚙
+            </button>
+          </div>
+        </div>
+        {installMsg?.addonName === 'captain' && (
+          <div className={`addon-install-msg ${installMsg.success ? 'success' : 'error'}`}>
+            {installMsg.text}
+          </div>
+        )}
+      </div>
+      <div className="captain-pinned-divider" />
 
       {/* Conflict warnings — checks union of enabled addons + plugins so cross-tab
           overlap (e.g. LegacyAC plugin vs LuAshitacast addon) still surfaces here. */}
@@ -843,6 +905,10 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
           </div>
         </div>
       </div>
+
+      {showCaptainModal && (
+        <CaptainModal onClose={() => setShowCaptainModal(false)} />
+      )}
 
       {pendingBundle && (
         <Modal onClose={() => setPendingBundle(null)} ariaLabel="Bundle Confirmation">
