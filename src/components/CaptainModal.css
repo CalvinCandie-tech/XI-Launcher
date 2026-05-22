@@ -45,7 +45,7 @@
 }
 
 .captain-section-caution {
-  color: #e8a020;
+  color: var(--amber, #e8a020);
 }
 
 .captain-modal-grid {
@@ -65,7 +65,7 @@
 }
 
 .captain-addon-caution {
-  border-color: #e8a020;
+  border-color: var(--amber, #e8a020);
 }
 
 .captain-addon-card-header {

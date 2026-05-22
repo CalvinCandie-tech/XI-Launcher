@@ -33,7 +33,7 @@ function CaptainModal({ onClose }) {
       <div className="captain-modal panel">
         <div className="captain-modal-header">
           <h3 className="cinzel captain-modal-title">👨‍✈️ Captain — Sub-addons</h3>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+          <button className="btn btn-ghost btn-sm" aria-label="Close" onClick={onClose}>✕</button>
         </div>
         <div className="captain-modal-banner">
           Sub-addons are configured in-game via <code>/cap</code>. Use this reference to understand what each one does before enabling.
