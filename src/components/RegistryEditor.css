@@ -1,0 +1,121 @@
+.registry-editor {
+  width: min(820px, 92vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.registry-editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.registry-editor-title {
+  margin: 0;
+  color: var(--gold);
+  font-size: 18px;
+}
+
+.registry-editor-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: 640px;
+}
+
+.registry-editor-body {
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.registry-group-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gold);
+  margin-bottom: 10px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border);
+}
+
+.registry-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.registry-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.registry-field-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.registry-field-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-bright, #f2e6cf);
+}
+
+.registry-field-rec {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #0a0c10;
+  background: linear-gradient(135deg, var(--teal), var(--gold));
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.registry-field-input {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-bright, #f2e6cf);
+  background: var(--bg-deepest, #0a0c10);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+
+.registry-field-input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.registry-field-desc {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.registry-editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.registry-editor-footer-right {
+  display: flex;
+  gap: 8px;
+}

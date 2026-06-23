@@ -126,29 +126,6 @@ export const ADDON_CATALOGUE = [
   { name: 'gdifonts', description: 'Font rendering library required by balloon and other addons. Not loadable on its own — consumed via require().', category: 'Library', repo: 'onimitch/gdifonts', installAs: 'libs/gdifonts', isLibrary: true },
 ];
 
-const ADDON_BUNDLES = [
-  {
-    name: 'Solo Essentials',
-    desc: 'Gear swaps, hotbar, camera, and all the QoL you need for solo play',
-    addons: ['LuAshitacast', 'tHotBar', 'HXUI', 'tTimers', 'balloon', 'FancyTrusts', 'equipmon', 'fps', 'enternity', 'distance', 'instantchat', 'macrofix', 'quicksets', 'recast', 'invmon']
-  },
-  {
-    name: 'Party & Endgame',
-    desc: 'Party list, skillchains, treasure pool, buffs, and target info for group content',
-    addons: ['LuAshitacast', 'tHotBar', 'XivParty', 'chains', 'TreasurePool', 'HitPoints', 'tTimers', 'balloon', 'enternity', 'statustimers', 'recast', 'quicksets', 'distance', 'instantchat', 'macrofix', 'chatmon', 'tparty']
-  },
-  {
-    name: 'Crafting & Utility',
-    desc: 'Crafting tracker, item search, loot management, AH tools, and logging',
-    addons: ['craftmon', 'itemwatch', 'equipmon', 'fps', 'logs', 'timestamp', 'balloon', 'enternity', 'instantah', 'instantchat', 'invmon', 'ahcolors', 'ahgo', 'macrofix', 'clock']
-  },
-  {
-    name: 'Controller Player',
-    desc: 'Gamepad-friendly crossbar with FFXIV-style HUD overlays and QoL',
-    addons: ['tCrossBar', 'LuAshitacast', 'HXUI', 'tTimers', 'balloon', 'FancyTrusts', 'equipmon', 'fps', 'enternity', 'recast', 'distance', 'instantchat', 'macrofix', 'quicksets']
-  }
-];
-
 const ADDON_HELP = {
   aspect:        { commands: ['/aspect'], usage: 'Set custom aspect ratio. /aspect to toggle or /aspect <width> <height> to set a specific ratio.' },
   autojoin:      { commands: ['/autojoin'], usage: 'Auto-accept party invites. /autojoin on|off to toggle, /autojoin whitelist <name> to add trusted players.' },
@@ -216,6 +193,9 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
   const [checkMsg, setCheckMsg] = useState('');
   const [importMsg, setImportMsg] = useState(null); // { success: bool, text: string }
   const [showCaptainModal, setShowCaptainModal] = useState(false);
+  // Which category tile is open. null = none open (just the tile grid). Clicking a
+  // tile opens its addons below; clicking it again closes. Search overrides this.
+  const [selectedCat, setSelectedCat] = useState(null);
 
   const handleImportAddon = async () => {
     if (!config?.ashitaPath) return;
@@ -440,6 +420,11 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
       loadAddons();
       setInstallMsg({ addonName: addon.name, success: true, text: result.message });
       setTimeout(() => setInstallMsg(prev => prev?.addonName === addon.name ? null : prev), 3000);
+    } else {
+      // Don't swallow the failure — otherwise a locked-file uninstall (game still
+      // running) looks like the addon "refuses to die" with no explanation.
+      setInstallMsg({ addonName: addon.name, success: false, text: result.error || 'Uninstall failed.' });
+      setTimeout(() => setInstallMsg(prev => prev?.addonName === addon.name ? null : prev), 8000);
     }
   };
 
@@ -709,15 +694,6 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
 
   return (
     <div className="addons-tab">
-      <div className="addons-update-bar">
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={handleCheckUpdates}
-          disabled={checkingUpdates}
-        >
-          {checkingUpdates ? 'Checking...' : checkMsg || 'Check for Addon Updates'}
-        </button>
-      </div>
       <div className="panel addons-toolbar">
         <div className="addons-toolbar-row">
           <div className="addons-toolbar-left">
@@ -751,6 +727,14 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
           </div>
         </div>
         <div className="addons-toolbar-actions">
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={handleCheckUpdates}
+            disabled={checkingUpdates}
+            title="Check all installed community addons against GitHub for newer versions"
+          >
+            {checkingUpdates ? '◌ Checking...' : (checkMsg || '⟳ Check Updates')}
+          </button>
           <button className="btn btn-primary btn-sm" onClick={handleImportAddon}>+ Import</button>
           <button className="btn btn-primary btn-sm" onClick={loadAddons}>↻ Refresh</button>
           <button className="btn btn-primary btn-sm" onClick={installAllCommunity} disabled={batchInstalling}>
@@ -850,31 +834,14 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
           <div className="addons-welcome-text">
             <h3 className="cinzel addon-welcome-title">No addons enabled yet</h3>
             <p className="addon-welcome-desc">
-              Pick a Quick Setup Bundle below to get started — it will install and enable a curated set of addons for your playstyle. You can always customize later.
+              Open a category below to browse and enable addons, or build a Custom Bundle to install and enable a set of your own in one click.
             </p>
           </div>
         </div>
       )}
 
       <div className="addons-bundles">
-        <div className="section-header">Quick Setup Bundles</div>
         <div className="addons-bundles-grid">
-          {ADDON_BUNDLES.map(bundle => (
-            <div key={bundle.name} className="addon-bundle-card panel">
-              <h4 className="cinzel addon-bundle-title">{bundle.name}</h4>
-              <p className="addon-bundle-desc">{bundle.desc}</p>
-              <div className="addon-bundle-addons-list">
-                {bundle.addons.join(', ')}
-              </div>
-              <button
-                className="btn btn-primary btn-sm addon-bundle-btn"
-                onClick={() => setPendingBundle(bundle)}
-                disabled={batchInstalling || !config.activeProfile}
-              >
-                {batchInstalling ? '◌ Installing...' : 'Apply Bundle'}
-              </button>
-            </div>
-          ))}
           {customBundles.map((bundle, idx) => (
             <div key={`custom-${idx}`} className="addon-bundle-card addon-bundle-custom panel">
               <div className="addon-custom-bundle-header">
@@ -948,34 +915,60 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
       )}
 
       {showBundleEditor && (
-        <Modal onClose={() => setShowBundleEditor(false)} ariaLabel="Bundle Editor">
+        <Modal onClose={() => setShowBundleEditor(false)} ariaLabel="Bundle Editor" zIndex={1100}>
           <div className="bundle-editor panel">
-            <h3 className="cinzel addon-modal-title">
-              {editingBundle !== null ? 'Edit Bundle' : 'Create Custom Bundle'}
-            </h3>
-            <input
-              type="text"
-              value={bundleName}
-              onChange={e => setBundleName(e.target.value)}
-              placeholder="Bundle name..."
-              className="bundle-editor-name"
-            />
-            <div className="bundle-editor-list">
-              {ADDON_CATALOGUE.map(addon => (
-                <label key={addon.name} className={`bundle-editor-item ${bundleAddons.includes(addon.name) ? 'selected' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={bundleAddons.includes(addon.name)}
-                    onChange={() => toggleBundleAddon(addon.name)}
-                  />
-                  <span className="bundle-editor-addon-name">{addon.name}</span>
-                  <span className={`addon-category-tag addon-category-tag-sm`}>{addon.category}</span>
-                </label>
-              ))}
+            <div className="bundle-editor-header">
+              <div>
+                <h3 className="cinzel bundle-editor-title">
+                  {editingBundle !== null ? 'Edit Custom Bundle' : 'Create Custom Bundle'}
+                </h3>
+                <p className="bundle-editor-subtitle">
+                  Pick the addons to include. Applying the bundle later installs any that are missing and turns them all on for your active profile.
+                </p>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowBundleEditor(false)}>✕</button>
             </div>
+
+            <div className="bundle-editor-body">
+              <input
+                type="text"
+                value={bundleName}
+                onChange={e => setBundleName(e.target.value)}
+                placeholder="Bundle name…"
+                className="bundle-editor-name"
+              />
+              <div className="bundle-editor-list">
+                {[...new Set(ADDON_CATALOGUE.map(a => a.category))].map(cat => (
+                  <div key={cat} className="bundle-editor-group">
+                    <div className="bundle-editor-group-title">{cat}</div>
+                    <div className="bundle-editor-grid">
+                      {ADDON_CATALOGUE.filter(a => a.category === cat).map(addon => {
+                        const checked = bundleAddons.includes(addon.name);
+                        return (
+                          <button
+                            type="button"
+                            key={addon.name}
+                            className={`bundle-editor-item ${checked ? 'selected' : ''}`}
+                            onClick={() => toggleBundleAddon(addon.name)}
+                            aria-pressed={checked}
+                          >
+                            <div className="bundle-editor-item-head">
+                              <span className="bundle-editor-addon-name">{addon.name}</span>
+                              <span className="bundle-editor-check">{checked ? '✓' : ''}</span>
+                            </div>
+                            <p className="bundle-editor-item-desc">{addon.description}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="bundle-editor-footer">
-              <span className="addon-editor-count">{bundleAddons.length} addons selected</span>
-              <div className="addon-editor-buttons">
+              <span className="bundle-editor-count">{bundleAddons.length} addon{bundleAddons.length !== 1 ? 's' : ''} selected</span>
+              <div className="bundle-editor-actions">
                 <button className="btn btn-ghost btn-sm" onClick={() => setShowBundleEditor(false)}>Cancel</button>
                 <button
                   className="btn btn-primary btn-sm"
@@ -1030,11 +1023,33 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
       )}
 
       <div className="addons-grouped">
-        {[...new Set(filtered.map(a => a.category))].map(cat => (
-          <div key={cat} className="addons-category-group">
-            <div className="addons-category-header cinzel">{cat}</div>
-            <div className="addons-grid">
-              {filtered.filter(a => a.category === cat).map(addon => {
+        <div className="addons-category-tiles">
+          {[...new Set(filtered.map(a => a.category))].map(cat => {
+            const catAddons = filtered.filter(a => a.category === cat);
+            const installedN = catAddons.filter(a => installedAddons.includes((a.installAs || a.name).toLowerCase())).length;
+            const activeN = catAddons.filter(a => enabledAddons.includes((a.installAs || a.name).toLowerCase())).length;
+            const active = selectedCat === cat;
+            // While searching, force every matching category open so results stay visible.
+            const isOpen = search.trim().length > 0 || active;
+            return (
+              <React.Fragment key={cat}>
+              <button
+                type="button"
+                className={`addon-category-tile ${active ? 'active' : ''}`}
+                onClick={() => setSelectedCat(active ? null : cat)}
+                aria-expanded={active}
+              >
+                <span className="addon-category-tile-name cinzel">{cat}</span>
+                <span className="addon-category-tile-meta">
+                  <span className="addon-tip addon-count-pill" data-tip="Addons curated in this category">{catAddons.length} addon{catAddons.length !== 1 ? 's' : ''}</span>
+                  {installedN ? <span className="addon-tip addon-count-pill" data-tip="Present on disk and loadable by Ashita">{installedN} installed</span> : null}
+                  <span className="addon-tip addon-count-pill" data-tip="Enabled in your active profile's script">{activeN} active</span>
+                </span>
+              </button>
+              {isOpen && (
+                <div className="addons-category-expansion">
+                  <div className="addons-grid">
+                    {catAddons.map(addon => {
                 const scriptName = (addon.installAs || addon.name).toLowerCase();
                 const isEnabled = enabledAddons.includes(scriptName);
                 const isInstalled = installedAddons.includes(scriptName);
@@ -1109,10 +1124,14 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
                     </div>
                   </div>
                 );
-              })}
-            </div>
-          </div>
-        ))}
+                    })}
+                  </div>
+                </div>
+              )}
+              </React.Fragment>
+            );
+          })}
+        </div>
       </div>
 
       {unlistedInstalled.length > 0 && (
@@ -1144,9 +1163,6 @@ function AddonsTab({ config, updateConfig, onCheckAddonUpdates }) {
         </div>
       )}
 
-      <div className="addons-credit">
-        Recommended addons &amp; plugins curated with thanks to <strong>Graves</strong> from LevelDownFFXI.
-      </div>
     </div>
   );
 }

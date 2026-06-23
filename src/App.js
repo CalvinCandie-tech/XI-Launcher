@@ -17,6 +17,7 @@ import UpdateModal from './components/UpdateModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import Modal from './components/Modal';
 import { ADDON_CATALOGUE } from './tabs/AddonsTab';
+import MissingAddonsModal from './components/MissingAddonsModal';
 
 // Both catalogues need to be queried wherever a name might map to either a
 // /addon load entry or a /load entry (update check, missing-on-launch warning).
@@ -635,129 +636,15 @@ function App() {
         />
       )}
       {launchWarning && (
-        <Modal onClose={() => setLaunchWarning(null)} ariaLabel="Missing addons and plugins">
-          <div className="launch-warning-modal panel">
-            <h3 className="cinzel modal-title">Missing Addons / Plugins</h3>
-            <p className="modal-desc">
-              The following are enabled in your script but not found on disk. They will cause errors at startup.
-              Resolve each item or launch anyway.
-            </p>
-            <div className="launch-warning-list">
-              {launchWarning.missing.map(m => {
-                const catalogueEntry = COMBINED_CATALOGUE.find(a =>
-                  (a.installAs || a.name).toLowerCase() === m.name.toLowerCase() ||
-                  a.name.toLowerCase() === m.name.toLowerCase()
-                );
-                const canInstall = catalogueEntry && catalogueEntry.repo;
-                return (
-                  <div key={m.name} className="launch-warning-item">
-                    <div className="launch-warning-item-info">
-                      <span className="mono text-bright">{m.name}</span>
-                      <span className={`pill pill-xs ${m.type === 'plugin' ? 'pill-teal' : 'pill-gold'}`}>{m.type}</span>
-                    </div>
-                    <div className="launch-warning-item-actions">
-                      {m.status === 'installing' && (
-                        <span className="launch-status launch-status-teal">Installing...</span>
-                      )}
-                      {m.status === 'installed' && (
-                        <span className="launch-status launch-status-green">Installed</span>
-                      )}
-                      {m.status === 'removed' && (
-                        <span className="launch-status launch-status-dim">Removed from script</span>
-                      )}
-                      {m.status === 'error' && (
-                        <span className="launch-status launch-status-red">Failed</span>
-                      )}
-                      {!m.status && (
-                        <>
-                          {!canInstall && catalogueEntry && !catalogueEntry.repo && (
-                            <span className="launch-status launch-status-dim" title="Built-in Ashita addon — reinstall or update Ashita to restore it">Built-in (reinstall Ashita)</span>
-                          )}
-                          {canInstall && (
-                            <button className="btn btn-ghost btn-xs" onClick={async () => {
-                              setLaunchWarning(prev => ({
-                                ...prev,
-                                missing: prev.missing.map(x => x.name === m.name ? { ...x, status: 'installing' } : x)
-                              }));
-                              try {
-                                const result = await api.installAddon(
-                                  config.ashitaPath,
-                                  catalogueEntry.installAs || catalogueEntry.name,
-                                  catalogueEntry.repo,
-                                  catalogueEntry.subdir,
-                                  catalogueEntry.useRelease,
-                                  catalogueEntry.releaseFolder,
-                                  catalogueEntry.isPlugin,
-                                  catalogueEntry.ashitaRoot
-                                );
-                                setLaunchWarning(prev => ({
-                                  ...prev,
-                                  missing: prev.missing.map(x => x.name === m.name ? { ...x, status: result.success ? 'installed' : 'error' } : x)
-                                }));
-                              } catch {
-                                setLaunchWarning(prev => ({
-                                  ...prev,
-                                  missing: prev.missing.map(x => x.name === m.name ? { ...x, status: 'error' } : x)
-                                }));
-                              }
-                            }}>
-                              Install
-                            </button>
-                          )}
-                          <button className="btn btn-ghost btn-xs" onClick={async () => {
-                            try {
-                              const profile = await api.readProfile(config.ashitaPath, config.activeProfile);
-                              if (!profile?.exists) return;
-                              let scriptName = 'default.txt';
-                              for (const line of profile.content.split('\n')) {
-                                const match = line.match(/^\s*script\s*=\s*(.+)/i);
-                                if (match && match[1].trim()) { scriptName = match[1].trim(); break; }
-                              }
-                              const scriptPath = config.ashitaPath + '\\scripts\\' + scriptName;
-                              const scriptResult = await api.readFile(scriptPath);
-                              if (scriptResult?.content) {
-                                const lines = scriptResult.content.split('\n');
-                                const filtered = lines.filter(l => {
-                                  const trimmed = l.trim().toLowerCase();
-                                  if (m.type === 'addon') return trimmed !== '/addon load ' + m.name.toLowerCase();
-                                  return trimmed !== '/load ' + m.name.toLowerCase();
-                                });
-                                await api.writeFile(scriptPath, filtered.join('\n'));
-                              }
-                              setLaunchWarning(prev => ({
-                                ...prev,
-                                missing: prev.missing.map(x => x.name === m.name ? { ...x, status: 'removed' } : x)
-                              }));
-                            } catch {
-                              setLaunchWarning(prev => ({
-                                ...prev,
-                                missing: prev.missing.map(x => x.name === m.name ? { ...x, status: 'error' } : x)
-                              }));
-                            }
-                          }}>
-                            Remove from Script
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setLaunchWarning(null)}>Cancel</button>
-              {launchWarning.missing.every(m => m.status === 'installed' || m.status === 'removed') ? (
-                <button className="btn btn-primary" onClick={() => { const xi = launchWarning.useXiloader; setLaunchWarning(null); doLaunch(xi); }}>
-                  Launch
-                </button>
-              ) : (
-                <button className="btn btn-primary" onClick={() => { const xi = launchWarning.useXiloader; setLaunchWarning(null); doLaunch(xi); }}>
-                  Launch Anyway
-                </button>
-              )}
-            </div>
-          </div>
-        </Modal>
+        <MissingAddonsModal
+          missing={launchWarning.missing}
+          ashitaPath={config.ashitaPath}
+          activeProfile={config.activeProfile}
+          catalogue={COMBINED_CATALOGUE}
+          useXiloader={launchWarning.useXiloader}
+          onClose={() => setLaunchWarning(null)}
+          onLaunch={(xi) => doLaunch(xi)}
+        />
       )}
       {dirtyConfirm && (
         <Modal onClose={() => setDirtyConfirm(null)} ariaLabel="Unsaved changes">

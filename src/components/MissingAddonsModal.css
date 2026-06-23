@@ -1,0 +1,142 @@
+.missing-modal {
+  width: min(720px, 94vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.missing-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.missing-modal-title {
+  margin: 0;
+  color: var(--gold);
+  font-size: 19px;
+}
+
+.missing-modal-subtitle {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  max-width: 540px;
+}
+
+.missing-modal-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.missing-modal-count {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--gold);
+  line-height: 1;
+}
+
+.missing-modal-count-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.missing-modal-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.missing-modal-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.missing-modal-list {
+  overflow-y: auto;
+  padding: 10px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.missing-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-deepest, #0a0c10);
+  transition: opacity 0.15s ease;
+}
+
+.missing-item.resolved {
+  opacity: 0.55;
+}
+
+.missing-item-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.missing-toggle {
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.missing-item-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-bright, #f2e6cf);
+}
+
+.missing-item-source {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.missing-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.missing-status {
+  font-size: 12px;
+  font-weight: 600;
+}
+.missing-status-teal  { color: var(--teal); }
+.missing-status-green { color: #5fd07a; }
+.missing-status-red   { color: #e0656a; }
+.missing-status-dim   { color: var(--text-secondary); }
+
+.missing-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--border);
+}
+
+.btn.btn-xs {
+  padding: 3px 9px;
+  font-size: 11px;
+}

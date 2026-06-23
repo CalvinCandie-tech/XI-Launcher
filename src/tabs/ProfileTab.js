@@ -3,6 +3,7 @@ import './ProfileTab.css';
 import { DEFAULT_PROFILE_INI } from '../utils/profileTemplates';
 import ScriptEditorTab from './ScriptEditorTab';
 import Modal from '../components/Modal';
+import RegistryEditor from '../components/RegistryEditor';
 
 const api = window.xiAPI;
 
@@ -16,6 +17,7 @@ function ProfileTab({ config, updateConfig }) {
   const [newProfileName, setNewProfileName] = useState('');
   const [newProfileType, setNewProfileType] = useState('private');
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [showRegistry, setShowRegistry] = useState(false);
   const [autoDetectMsg, setAutoDetectMsg] = useState(null);
   const [autoDetecting, setAutoDetecting] = useState(false);
   const [buildTools, setBuildTools] = useState(null);
@@ -519,6 +521,7 @@ function ProfileTab({ config, updateConfig }) {
                   <button className="btn btn-ghost btn-sm" onClick={() => cloneProfile(selectedProfile)} title="Clone this profile">⧉ Clone</button>
                   <button className="btn btn-ghost btn-sm" onClick={() => exportProfile(selectedProfile)} title="Export as .xiprofile">↑ Export</button>
                   <button className="btn btn-ghost btn-sm" onClick={openProfileFolder}>Open Folder</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setShowRegistry(true)} title="Edit FFXI graphics & client settings with a friendly form">⚙ Graphics</button>
                   {isEditing ? (
                     <>
                       <button className="btn btn-primary btn-sm" onClick={saveEdit}>Save</button>
@@ -539,6 +542,18 @@ function ProfileTab({ config, updateConfig }) {
                 readOnly={!isEditing}
                 spellCheck={false}
               />
+              {showRegistry && (
+                <RegistryEditor
+                  iniContent={isEditing ? editContent : profileContent}
+                  onClose={() => setShowRegistry(false)}
+                  onSave={async (newContent) => {
+                    await api.saveProfile(config.ashitaPath, selectedProfile, newContent);
+                    setProfileContent(newContent);
+                    if (isEditing) setEditContent(newContent);
+                    setShowRegistry(false);
+                  }}
+                />
+              )}
             </>
           ) : (
             <div className="profile-editor-empty">

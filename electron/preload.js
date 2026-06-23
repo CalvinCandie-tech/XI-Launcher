@@ -185,6 +185,7 @@ contextBridge.exposeInMainWorld('xiAPI', {
   installAddon: (ashitaPath, addonName, repo, subdir, useRelease, releaseFolder, isPlugin, ashitaRoot) => ipcRenderer.invoke('install-addon', ashitaPath, addonName, repo, subdir, useRelease, releaseFolder, isPlugin, ashitaRoot),
   uninstallAddon: (ashitaPath, addonName, isPlugin, ashitaRoot) => ipcRenderer.invoke('uninstall-addon', ashitaPath, addonName, isPlugin, ashitaRoot),
   copyDir: (src, dest) => ipcRenderer.invoke('copy-dir', src, dest),
+  restoreBundledItem: (type, name) => ipcRenderer.invoke('restore-bundled-item', type, name),
   onAddonProgress: (callback) => {
     const handler = (_, addonName, percent, detail) => callback(addonName, percent, detail);
     ipcRenderer.on('addon-progress', handler);
