@@ -33,7 +33,15 @@ const api = window.xiAPI;
 function App() {
   const [config, setConfig] = useState(null);
   const [activeTab, setActiveTab] = useState('home');
+  // Tabs are mounted on first visit and kept mounted (hidden) afterwards, so an
+  // in-flight download's progress UI + event listeners survive tab switches
+  // instead of being torn down by a remount.
+  const [mountedTabs, setMountedTabs] = useState(() => new Set(['home']));
   const [isLaunching, setIsLaunching] = useState(false);
+  // Synchronous guard against double-launch: React state (isLaunching) doesn't
+  // update until after the pre-launch IO window, so a fast second click would
+  // otherwise spawn a second game instance. A ref flips immediately.
+  const launchInFlightRef = useRef(false);
   const [launchLog, setLaunchLog] = useState('');
   const [updateInfo, setUpdateInfo] = useState(null);
   const [showWizard, setShowWizard] = useState(false);
@@ -54,6 +62,7 @@ function App() {
   useEffect(() => {
     if (!api) return;
     api.storeGetAll().then(async (data) => {
+     try {
       // Auto-detect paths that aren't set yet
       const updates = {};
 
@@ -166,8 +175,22 @@ function App() {
           api.saveProfileSettings(merged.activeProfile, snapshot);
         }
       }
+     } catch (bootErr) {
+       // A failed probe/migration must never leave config null — that dead-ends the
+       // app on the "Loading..." screen forever. Degrade to the stored config as-is.
+       console.error('Boot init failed; using stored config as-is:', bootErr);
+       setConfig(prev => prev || data || {});
+     }
+    }).catch((err) => {
+      console.error('Failed to load stored config:', err);
+      setConfig(prev => prev || {});
     });
   }, []);
+
+  // Remember every tab that's been opened so it stays mounted after we leave it.
+  useEffect(() => {
+    setMountedTabs(prev => prev.has(activeTab) ? prev : new Set(prev).add(activeTab));
+  }, [activeTab]);
 
   // Load profiles list
   useEffect(() => {
@@ -180,7 +203,7 @@ function App() {
     if (!api?.checkForUpdates) return;
     api.checkForUpdates().then(info => {
       if (info && !info.upToDate && !info.skipped && info.latest) setUpdateInfo(info);
-    });
+    }).catch((err) => console.error('Update check failed:', err));
   }, []);
 
   const handleManualUpdateCheck = async () => {
@@ -460,6 +483,8 @@ function App() {
   }, []);
 
   const doLaunch = useCallback(async (useXiloader) => {
+    if (launchInFlightRef.current) return;
+    launchInFlightRef.current = true;
     fadeOutMusic();
     setIsLaunching(true);
     setLaunchLog('');
@@ -504,12 +529,18 @@ function App() {
     } catch (e) {
       setLaunchLog(`Error: ${e.message}`);
     } finally {
+      launchInFlightRef.current = false;
       setTimeout(() => setIsLaunching(false), 2000);
     }
   }, [config, updateConfig, fadeOutMusic]);
 
   const handleLaunch = useCallback(async (useXiloader) => {
     if (!api || !config) return;
+    // Cover the async pre-launch check window too — otherwise a second click here
+    // (before doLaunch sets isLaunching) starts a duplicate check + launch.
+    if (launchInFlightRef.current) return;
+    launchInFlightRef.current = true;
+    setIsLaunching(true);
     // Pre-launch check: verify enabled addons/plugins exist on disk
     try {
       const profile = await api.readProfile(config.ashitaPath, config.activeProfile);
@@ -537,6 +568,10 @@ function App() {
           }
           await Promise.all(checks);
           if (missing.length > 0) {
+            // Hand off to the modal, which will re-initiate via doLaunch — release
+            // the guard so that path isn't blocked.
+            launchInFlightRef.current = false;
+            setIsLaunching(false);
             setLaunchWarning({ missing, useXiloader });
             return;
           }
@@ -575,6 +610,9 @@ function App() {
     } catch (e) {
       console.error('Pre-launch check failed:', e);
     }
+    // Release synchronously immediately before doLaunch re-acquires it (no await
+    // between, so no second click can slip through this gap).
+    launchInFlightRef.current = false;
     doLaunch(useXiloader);
   }, [config, doLaunch]);
 
@@ -592,9 +630,9 @@ function App() {
     return <div className="loading">Loading...</div>;
   }
 
-  const renderTab = () => {
+  const renderTabContent = (tab) => {
     const tabProps = { config, updateConfig };
-    switch (activeTab) {
+    switch (tab) {
       case 'home': return <HomeTab {...tabProps} onNavigate={guardedSetActiveTab} onLaunch={handleLaunch} isLaunching={isLaunching} launchLog={launchLog} updateInfo={updateInfo} onManualUpdateCheck={handleManualUpdateCheck} onSkipVersion={handleSkipVersion} onDismissUpdate={handleDismissUpdate} onShowWizard={() => setShowWizard(true)} />;
       case 'profiles': return <ProfileTab {...tabProps} />;
       case 'addons': return <AddonsTab {...tabProps} onCheckAddonUpdates={handleManualAddonCheck} />;
@@ -675,9 +713,15 @@ function App() {
           musicLoop={musicLoop}
           onToggleLoop={toggleLoop}
         />
-        <main className="app-content" key={activeTab}>
+        <main className="app-content">
           <ErrorBoundary>
-            {renderTab()}
+            {[...mountedTabs].map(tab => (
+              // display:contents keeps the active tab's layout byte-identical to a
+              // direct child; display:none fully hides (and pauses) inactive tabs.
+              <div key={tab} style={{ display: activeTab === tab ? 'contents' : 'none' }}>
+                {renderTabContent(tab)}
+              </div>
+            ))}
           </ErrorBoundary>
         </main>
       </div>

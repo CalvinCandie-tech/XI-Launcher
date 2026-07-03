@@ -20,7 +20,9 @@
   --teal-rgb: 58, 184, 200;
   --gold-rgb: 200, 146, 42;
   --red: #c84040;
+  --red-hover: #d05050;
   --green: #48b868;
+  --amber: #d8a038;
 
   /* Standardised active / glow tokens */
   --active-bg: linear-gradient(135deg, rgba(58, 184, 200, 0.08), rgba(200, 146, 42, 0.08));
@@ -43,6 +45,8 @@
   --red-border: rgba(200, 64, 64, 0.3);
   --green-alpha: rgba(72, 184, 104, 0.08);
   --green-border: rgba(72, 184, 104, 0.2);
+  --amber-alpha: rgba(216, 160, 56, 0.08);
+  --amber-border: rgba(216, 160, 56, 0.3);
 
   /* Font families */
   --font-display: 'Cinzel', serif;
@@ -101,15 +105,15 @@ body::before {
 
 /* Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 14px;
 }
 ::-webkit-scrollbar-track {
   background: var(--bg-deepest);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--border-bright);
-  border-radius: 4px;
-  border: 2px solid var(--bg-deepest);
+  border-radius: 7px;
+  border: 3px solid var(--bg-deepest);
 }
 ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, var(--teal), var(--gold-bright));

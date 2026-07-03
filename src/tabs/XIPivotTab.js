@@ -9,6 +9,7 @@ const HD_PACKS = [
   { name: 'NextGames HD', desc: 'HD texture packs by Amelila & RadialArcana — zones, monsters, furniture, trusts, mounts, weapons, and more. Two versions available: "NextHD" for high-quality replacements, or "NextLore" for a lore-friendly upscale closer to vanilla. Download your preferred version from Nexus Mods.', url: 'https://www.nexusmods.com/finalfantasy11/mods/12?tab=files', manual: true, conflictGroup: 'hdtextures' },
   { name: 'XiView', desc: 'HD UI overhaul — status icons, fonts, GUI elements, and menu skins for modern resolutions', url: 'https://github.com/KenshiDRK/XiView', variants: ['Normal', 'Widescreen'], conflictGroup: 'ui' },
   { name: 'XITide', desc: 'HD font and icon replacement — damage numbers, gil values, status icons, linkshell icons, and more (by Ashenbubs)', url: 'https://github.com/CalvinCandie-tech/XITide-Font-Pack', releaseAsset: true, conflictGroup: 'ui' },
+  { name: 'MoonIcon HD', desc: 'Enhanced typeface, compass, weather icons, and city emblems (by Gdragoon91). Nexus-hosted only — no GitHub release, download from Nexus Mods.', url: 'https://www.nexusmods.com/finalfantasy11/mods/37?tab=files', manual: true, conflictGroup: 'ui' },
   { name: 'FFXI-Vision', desc: 'Cleaner, more detailed zone maps — an overhaul of the stock in-game map files', url: 'https://github.com/Drauku/FFXI-Vision', conflictGroup: 'maps' },
   { name: 'Remapster', desc: 'Hand-drawn zone maps with fine detail — cities, dungeons, open world. Available in 1024 or 2048 resolution', url: 'https://github.com/AkadenTK/remapster_maps', releaseAsset: true, resolutions: true, conflictGroup: 'maps' },
   { name: 'LoFi-FFXI', desc: 'Lo-fi music replacements for FFXI — chill, relaxed versions of in-game BGM tracks', url: 'https://github.com/CatsAndBoats/LoFi-FFXI', conflictGroup: 'music' },
@@ -170,15 +171,20 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
   const installXIPivot = async () => {
     setInstallStatus('installing');
     setInstallMsg('Downloading XIPivot from GitHub...');
-    const result = await api.installXIPivot(config.ashitaPath);
-    if (result.success) {
-      setInstallStatus('done');
-      setInstallMsg(result.message);
-      await ensurePivotInProfile();
-      await load(); // Refresh status
-    } else {
+    try {
+      const result = await api.installXIPivot(config.ashitaPath);
+      if (result.success) {
+        setInstallStatus('done');
+        setInstallMsg(result.message);
+        await ensurePivotInProfile();
+        await load(); // Refresh status
+      } else {
+        setInstallStatus('error');
+        setInstallMsg(result.error);
+      }
+    } catch (e) {
       setInstallStatus('error');
-      setInstallMsg(result.error);
+      setInstallMsg(`Install failed: ${e.message}`);
     }
   };
 
@@ -293,7 +299,9 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
     setCustomModStatus(prev => ({ ...prev, [placeholderName]: { status: 'installing', message: 'Fetching mod info...', percent: 0 } }));
     setCustomModUrl('');
 
-    const info = await api.fetchGithubRepoInfo(url);
+    let info;
+    try {
+    info = await api.fetchGithubRepoInfo(url);
     if (!info.success) {
       // Remove placeholder and show error
       setCustomMods(prev => prev.filter(m => m.name !== placeholderName));
@@ -343,6 +351,12 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
     } else {
       setCustomModStatus(prev => ({ ...prev, [info.name]: { status: 'error', message: result.error, percent: 0 } }));
     }
+    } catch (e) {
+      // Never leave a card stuck on "installing" — surface the failure.
+      const stuckName = info?.name || placeholderName;
+      setCustomModStatus(prev => ({ ...prev, [stuckName]: { status: 'error', message: e.message || 'Install failed', percent: 0 } }));
+      setCustomModError(e.message || 'Install failed');
+    }
   };
 
   const removeCustomMod = async (modName) => {
@@ -364,6 +378,7 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
   };
 
   const [hdPackStatus, setHdPackStatus] = useState({}); // { packName: { status, message, percent } }
+  const [packFolderStatus, setPackFolderStatus] = useState({}); // { packName: bool } — extracted on disk?
   const [remapsterRes, setRemapsterRes] = useState(() => config.remapsterRes || '2048');
   const [xiviewVariant, setXiviewVariant] = useState(() => config.xiviewVariant || 'Widescreen');
 
@@ -375,11 +390,37 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
     return cleanup;
   }, []);
 
+  // A pack's DATs folder existing on disk means it's installed and can be toggled
+  // on/off in the profile without re-downloading. This is separate from whether the
+  // overlay is currently active (in profileOverlays). Re-checked after any install.
+  const refreshPackFolders = useCallback(async () => {
+    if (!api || !config.ashitaPath) return;
+    // Check the real pivot root (where packs actually extract) so the "installed"
+    // signal is accurate even when the user has a custom DATs root.
+    const datsRoot = pivotConfig.rootPath || (config.ashitaPath + '\\polplugins\\DATs');
+    const results = await Promise.all(
+      HD_PACKS.map(p => api.pathExists(datsRoot + '\\' + p.name).then(exists => [p.name, exists]))
+    );
+    setPackFolderStatus(Object.fromEntries(results));
+  }, [config.ashitaPath, pivotConfig.rootPath]);
+
+  useEffect(() => { refreshPackFolders(); }, [refreshPackFolders]);
+
+  // Toggle a pack's overlay in the active profile without touching the extracted
+  // files — deactivate removes it from the overlay list, activate adds it back.
+  const deactivatePack = async (pack) => {
+    await saveProfileOverlays(prev => prev.filter(n => n !== pack.name));
+  };
+  const activatePack = async (pack) => {
+    await saveProfileOverlays(prev => prev.includes(pack.name) ? prev : [...prev, pack.name]);
+  };
+
   const installHDPack = async (pack) => {
     if (hdPackStatus[pack.name]?.status === 'installing') return;
     setHdPackStatus(prev => ({ ...prev, [pack.name]: { status: 'installing', message: 'Starting download...', percent: 0 } }));
 
     let result;
+    try {
     if (pack.manual) {
       result = await api.installHDPackManual(config.ashitaPath, pack.name);
     } else if (pack.releaseAsset) {
@@ -387,6 +428,10 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
     } else {
       const subdir = pack.variants ? (pack.name === 'XiView' ? xiviewVariant : null) : null;
       result = await api.installHDPack(config.ashitaPath, pack.name, pack.url, subdir);
+    }
+    } catch (e) {
+      setHdPackStatus(prev => ({ ...prev, [pack.name]: { status: 'error', message: `Install failed: ${e.message}`, percent: 0 } }));
+      return;
     }
     if (result.success) {
       // Compute new overlays against the current list at resolve time, not the
@@ -407,6 +452,7 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
         return next;
       });
       setHdPackStatus(prev => ({ ...prev, [pack.name]: { status: 'done', message: result.message, percent: 100 } }));
+      refreshPackFolders();
     } else {
       setHdPackStatus(prev => ({ ...prev, [pack.name]: { status: 'error', message: result.error, percent: 0 } }));
     }
@@ -427,6 +473,37 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
   const cancelHDPack = async (packName) => {
     await api.hdpackCancel(packName);
     setHdPackStatus(prev => ({ ...prev, [packName]: { status: 'error', message: 'Download cancelled.', percent: 0, paused: false } }));
+  };
+
+  // Renders the primary action for a pack card. Once a pack is extracted on disk it
+  // becomes an Activate/Deactivate toggle (never deletes files) plus a Reinstall.
+  const renderPackAction = (pack) => {
+    const ps = hdPackStatus[pack.name];
+    const isInstalling = ps?.status === 'installing';
+    const added = profileOverlays.includes(pack.name);
+    // Authoritative: the pack's files must actually be on disk before it can be
+    // activated/deactivated. An in-session "done" status is not enough.
+    const installedOnDisk = packFolderStatus[pack.name] === true;
+    if (isInstalling) {
+      return <button className="btn btn-ghost btn-sm" disabled>◌ Installing...</button>;
+    }
+    if (!installedOnDisk) {
+      return (
+        <button className={`btn ${pack.manual ? 'btn-teal' : 'btn-primary'} btn-sm`} onClick={() => installHDPack(pack)}>
+          {pack.manual ? 'Select Downloaded Zip' : 'Install'}
+        </button>
+      );
+    }
+    return (
+      <>
+        {added ? (
+          <button className="btn btn-ghost btn-sm" onClick={() => deactivatePack(pack)}>✓ Active — Deactivate</button>
+        ) : (
+          <button className="btn btn-teal btn-sm" onClick={() => activatePack(pack)}>Activate</button>
+        )}
+        <button className="btn btn-ghost btn-xs hdpack-link" title="Re-extract the files" onClick={() => installHDPack(pack)}>↻ Reinstall</button>
+      </>
+    );
   };
 
   return (
@@ -620,7 +697,6 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
               {groupPacks.map(pack => {
                 const added = profileOverlays.includes(pack.name);
                 const ps = hdPackStatus[pack.name];
-                const isInstalling = ps?.status === 'installing';
                 return (
                   <div key={pack.name} className={`hdpack-card-inline ${added ? 'hdpack-selected' : ''}`}>
                     <div className="hdpack-card-body">
@@ -643,24 +719,12 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
                           </div>
                           <div className="hdpack-step">
                             <span className="hdpack-step-num">2</span>
-                            <button
-                              className={`btn ${added ? 'btn-ghost' : 'btn-teal'} btn-sm`}
-                              onClick={() => installHDPack(pack)}
-                              disabled={isInstalling || (added && ps?.status === 'done')}
-                            >
-                              {isInstalling ? '◌ Installing...' : added && ps?.status === 'done' ? '✓ Active' : added ? '↻ Reinstall' : 'Select Downloaded Zip'}
-                            </button>
+                            {renderPackAction(pack)}
                           </div>
                         </div>
                       ) : (
                         <div className="hdpack-actions">
-                          <button
-                            className={`btn ${added ? 'btn-ghost' : 'btn-primary'} btn-sm`}
-                            onClick={() => installHDPack(pack)}
-                            disabled={isInstalling || (added && ps?.status === 'done')}
-                          >
-                            {isInstalling ? '◌ Installing...' : added && ps?.status === 'done' ? '✓ Active' : added ? '↻ Reinstall' : 'Install'}
-                          </button>
+                          {renderPackAction(pack)}
                           {pack.url && (
                             <button className="btn btn-ghost btn-sm hdpack-link" onClick={() => api.openExternal(pack.url)}>GitHub ↗</button>
                           )}
@@ -707,7 +771,6 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
         {HD_PACKS.filter(p => !p.conflictGroup).map(pack => {
           const added = profileOverlays.includes(pack.name);
           const ps = hdPackStatus[pack.name];
-          const isInstalling = ps?.status === 'installing';
           return (
             <div key={pack.name} className={`panel hdpack-card ${added ? 'hdpack-installed' : ''}`}>
               <h3 className="hdpack-name cinzel">{pack.name}</h3>
@@ -730,24 +793,12 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
                   </div>
                   <div className="hdpack-step">
                     <span className="hdpack-step-num">2</span>
-                    <button
-                      className={`btn ${added ? 'btn-ghost' : 'btn-teal'} btn-sm`}
-                      onClick={() => installHDPack(pack)}
-                      disabled={isInstalling || (added && ps?.status === 'done')}
-                    >
-                      {isInstalling ? '◌ Installing...' : added && ps?.status === 'done' ? '✓ Installed' : added ? '↻ Reinstall' : 'Select Downloaded Zip'}
-                    </button>
+                    {renderPackAction(pack)}
                   </div>
                 </div>
               ) : (
                 <div className="hdpack-actions">
-                  <button
-                    className={`btn ${added ? 'btn-ghost' : 'btn-primary'} btn-sm`}
-                    onClick={() => installHDPack(pack)}
-                    disabled={isInstalling || (added && ps?.status === 'done')}
-                  >
-                    {isInstalling ? '◌ Installing...' : added && ps?.status === 'done' ? '✓ Installed' : added ? '↻ Reinstall' : 'Install'}
-                  </button>
+                  {renderPackAction(pack)}
                   {pack.url && (
                     <button className="btn btn-ghost btn-sm hdpack-link" onClick={() => api.openExternal(pack.url)}>GitHub ↗</button>
                   )}

@@ -680,9 +680,9 @@
   flex: 1;
   min-width: 0;
   padding: 6px 10px;
-  background: var(--bg-elevated, #1a1a2e);
-  border: 1px solid var(--border, #2a2a4a);
-  color: var(--text, #e0e0e0);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   border-radius: 4px;
   font-size: 0.85rem;
 }
@@ -691,16 +691,16 @@
   flex: 1;
   min-width: 0;
   padding: 6px 10px;
-  background: var(--bg-elevated, #1a1a2e);
-  border: 1px solid var(--border, #2a2a4a);
-  color: var(--text, #e0e0e0);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   border-radius: 4px;
   font-family: monospace;
   font-size: 0.85rem;
 }
 
 .gp-guid-input::placeholder {
-  color: var(--text-muted, #666);
+  color: var(--text-dim);
 }
 
 .settings-subnav {

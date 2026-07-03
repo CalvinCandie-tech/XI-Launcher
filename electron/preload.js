@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('xiAPI', {
 
   // xiloader download
   downloadXiloader: (destPath) => ipcRenderer.invoke('download-xiloader', destPath),
+  checkXiloaderUpdate: (destPath) => ipcRenderer.invoke('check-xiloader-update', destPath),
   onXiloaderDownloadProgress: (callback) => {
     const handler = (_, percent, detail) => callback(percent, detail);
     ipcRenderer.on('xiloader-download-progress', handler);
@@ -140,6 +141,11 @@ contextBridge.exposeInMainWorld('xiAPI', {
   setMinimizeToTray: (enabled) => ipcRenderer.invoke('set-minimize-to-tray', enabled),
   getMinimizeToTray: () => ipcRenderer.invoke('get-minimize-to-tray'),
   getStartupWarnings: () => ipcRenderer.invoke('get-startup-warnings'),
+  onStartupWarning: (callback) => {
+    const handler = (_, msg) => callback(msg);
+    ipcRenderer.on('startup-warning', handler);
+    return () => ipcRenderer.removeListener('startup-warning', handler);
+  },
 
   // Server status
   checkServerStatus: (host, port) => ipcRenderer.invoke('check-server-status', host, port),

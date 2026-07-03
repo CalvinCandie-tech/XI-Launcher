@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const https = require('https');
-const { execSync, spawn, exec } = require('child_process');
+const { execSync, spawn, exec, execFile } = require('child_process');
 const yauzl = require('yauzl');
 
 /**
@@ -134,8 +134,14 @@ function validateRegValue(value) {
   if (isNaN(num)) throw new Error(`Invalid registry value: ${value}`);
   return num;
 }
+// Escape a value for interpolation inside a PowerShell SINGLE-quoted string.
+// In single-quoted PS strings every character is literal EXCEPT the single quote,
+// which is escaped by doubling it. Escaping backtick/$/" here is wrong — those are
+// already literal in single quotes, so escaping them injects stray characters into
+// the value (e.g. it silently corrupted login passwords containing $ or `).
+// Every call site wraps the result in single quotes: '${escapePSString(x)}'.
 function escapePSString(str) {
-  return String(str).replace(/'/g, "''").replace(/`/g, '``').replace(/\$/g, '`$').replace(/"/g, '`"');
+  return String(str).replace(/'/g, "''");
 }
 // Merge [section, key, value] updates into an existing INI file content,
 // preserving comments, ordering, unknown keys, and unknown sections. Missing
@@ -225,6 +231,37 @@ function runPowerShell(psCmd, timeoutMs = 15000) {
     child.on('error', (err) => { clearTimeout(timer); reject(err); });
     child.on('close', (code) => {
       clearTimeout(timer);
+      if (timedOut) return reject(new Error(`PowerShell timed out after ${timeoutMs}ms`));
+      if (code !== 0) return reject(new Error(stderr.trim() || `PowerShell exited with code ${code}`));
+      resolve();
+    });
+  });
+}
+
+// Run a PowerShell script from a temp .ps1 file instead of via -Command. Used for
+// game launch: passing the login password through -Command would expose it on
+// powershell.exe's command line (visible to any process via WMI). A -File script
+// keeps arguments out of the process argv; the temp file is deleted immediately after.
+function runPowerShellFile(scriptBody, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    let tmpScript;
+    try {
+      tmpScript = path.join(os.tmpdir(), `xi-launch-${Date.now()}-${process.pid}.ps1`);
+      // UTF-8 BOM so PowerShell reads non-ASCII (e.g. accented passwords) correctly.
+      fs.writeFileSync(tmpScript, '﻿' + scriptBody, 'utf8');
+    } catch (e) { return reject(e); }
+    const cleanup = () => { try { fs.unlinkSync(tmpScript); } catch {} };
+    const child = spawn('powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', tmpScript],
+      { shell: false, windowsHide: true });
+    let stderr = '';
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; try { child.kill(); } catch {} }, timeoutMs);
+    child.stderr?.on('data', (c) => { stderr += c.toString(); });
+    child.on('error', (err) => { clearTimeout(timer); cleanup(); reject(err); });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      cleanup();
       if (timedOut) return reject(new Error(`PowerShell timed out after ${timeoutMs}ms`));
       if (code !== 0) return reject(new Error(stderr.trim() || `PowerShell exited with code ${code}`));
       resolve();
@@ -348,6 +385,95 @@ function checkDiskSpace(targetPath) {
     ).toString().trim();
     return parseInt(stdout, 10) || 0;
   } catch { return Infinity; } // If check fails, don't block the operation
+}
+
+// Fetch the latest xiloader release metadata (tag + exe download URL) from GitHub.
+async function fetchLatestXiloaderRelease() {
+  const release = await githubGet('/repos/LandSandBoat/xiloader/releases/latest');
+  const asset = release.assets?.find(a => a.name.toLowerCase().includes('xiloader') && a.name.endsWith('.exe'));
+  if (!asset) throw new Error('No pre-built xiloader release found on GitHub.');
+  return { tag: release.tag_name, downloadUrl: asset.browser_download_url };
+}
+
+// One download routine for every file download in the app. Follows redirects
+// (301/302/307/308), streams with backpressure, and — critically — aborts if the
+// connection stalls (no bytes for stallMs) so a dead socket can't hang an install
+// forever. Retries with backoff. onProgress(receivedBytes, totalBytes) lets each
+// caller format its own percent/label. Replaces ~10 near-identical copies that had
+// divergent redirect handling and mostly no timeout at all.
+function downloadFile(url, destPath, { headers = {}, stallMs = 60000, onProgress, label = 'Download' } = {}) {
+  const reqHeaders = { 'User-Agent': 'XI-Launcher', ...headers };
+  return retryAsync(() => new Promise((resolve, reject) => {
+    let settled = false;
+    const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
+    const okResolve = done(resolve);
+    const okReject = done(reject);
+    const download = (u, redirects = 0) => {
+      if (redirects > 10) return okReject(new Error('Too many redirects.'));
+      const req = https.get(u, { headers: reqHeaders }, (res) => {
+        const sc = res.statusCode;
+        if (sc === 301 || sc === 302 || sc === 307 || sc === 308) {
+          if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
+          res.resume();
+          return download(res.headers.location, redirects + 1);
+        }
+        if (sc !== 200) { res.resume(); return okReject(new Error(`Download failed: HTTP ${sc}`)); }
+        const total = parseInt(res.headers['content-length'] || '0', 10);
+        let received = 0;
+        const file = fs.createWriteStream(destPath);
+        let stallTimer = setTimeout(() => req.destroy(new Error('Download stalled — no data received.')), stallMs);
+        const bumpStall = () => {
+          clearTimeout(stallTimer);
+          stallTimer = setTimeout(() => req.destroy(new Error('Download stalled — no data received.')), stallMs);
+        };
+        file.on('error', (err) => { clearTimeout(stallTimer); try { res.destroy(); } catch {} okReject(err); });
+        res.on('data', (chunk) => {
+          received += chunk.length;
+          bumpStall();
+          if (!file.write(chunk)) res.pause();
+          if (onProgress) onProgress(received, total);
+        });
+        file.on('drain', () => res.resume());
+        res.on('end', () => { clearTimeout(stallTimer); file.end(); file.on('finish', okResolve); });
+        res.on('error', (err) => { clearTimeout(stallTimer); file.destroy(); okReject(err); });
+      });
+      req.on('error', okReject);
+    };
+    download(url);
+  }), { label });
+}
+
+// Download a xiloader.exe build to destExe, reporting progress via sendProgress(percent, detail).
+async function downloadXiloaderExe(downloadUrl, destExe, sendProgress) {
+  await downloadFile(downloadUrl, destExe, {
+    label: 'xiloader download',
+    onProgress: (received, total) => {
+      if (total > 0) sendProgress(10 + Math.round((received / total) * 85), `Downloading... ${(received / 1024).toFixed(0)} KB`);
+    }
+  });
+}
+
+// Read the embedded FileVersion (e.g. "2.1.2.0") from an installed xiloader.exe via its
+// PE version resource. Returns null if the file has none or can't be read.
+function getLocalXiloaderVersion(exePath) {
+  try {
+    const out = execSync(
+      `powershell -NoProfile -Command "(Get-Item '${exePath.replace(/'/g, "''")}').VersionInfo.FileVersionRaw.ToString()"`,
+      { timeout: 5000, encoding: 'utf-8' }
+    ).trim();
+    return /^\d+(\.\d+){1,3}$/.test(out) ? out : null;
+  } catch { return null; }
+}
+
+// True if dotted version string `a` is numerically older than `b` (e.g. "2.1.2.0" < "2.1.2" is false — equal).
+function isOlderVersion(a, b) {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = pa[i] || 0, nb = pb[i] || 0;
+    if (na !== nb) return na < nb;
+  }
+  return false;
 }
 
 // Parse a URL to determine mod download type
@@ -514,7 +640,10 @@ function registerCSP() {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob:",
-    "media-src 'self' file: blob:",
+    // data: is required — music tracks are served to the <audio> element as
+    // base64 data: URIs via get-music-path. Without it the CSP silently blocks
+    // playback in the packaged app (dev skips CSP, which is why it only broke here).
+    "media-src 'self' file: blob: data:",
     "connect-src 'self' https://api.github.com https://github.com https://objects.githubusercontent.com",
     "object-src 'none'",
     "base-uri 'self'",
@@ -706,7 +835,48 @@ async function deployBundledXiloader() {
   }
 }
 
+// Strip the Mark-of-the-Web Zone.Identifier from runtime exe/dll files so Windows
+// doesn't block Ashita/xiloader. Runs async in the background — NEVER on the startup
+// critical path — with a generous timeout. A slow scan on an HDD is normal and must
+// not be reported as a failure; only a genuine (non-timeout) error is surfaced, and
+// -ErrorAction SilentlyContinue means even most permission issues won't throw.
+async function unblockRuntimeFiles() {
+  try {
+    if (!fs.existsSync(runtimeDir)) return;
+    const psCmd = `Get-ChildItem -LiteralPath '${runtimeDir.replace(/'/g, "''")}' -Recurse -Include '*.exe','*.dll' -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue`;
+    await runPowerShell(psCmd, 120000);
+  } catch (e) {
+    if (/timed out/i.test(e.message || '')) {
+      console.warn('Runtime unblock scan timed out (non-fatal):', e.message);
+      return;
+    }
+    console.error('Failed to unblock runtime files:', e.message);
+    const msg = 'Could not unblock some downloaded files — if Ashita or xiloader fails to start, right-click XI Launcher and choose "Run as administrator".';
+    startupWarnings.push(msg);
+    try { mainWindow?.webContents?.send('startup-warning', msg); } catch {}
+  }
+}
+
+// Single-instance lock. A second launch — most dangerously during a self-update
+// that robocopy-mirrors over appRoot — must not run a parallel process. The second
+// instance surrenders and focuses the existing window instead.
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
 app.whenReady().then(async () => {
+  // A second instance that lost the lock is quitting — don't initialize anything.
+  if (!hasSingleInstanceLock) return;
+
   // Ensure runtime directory exists
   if (!fs.existsSync(runtimeDir)) fs.mkdirSync(runtimeDir, { recursive: true });
 
@@ -736,13 +906,10 @@ app.whenReady().then(async () => {
     console.error('Temp cleanup failed:', e.message);
   }
 
-  // Remove Mark of the Web Zone.Identifier from exe/dll files so Windows doesn't block them
-  try {
-    execSync(`powershell -Command "Get-ChildItem -Path '${runtimeDir.replace(/'/g, "''")}' -Recurse -Include '*.exe','*.dll' | Unblock-File"`, { timeout: 15000 });
-  } catch (e) {
-    console.error('Failed to unblock runtime files:', e.message);
-    startupWarnings.push('Could not unblock downloaded files — Windows may block Ashita or xiloader from running. Try right-clicking XI Launcher and selecting "Run as administrator".');
-  }
+  // Mark-of-the-Web unblock runs in the background AFTER the window is shown
+  // (see unblockRuntimeFiles() call below) — it used to run synchronously here,
+  // freezing the whole UI for up to 15s while it walked tens of thousands of
+  // runtime files, and then falsely warning "run as administrator" on timeout.
 
   await initStore();
 
@@ -772,6 +939,10 @@ app.whenReady().then(async () => {
   createTray();
   minimizeToTray = store.get('minimizeToTray') || false;
   registerIPC();
+
+  // Fire-and-forget: strip Mark-of-the-Web from runtime binaries without blocking
+  // startup. Warnings (rare now) are pushed to startupWarnings and also sent live.
+  unblockRuntimeFiles();
 });
 
 app.on('window-all-closed', () => app.quit());
@@ -813,7 +984,17 @@ function registerIPC() {
     }
     return store.get(key);
   });
+  const ALLOWLIST_PATH_KEYS = new Set(['ashitaPath', 'ffxiPath', 'xiloaderPath']);
   ipcMain.handle('store-set', (_, key, value) => {
+    // isAllowedPath() builds its allowed roots from these three keys, so a bogus
+    // value here would widen the filesystem trust boundary for every file handler.
+    // Reject non-strings, embedded quotes/newlines, and bare drive roots (e.g. "C:\")
+    // which are far too broad to be a real install path.
+    if (ALLOWLIST_PATH_KEYS.has(key)) {
+      if (typeof value !== 'string' || /["\r\n]/.test(value)) return false;
+      const trimmed = value.trim();
+      if (trimmed && /^[a-zA-Z]:[\\/]?$/.test(trimmed)) return false;
+    }
     if (key === 'loginPass' && safeStorage.isEncryptionAvailable()) {
       store.set(key, safeStorage.encryptString(String(value)).toString('base64'));
       store.set('loginPassEncrypted', true);
@@ -1068,26 +1249,7 @@ function registerIPC() {
         }
       } catch {}
 
-      const data = await new Promise((resolve, reject) => {
-        const req = https.get(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
-          headers: { 'User-Agent': 'XI-Launcher', Accept: 'application/json' }
-        }, (res) => {
-          if (res.statusCode && res.statusCode >= 400) {
-            res.resume();
-            return reject(new Error(`GitHub API returned status ${res.statusCode}`));
-          }
-          let body = '';
-          res.on('data', c => body += c);
-          res.on('end', () => {
-            try { resolve(JSON.parse(body)); } catch (e) { reject(new Error('Invalid JSON from GitHub API')); }
-          });
-          res.on('error', reject);
-        });
-        req.on('error', reject);
-        req.setTimeout(10000, () => {
-          req.destroy(new Error('GitHub API request timed out'));
-        });
-      });
+      const data = await githubGet(`/repos/${UPDATE_REPO}/releases/latest`, { force: true });
 
       if (data && typeof data.message === 'string' && /rate limit/i.test(data.message)) {
         return { upToDate: true, current: APP_VERSION, error: 'GitHub rate limit reached — try again later' };
@@ -1169,56 +1331,20 @@ function registerIPC() {
       const tmpFile = path.join(tmpDir, 'update.zip');
 
       // Download the zip
-      await retryAsync(() => new Promise((resolve, reject) => {
-        let settled = false;
-        const finish = (fn, ...args) => { if (settled) return; settled = true; fn(...args); };
-
-        const download = (url, redirectsLeft = 5) => {
-          const req = https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
-            if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) {
-              res.resume();
-              if (redirectsLeft <= 0) return finish(reject, new Error('Too many redirects'));
-              if (!res.headers.location) return finish(reject, new Error('Redirect without location header'));
-              return download(res.headers.location, redirectsLeft - 1);
-            }
-            if (res.statusCode !== 200) {
-              res.resume();
-              return finish(reject, new Error(`Download failed with status ${res.statusCode}`));
-            }
-            const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
-            let receivedBytes = 0;
-            const file = fs.createWriteStream(tmpFile);
-            file.on('error', (err) => {
-              res.destroy();
-              finish(reject, err);
-            });
-            res.on('data', (chunk) => {
-              receivedBytes += chunk.length;
-              if (!file.write(chunk)) res.pause();
-              const mb = (receivedBytes / 1048576).toFixed(1);
-              if (totalBytes > 0) {
-                const pct = Math.round((receivedBytes / totalBytes) * 70);
-                const totalMb = (totalBytes / 1048576).toFixed(1);
-                sendProgress(pct, `Downloading... ${mb} / ${totalMb} MB`);
-              } else {
-                sendProgress(Math.min(70, Math.round(receivedBytes / 50000)), `Downloading... ${mb} MB`);
-              }
-            });
-            file.on('drain', () => res.resume());
-            res.on('end', () => {
-              file.end();
-              file.once('finish', () => finish(resolve));
-            });
-            res.on('error', (err) => { file.destroy(); finish(reject, err); });
-          });
-          req.on('error', (err) => finish(reject, err));
-          // Abort if no bytes arrive for 30s (stalled connection)
-          req.setTimeout(30000, () => {
-            req.destroy(new Error('Download stalled — no data for 30 seconds'));
-          });
-        };
-        download(downloadUrl);
-      }), { label: 'Update download' });
+      await downloadFile(downloadUrl, tmpFile, {
+        label: 'Update download',
+        stallMs: 30000,
+        onProgress: (received, total) => {
+          const mb = (received / 1048576).toFixed(1);
+          if (total > 0) {
+            const pct = Math.round((received / total) * 70);
+            const totalMb = (total / 1048576).toFixed(1);
+            sendProgress(pct, `Downloading... ${mb} / ${totalMb} MB`);
+          } else {
+            sendProgress(Math.min(70, Math.round(received / 50000)), `Downloading... ${mb} MB`);
+          }
+        }
+      });
 
       // Disable Electron's asar interception so we can extract/copy app.asar as a raw file
       const prevNoAsar = process.noAsar;
@@ -1586,46 +1712,19 @@ function registerIPC() {
 
       sendProgress(5, 'Downloading Ashita v4 from GitHub...');
 
-      await retryAsync(() => new Promise((resolve, reject) => {
-        let settled = false;
-        const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
-        const okResolve = done(resolve);
-        const okReject = done(reject);
-        const download = (url, redirects = 0) => {
-          if (redirects > 10) return okReject(new Error('Too many redirects.'));
-          const req = https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
-            if (res.statusCode === 302 || res.statusCode === 301) {
-              if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
-              res.resume();
-              return download(res.headers.location, redirects + 1);
-            }
-            if (res.statusCode !== 200) {
-              return okReject(new Error(`Download failed with status ${res.statusCode}`));
-            }
-            const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
-            let receivedBytes = 0;
-            const file = fs.createWriteStream(tmpZip);
-            file.on('error', (err) => { try { res.destroy(); } catch {} okReject(err); });
-            res.on('data', (chunk) => {
-              receivedBytes += chunk.length;
-              if (!file.write(chunk)) res.pause();
-              const mb = (receivedBytes / 1048576).toFixed(1);
-              if (totalBytes > 0) {
-                const pct = 5 + Math.round((receivedBytes / totalBytes) * 50);
-                const totalMb = (totalBytes / 1048576).toFixed(1);
-                sendProgress(pct, `Downloading... ${mb} / ${totalMb} MB`);
-              } else {
-                sendProgress(Math.min(50, 5 + Math.round(receivedBytes / 50000)), `Downloading... ${mb} MB`);
-              }
-            });
-            file.on('drain', () => res.resume());
-            res.on('end', () => { file.end(); file.on('finish', okResolve); });
-            res.on('error', (err) => { file.destroy(); okReject(err); });
-          });
-          req.on('error', okReject);
-        };
-        download(zipUrl);
-      }), { label: 'Ashita v4 download' });
+      await downloadFile(zipUrl, tmpZip, {
+        label: 'Ashita v4 download',
+        onProgress: (received, total) => {
+          const mb = (received / 1048576).toFixed(1);
+          if (total > 0) {
+            const pct = 5 + Math.round((received / total) * 50);
+            const totalMb = (total / 1048576).toFixed(1);
+            sendProgress(pct, `Downloading... ${mb} / ${totalMb} MB`);
+          } else {
+            sendProgress(Math.min(50, 5 + Math.round(received / 50000)), `Downloading... ${mb} MB`);
+          }
+        }
+      });
 
       sendProgress(60, 'Extracting...');
 
@@ -1728,14 +1827,20 @@ function registerIPC() {
         if (!fs.existsSync(exe)) return { error: `xiloader.exe not found at ${opts.xiloaderPath}. You can download it from the Profiles tab or place xiloader.exe in that folder manually.` };
         if (!opts.serverName) return { error: 'No server address set. Go to Profiles → Private Server Connection and enter your server hostname.' };
         const args = [];
-        if (opts.serverName) args.push('--server', opts.serverName);
-        if (opts.serverPort) args.push('--serverport', opts.serverPort);
-        if (opts.loginUser) args.push('--user', opts.loginUser);
-        if (opts.loginPass) args.push('--pass', opts.loginPass);
+        if (opts.serverName) args.push('--server', String(opts.serverName));
+        if (opts.serverPort) args.push('--serverport', String(opts.serverPort));
+        if (opts.loginUser) args.push('--user', String(opts.loginUser));
+        if (opts.loginPass) args.push('--pass', String(opts.loginPass));
         if (opts.hairpin) args.push('--hairpin');
-        const argStr = args.map(a => `'${escapePSString(a)}'`).join(',');
-        const psCmd = `Start-Process -FilePath '${escapePSString(exe)}' ${argStr ? `-ArgumentList ${argStr}` : ''} -WorkingDirectory '${escapePSString(opts.xiloaderPath)}' -Verb RunAs`;
-        await runPowerShell(psCmd, 15000);
+        const argList = args.map(a => `'${escapePSString(a)}'`).join(', ');
+        // Run from a temp .ps1 (not -Command) so the password never lands on
+        // powershell.exe's command line. Args go through a PS array literal so
+        // spaces/special chars can't break out of the single-quoted values.
+        const script = `$ErrorActionPreference = 'Stop'\n`
+          + `Start-Process -FilePath '${escapePSString(exe)}'`
+          + `${argList ? ` -ArgumentList @(${argList})` : ''}`
+          + ` -WorkingDirectory '${escapePSString(opts.xiloaderPath)}' -Verb RunAs\n`;
+        await runPowerShellFile(script, 15000);
         // Watch for game exit and notify renderer
         watchForGameExit('pol.exe', profileKey);
         return { success: true, message: 'xiloader launched' };
@@ -1747,11 +1852,12 @@ function registerIPC() {
         const profileIni = path.join(opts.ashitaPath, 'config', 'boot', `${opts.profileName}.ini`);
         if (!fs.existsSync(profileIni)) return { error: `Profile "${opts.profileName}" INI file not found. The profile may have been deleted. Select a different profile or create a new one.` };
         const iniName = `${opts.profileName}.ini`;
-        const argStr = iniName.includes(' ')
-          ? `-ArgumentList '""${escapePSString(iniName)}""'`
-          : `-ArgumentList '${escapePSString(iniName)}'`;
-        const psCmd = `Start-Process -FilePath '${escapePSString(exe)}' ${argStr} -WorkingDirectory '${escapePSString(opts.ashitaPath)}' -Verb RunAs`;
-        await runPowerShell(psCmd, 15000);
+        // Array literal handles a profile name with spaces — PowerShell quotes the
+        // element itself, so no manual double-quote wrapping is needed.
+        const script = `$ErrorActionPreference = 'Stop'\n`
+          + `Start-Process -FilePath '${escapePSString(exe)}' -ArgumentList @('${escapePSString(iniName)}')`
+          + ` -WorkingDirectory '${escapePSString(opts.ashitaPath)}' -Verb RunAs\n`;
+        await runPowerShellFile(script, 15000);
         // Watch for game exit and notify renderer
         watchForGameExit('pol.exe', profileKey);
         return { success: true, message: `Ashita launched with profile: ${opts.profileName}` };
@@ -1782,76 +1888,16 @@ function registerIPC() {
 
       sendProgress(5, 'Checking for latest xiloader release...');
 
-      // Try LandSandBoat releases first
-      const releaseUrl = 'https://api.github.com/repos/LandSandBoat/xiloader/releases/latest';
-      const getJson = (url, depth = 0) => new Promise((resolve, reject) => {
-        if (depth > 10) return reject(new Error('Too many redirects'));
-        https.get(url, { headers: { 'User-Agent': 'XI-Launcher', Accept: 'application/json' } }, (res) => {
-          if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) {
-            res.resume();
-            if (!res.headers.location) return reject(new Error('Redirect without Location header'));
-            return getJson(res.headers.location, depth + 1).then(resolve, reject);
-          }
-          if (res.statusCode && res.statusCode >= 400) {
-            res.resume();
-            return reject(new Error(`HTTP ${res.statusCode}`));
-          }
-          let data = '';
-          res.on('data', c => data += c);
-          res.on('end', () => {
-            try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
-          });
-          res.on('error', reject);
-        }).on('error', reject);
-      });
+      let release = null;
+      try { release = await fetchLatestXiloaderRelease(); } catch {}
 
-      let downloadUrl = null;
-      try {
-        const release = await getJson(releaseUrl);
-        if (release.assets) {
-          const asset = release.assets.find(a => a.name.toLowerCase().includes('xiloader') && a.name.endsWith('.exe'));
-          if (asset) downloadUrl = asset.browser_download_url;
-        }
-      } catch {}
-
-      if (!downloadUrl) {
+      if (!release) {
         // Fallback: build from source advice
         return { success: false, error: 'No pre-built xiloader release found on GitHub. Use the "Download & Build" option instead (requires Git + CMake + Visual Studio).' };
       }
 
       sendProgress(10, 'Downloading xiloader.exe...');
-
-      await retryAsync(() => new Promise((resolve, reject) => {
-        let settled = false;
-        const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
-        const okResolve = done(resolve);
-        const okReject = done(reject);
-        const download = (url, redirects = 0) => {
-          if (redirects > 10) return okReject(new Error('Too many redirects.'));
-          const req = https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
-            if (res.statusCode === 302 || res.statusCode === 301) {
-              if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
-              res.resume();
-              return download(res.headers.location, redirects + 1);
-            }
-            if (res.statusCode !== 200) return okReject(new Error(`Download failed: HTTP ${res.statusCode}`));
-            const total = parseInt(res.headers['content-length'] || '0', 10);
-            let received = 0;
-            const file = fs.createWriteStream(destExe);
-            file.on('error', (err) => { try { res.destroy(); } catch {} okReject(err); });
-            res.on('data', (chunk) => {
-              received += chunk.length;
-              if (!file.write(chunk)) res.pause();
-              if (total > 0) sendProgress(10 + Math.round((received / total) * 85), `Downloading... ${(received / 1024).toFixed(0)} KB`);
-            });
-            file.on('drain', () => res.resume());
-            res.on('end', () => { file.end(); file.on('finish', okResolve); });
-            res.on('error', (err) => { file.destroy(); okReject(err); });
-          });
-          req.on('error', okReject);
-        };
-        download(downloadUrl);
-      }), { label: 'xiloader download' });
+      await downloadXiloaderExe(release.downloadUrl, destExe, sendProgress);
 
       sendProgress(100, 'xiloader.exe downloaded successfully');
       store.set('xiloaderPath', targetDir);
@@ -1861,6 +1907,56 @@ function registerIPC() {
         return { success: false, error: 'Network error: Could not reach GitHub. Check your internet connection.' };
       }
       return { success: false, error: `Download failed: ${e.message}` };
+    }
+  });
+
+  // Check the installed xiloader against the latest GitHub release, downloading/overwriting
+  // automatically if it's outdated or missing. Only ever targets the launcher's default
+  // install (destDir), never a profile's pinned custom xiloader path.
+  ipcMain.handle('check-xiloader-update', async (_, destDir) => {
+    try {
+      const targetDir = destDir || defaultXiloaderPath;
+      const destExe = path.join(targetDir, 'xiloader.exe');
+      const installed = fs.existsSync(destExe);
+      const localVersion = installed ? getLocalXiloaderVersion(destExe) : null;
+
+      const sendProgress = (percent, detail) => {
+        try { mainWindow?.webContents?.send('xiloader-download-progress', percent, detail); } catch {}
+      };
+      sendProgress(5, 'Checking for latest xiloader release...');
+
+      let release;
+      try {
+        release = await fetchLatestXiloaderRelease();
+      } catch (e) {
+        return { success: false, error: friendlyError(e, 'Checking for xiloader updates') };
+      }
+      const latestVersion = (release.tag || '').replace(/^v/i, '');
+
+      if (installed && localVersion && !isOlderVersion(localVersion, latestVersion)) {
+        return { success: true, updated: false, upToDate: true, currentVersion: localVersion };
+      }
+
+      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+      sendProgress(10, installed ? 'Downloading update...' : 'Downloading xiloader.exe...');
+      await downloadXiloaderExe(release.downloadUrl, destExe, sendProgress);
+      sendProgress(100, 'xiloader.exe updated successfully');
+      store.set('xiloaderPath', targetDir);
+
+      return {
+        success: true,
+        updated: true,
+        previousVersion: localVersion,
+        newVersion: latestVersion,
+        message: installed
+          ? `xiloader updated${localVersion ? ` from v${localVersion} ` : ' '}to v${latestVersion}`
+          : `xiloader.exe (v${latestVersion}) downloaded to ${targetDir}`
+      };
+    } catch (e) {
+      if (e.message.includes('ENOTFOUND') || e.message.includes('getaddrinfo')) {
+        return { success: false, error: 'Network error: Could not reach GitHub. Check your internet connection.' };
+      }
+      return { success: false, error: `Update check failed: ${e.message}` };
     }
   });
 
@@ -1899,36 +1995,42 @@ function registerIPC() {
   });
 
   ipcMain.handle('build-xiloader', async (_, repoDir) => {
-    return new Promise((resolve) => {
-      const buildDir = path.join(repoDir, 'build');
-      if (!fs.existsSync(buildDir)) fs.mkdirSync(buildDir, { recursive: true });
+    if (typeof repoDir !== 'string' || !isAllowedPath(repoDir)) {
+      return { success: false, error: 'Build directory is outside the allowed FFXI/Ashita/xiloader folders.' };
+    }
+    const buildDir = path.join(repoDir, 'build');
+    if (!fs.existsSync(buildDir)) fs.mkdirSync(buildDir, { recursive: true });
 
-      const cmds = [
-        `cmake -S "${repoDir}" -B "${buildDir}" -A Win32`,
-        `cmake --build "${buildDir}" --config Release`
-      ].join(' && ');
-
-      const child = exec(cmds, { timeout: 300000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
-        if (err) {
-          return resolve({ success: false, error: err.message, stdout, stderr });
-        }
-        // Find the built exe
-        const possiblePaths = [
-          path.join(buildDir, 'Release', 'xiloader.exe'),
-          path.join(buildDir, 'xiloader.exe'),
-          path.join(buildDir, 'Debug', 'xiloader.exe')
-        ];
-        const exePath = possiblePaths.find(p => fs.existsSync(p));
-        if (exePath) {
-          return resolve({ success: true, exePath, message: 'Build successful' });
-        }
-        return resolve({ success: false, error: 'Build completed but xiloader.exe not found', stdout, stderr });
+    // execFile with an args array — no shell, so a path with quotes/&& can't inject.
+    const runCmake = (args) => new Promise((resolve, reject) => {
+      execFile('cmake', args, { timeout: 300000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+        if (err) { err.stdout = stdout; err.stderr = stderr; return reject(err); }
+        resolve({ stdout, stderr });
       });
     });
+
+    try {
+      await runCmake(['-S', repoDir, '-B', buildDir, '-A', 'Win32']);
+      await runCmake(['--build', buildDir, '--config', 'Release']);
+    } catch (err) {
+      return { success: false, error: err.message, stdout: err.stdout, stderr: err.stderr };
+    }
+
+    const possiblePaths = [
+      path.join(buildDir, 'Release', 'xiloader.exe'),
+      path.join(buildDir, 'xiloader.exe'),
+      path.join(buildDir, 'Debug', 'xiloader.exe')
+    ];
+    const exePath = possiblePaths.find(p => fs.existsSync(p));
+    if (exePath) return { success: true, exePath, message: 'Build successful' };
+    return { success: false, error: 'Build completed but xiloader.exe not found' };
   });
 
   ipcMain.handle('copy-xiloader', async (_, srcExe, destDir) => {
     try {
+      if (typeof srcExe !== 'string' || typeof destDir !== 'string' || !isAllowedPath(srcExe) || !isAllowedPath(destDir)) {
+        return { success: false, error: 'Source or destination is outside the allowed FFXI/Ashita/xiloader folders.' };
+      }
       if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
       const destPath = path.join(destDir, 'xiloader.exe');
       fs.copyFileSync(srcExe, destPath);
@@ -2263,21 +2365,7 @@ function registerIPC() {
 
     try {
       // Step 1: Fetch latest release info from GitHub API
-      const releaseData = await new Promise((resolve, reject) => {
-        const options = {
-          hostname: 'api.github.com',
-          path: '/repos/HealsCodes/XIPivot/releases/latest',
-          headers: { 'User-Agent': 'XI-Launcher' }
-        };
-        https.get(options, (res) => {
-          let data = '';
-          res.on('data', (chunk) => data += chunk);
-          res.on('end', () => {
-            try { resolve(JSON.parse(data)); }
-            catch { reject(new Error('Failed to parse release data')); }
-          });
-        }).on('error', reject);
-      });
+      const releaseData = await githubGet('/repos/HealsCodes/XIPivot/releases/latest');
 
       // Step 2: Find the Ashita v4 ZIP asset
       const asset = releaseData.assets?.find(a =>
@@ -2289,33 +2377,7 @@ function registerIPC() {
 
       // Step 3: Download the ZIP to temp
       const tmpZip = path.join(os.tmpdir(), 'xipivot-latest.zip');
-      await retryAsync(() => new Promise((resolve, reject) => {
-        let settled = false;
-        const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
-        const okResolve = done(resolve);
-        const okReject = done(reject);
-        const download = (url, redirects = 0) => {
-          if (redirects > 10) return okReject(new Error('Too many redirects'));
-          https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
-            if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) {
-              res.resume();
-              if (!res.headers.location) return okReject(new Error('Redirect without Location header'));
-              return download(res.headers.location, redirects + 1);
-            }
-            if (res.statusCode !== 200) {
-              res.resume();
-              return okReject(new Error(`Download failed with status ${res.statusCode}`));
-            }
-            const file = fs.createWriteStream(tmpZip);
-            file.on('error', (err) => { try { res.destroy(); } catch {} okReject(err); });
-            res.on('data', (chunk) => { if (!file.write(chunk)) res.pause(); });
-            file.on('drain', () => res.resume());
-            res.on('end', () => { file.end(); file.on('finish', okResolve); });
-            res.on('error', (err) => { file.destroy(); okReject(err); });
-          }).on('error', okReject);
-        };
-        download(asset.browser_download_url);
-      }), { label: 'XIPivot download' });
+      await downloadFile(asset.browser_download_url, tmpZip, { label: 'XIPivot download' });
 
       // Step 4: Extract
       const tmpExtract = path.join(os.tmpdir(), 'xipivot-extract');
@@ -2358,20 +2420,7 @@ function registerIPC() {
       return { success: true, name: parsed.name, description: 'Custom DAT mod (direct download)', url };
     }
     try {
-      const data = await new Promise((resolve, reject) => {
-        https.get({
-          hostname: 'api.github.com',
-          path: `/repos/${parsed.owner}/${parsed.repo}`,
-          headers: { 'User-Agent': 'XI-Launcher' }
-        }, (res) => {
-          let body = '';
-          res.on('data', (chunk) => body += chunk);
-          res.on('end', () => {
-            try { resolve(JSON.parse(body)); }
-            catch { reject(new Error('Failed to parse GitHub response')); }
-          });
-        }).on('error', reject);
-      });
+      const data = await githubGet(`/repos/${parsed.owner}/${parsed.repo}`);
       if (data.message === 'Not Found') return { success: false, error: 'Repository not found on GitHub' };
       if (data.message && data.message.includes('rate limit')) return { success: false, error: 'GitHub rate limit reached — try again in a few minutes' };
       return { success: true, name: data.name || parsed.repo, description: data.description || '', url };
@@ -2405,20 +2454,7 @@ function registerIPC() {
 
       if (parsed.type === 'github-repo') {
         sendProgress(0, 'Fetching repo info from GitHub...');
-        const repoInfo = await new Promise((resolve, reject) => {
-          https.get({
-            hostname: 'api.github.com',
-            path: `/repos/${parsed.owner}/${parsed.repo}`,
-            headers: { 'User-Agent': 'XI-Launcher' }
-          }, (res) => {
-            let body = '';
-            res.on('data', (chunk) => body += chunk);
-            res.on('end', () => {
-              try { resolve(JSON.parse(body)); }
-              catch { reject(new Error('Failed to parse GitHub response')); }
-            });
-          }).on('error', reject);
-        });
+        const repoInfo = await githubGet(`/repos/${parsed.owner}/${parsed.repo}`);
         if (repoInfo.message === 'Not Found') return { success: false, error: 'Repository not found on GitHub' };
         if (repoInfo.message && repoInfo.message.includes('rate limit')) return { success: false, error: 'GitHub rate limit reached — try again in a few minutes' };
         const branch = repoInfo.default_branch || 'main';
@@ -2426,20 +2462,7 @@ function registerIPC() {
         estimatedSize = repoInfo.size ? repoInfo.size * 1024 : 0;
       } else if (parsed.type === 'github-release') {
         sendProgress(0, 'Fetching latest release from GitHub...');
-        const releaseData = await new Promise((resolve, reject) => {
-          https.get({
-            hostname: 'api.github.com',
-            path: `/repos/${parsed.owner}/${parsed.repo}/releases/latest`,
-            headers: { 'User-Agent': 'XI-Launcher' }
-          }, (res) => {
-            let body = '';
-            res.on('data', (chunk) => body += chunk);
-            res.on('end', () => {
-              try { resolve(JSON.parse(body)); }
-              catch { reject(new Error('Failed to parse GitHub response')); }
-            });
-          }).on('error', reject);
-        });
+        const releaseData = await githubGet(`/repos/${parsed.owner}/${parsed.repo}/releases/latest`);
         if (releaseData.message === 'Not Found') return { success: false, error: 'No releases found for this repository' };
         if (releaseData.message && releaseData.message.includes('rate limit')) return { success: false, error: 'GitHub rate limit reached — try again in a few minutes' };
         const zipAsset = (releaseData.assets || []).find(a => a.name.endsWith('.zip'));
@@ -2456,47 +2479,19 @@ function registerIPC() {
 
       // Download zip
       tmpZip = path.join(os.tmpdir(), `custom-mod-${modName}.zip`);
-      await new Promise((resolve, reject) => {
-        let settled = false;
-        const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
-        const okResolve = done(resolve);
-        const okReject = done(reject);
-        const download = (downloadUrl, redirects = 0) => {
-          if (redirects > 10) return okReject(new Error('Too many redirects.'));
-          const lib = downloadUrl.startsWith('https') ? https : require('http');
-          const req = lib.get(downloadUrl, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
-            if (res.statusCode === 302 || res.statusCode === 301) {
-              if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
-              res.resume();
-              return download(res.headers.location, redirects + 1);
-            }
-            if (res.statusCode !== 200) {
-              return okReject(new Error(`Download failed with status ${res.statusCode}`));
-            }
-            const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
-            const total = totalBytes > 0 ? totalBytes : estimatedSize;
-            let received = 0;
-            const file = fs.createWriteStream(tmpZip);
-            file.on('error', (err) => { try { res.destroy(); } catch {} okReject(err); });
-            res.on('data', (chunk) => {
-              received += chunk.length;
-              if (!file.write(chunk)) res.pause();
-              const mb = (received / 1048576).toFixed(1);
-              if (total > 0) {
-                const pct = Math.min(70, Math.round((received / total) * 70));
-                const totalMb = (total / 1048576).toFixed(1);
-                sendProgress(pct, `Downloading... ${mb} MB / ${totalMb} MB`);
-              } else {
-                sendProgress(Math.min(60, Math.round(received / 50000)), `Downloading... ${mb} MB`);
-              }
-            });
-            file.on('drain', () => res.resume());
-            res.on('end', () => { file.end(); file.on('finish', okResolve); });
-            res.on('error', (err) => { file.destroy(); okReject(err); });
-          });
-          req.on('error', okReject);
-        };
-        download(zipUrl);
+      await downloadFile(zipUrl, tmpZip, {
+        label: 'Custom mod download',
+        onProgress: (received, total) => {
+          const t = total > 0 ? total : estimatedSize;
+          const mb = (received / 1048576).toFixed(1);
+          if (t > 0) {
+            const pct = Math.min(70, Math.round((received / t) * 70));
+            const totalMb = (t / 1048576).toFixed(1);
+            sendProgress(pct, `Downloading... ${mb} MB / ${totalMb} MB`);
+          } else {
+            sendProgress(Math.min(60, Math.round(received / 50000)), `Downloading... ${mb} MB`);
+          }
+        }
       });
 
       // Extract
@@ -2566,6 +2561,9 @@ function registerIPC() {
   ipcMain.handle('check-laa', async (_, exePath) => {
     let fd;
     try {
+      if (typeof exePath !== 'string' || !isAllowedPath(exePath)) {
+        return { exists: false, patched: false, error: 'Path is outside the allowed FFXI/Ashita/xiloader folders.' };
+      }
       if (!fs.existsSync(exePath)) return { exists: false, patched: false };
       fd = fs.openSync(exePath, 'r');
       const buf2 = Buffer.alloc(2);
@@ -2605,6 +2603,9 @@ function registerIPC() {
   // LargeAddressAware — patch or unpatch exe
   ipcMain.handle('set-laa', async (_, exePath, enable) => {
     try {
+      if (typeof exePath !== 'string' || !isAllowedPath(exePath)) {
+        return { success: false, error: 'Refusing to modify a file outside the allowed FFXI/Ashita/xiloader folders.' };
+      }
       if (!fs.existsSync(exePath)) return { success: false, error: 'File not found: ' + exePath };
 
       // Helper: patch LAA flag in a buffer
@@ -2741,20 +2742,7 @@ function registerIPC() {
 
       // Query GitHub API for the default branch name
       const repoPath = repoUrl.replace('https://github.com/', '');
-      const repoInfo = await new Promise((resolve, reject) => {
-        https.get({
-          hostname: 'api.github.com',
-          path: `/repos/${repoPath}`,
-          headers: { 'User-Agent': 'XI-Launcher' }
-        }, (res) => {
-          let data = '';
-          res.on('data', (chunk) => data += chunk);
-          res.on('end', () => {
-            try { resolve(JSON.parse(data)); }
-            catch { reject(new Error('Failed to parse repo info')); }
-          });
-        }).on('error', reject);
-      });
+      const repoInfo = await githubGet(`/repos/${repoPath}`);
 
       if (repoInfo.message === 'Not Found') {
         return { success: false, error: `Repository ${repoPath} not found on GitHub.` };
@@ -3084,20 +3072,7 @@ function registerIPC() {
       sendProgress('download', 0, 'Fetching latest release...');
 
       // Get latest release from GitHub API
-      const releases = await new Promise((resolve, reject) => {
-        https.get({
-          hostname: 'api.github.com',
-          path: `/repos/${repoPath}/releases`,
-          headers: { 'User-Agent': 'XI-Launcher' }
-        }, (res) => {
-          let data = '';
-          res.on('data', (chunk) => data += chunk);
-          res.on('end', () => {
-            try { resolve(JSON.parse(data)); }
-            catch { reject(new Error('Failed to parse releases')); }
-          });
-        }).on('error', reject);
-      });
+      const releases = await githubGet(`/repos/${repoPath}/releases`);
 
       if (!Array.isArray(releases) || releases.length === 0) {
         return { success: false, error: 'No releases found for this repository.' };
@@ -3276,19 +3251,7 @@ function registerIPC() {
       sendProgress(0, 'Fetching latest release info...');
 
       // Query GitHub API for latest release
-      const releaseInfo = await new Promise((resolve, reject) => {
-        https.get('https://api.github.com/repos/dege-diosg/dgVoodoo2/releases/latest', {
-          headers: { 'User-Agent': 'XI-Launcher', 'Accept': 'application/vnd.github.v3+json' }
-        }, (res) => {
-          let data = '';
-          res.on('data', chunk => data += chunk);
-          res.on('end', () => {
-            if (res.statusCode !== 200) return reject(new Error(`GitHub API returned ${res.statusCode}`));
-            try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
-          });
-          res.on('error', reject);
-        }).on('error', reject);
-      });
+      const releaseInfo = await githubGet('/repos/dege-diosg/dgVoodoo2/releases/latest');
 
       // Find the main zip (not _dbg, _dev64, or API)
       const asset = releaseInfo.assets?.find(a =>
@@ -3306,46 +3269,19 @@ function registerIPC() {
       const tmpZip = path.join(os.tmpdir(), asset.name);
 
       // Download the zip
-      await retryAsync(() => new Promise((resolve, reject) => {
-        let settled = false;
-        const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
-        const okResolve = done(resolve);
-        const okReject = done(reject);
-        const download = (url, redirects = 0) => {
-          if (redirects > 10) return okReject(new Error('Too many redirects.'));
-          const req = https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
-            if (res.statusCode === 302 || res.statusCode === 301) {
-              if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
-              res.resume();
-              return download(res.headers.location, redirects + 1);
-            }
-            if (res.statusCode !== 200) {
-              return okReject(new Error(`Download failed with status ${res.statusCode}`));
-            }
-            const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
-            let receivedBytes = 0;
-            const file = fs.createWriteStream(tmpZip);
-            file.on('error', (err) => { try { res.destroy(); } catch {} okReject(err); });
-            res.on('data', (chunk) => {
-              receivedBytes += chunk.length;
-              if (!file.write(chunk)) res.pause();
-              const mb = (receivedBytes / 1048576).toFixed(1);
-              if (totalBytes > 0) {
-                const pct = 5 + Math.round((receivedBytes / totalBytes) * 60);
-                const totalMb = (totalBytes / 1048576).toFixed(1);
-                sendProgress(pct, `Downloading... ${mb} / ${totalMb} MB`);
-              } else {
-                sendProgress(Math.min(60, 5 + Math.round(receivedBytes / 50000)), `Downloading... ${mb} MB`);
-              }
-            });
-            file.on('drain', () => res.resume());
-            res.on('end', () => { file.end(); file.on('finish', okResolve); });
-            res.on('error', (err) => { file.destroy(); okReject(err); });
-          });
-          req.on('error', okReject);
-        };
-        download(asset.browser_download_url);
-      }), { label: 'dgVoodoo download' });
+      await downloadFile(asset.browser_download_url, tmpZip, {
+        label: 'dgVoodoo download',
+        onProgress: (received, total) => {
+          const mb = (received / 1048576).toFixed(1);
+          if (total > 0) {
+            const pct = 5 + Math.round((received / total) * 60);
+            const totalMb = (total / 1048576).toFixed(1);
+            sendProgress(pct, `Downloading... ${mb} / ${totalMb} MB`);
+          } else {
+            sendProgress(Math.min(60, 5 + Math.round(received / 50000)), `Downloading... ${mb} MB`);
+          }
+        }
+      });
 
       sendProgress(70, 'Extracting...');
 
@@ -3779,19 +3715,7 @@ function registerIPC() {
 
       sendProgress(0, 'Fetching latest release info...');
 
-      const releaseInfo = await new Promise((resolve, reject) => {
-        https.get('https://api.github.com/repos/CalvinCandie-tech/xi-launcher/releases/tags/reshade-v1.0', {
-          headers: { 'User-Agent': 'XI-Launcher', 'Accept': 'application/vnd.github.v3+json' }
-        }, (res) => {
-          let data = '';
-          res.on('data', chunk => data += chunk);
-          res.on('end', () => {
-            if (res.statusCode !== 200) return reject(new Error(`GitHub API returned ${res.statusCode}`));
-            try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
-          });
-          res.on('error', reject);
-        }).on('error', reject);
-      });
+      const releaseInfo = await githubGet('/repos/CalvinCandie-tech/xi-launcher/releases/tags/reshade-v1.0');
 
       const asset = releaseInfo.assets?.find(a => a.name === 'reshade-pack.zip');
       if (!asset) return { success: false, error: 'Could not find reshade-pack.zip in the release' };
@@ -3801,46 +3725,19 @@ function registerIPC() {
       if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
       const tmpFile = path.join(os.tmpdir(), asset.name);
 
-      await retryAsync(() => new Promise((resolve, reject) => {
-        let settled = false;
-        const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
-        const okResolve = done(resolve);
-        const okReject = done(reject);
-        const download = (url, redirects = 0) => {
-          if (redirects > 10) return okReject(new Error('Too many redirects.'));
-          const req = https.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
-            if (res.statusCode === 302 || res.statusCode === 301) {
-              if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
-              res.resume();
-              return download(res.headers.location, redirects + 1);
-            }
-            if (res.statusCode !== 200) {
-              return okReject(new Error(`Download failed with status ${res.statusCode}`));
-            }
-            const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
-            let receivedBytes = 0;
-            const file = fs.createWriteStream(tmpFile);
-            file.on('error', (err) => { try { res.destroy(); } catch {} okReject(err); });
-            res.on('data', (chunk) => {
-              receivedBytes += chunk.length;
-              if (!file.write(chunk)) res.pause();
-              const mb = (receivedBytes / 1048576).toFixed(1);
-              if (totalBytes > 0) {
-                const pct = 5 + Math.round((receivedBytes / totalBytes) * 60);
-                const totalMb = (totalBytes / 1048576).toFixed(1);
-                sendProgress(pct, `Downloading... ${mb} / ${totalMb} MB`);
-              } else {
-                sendProgress(Math.min(60, 5 + Math.round(receivedBytes / 50000)), `Downloading... ${mb} MB`);
-              }
-            });
-            file.on('drain', () => res.resume());
-            res.on('end', () => { file.end(); file.on('finish', okResolve); });
-            res.on('error', (err) => { file.destroy(); okReject(err); });
-          });
-          req.on('error', okReject);
-        };
-        download(asset.browser_download_url);
-      }), { label: 'ReShade download' });
+      await downloadFile(asset.browser_download_url, tmpFile, {
+        label: 'ReShade download',
+        onProgress: (received, total) => {
+          const mb = (received / 1048576).toFixed(1);
+          if (total > 0) {
+            const pct = 5 + Math.round((received / total) * 60);
+            const totalMb = (total / 1048576).toFixed(1);
+            sendProgress(pct, `Downloading... ${mb} / ${totalMb} MB`);
+          } else {
+            sendProgress(Math.min(60, 5 + Math.round(received / 50000)), `Downloading... ${mb} MB`);
+          }
+        }
+      });
 
       sendProgress(70, 'Extracting...');
 
@@ -4132,47 +4029,19 @@ function registerIPC() {
 
       // Download ZIP to temp (sanitize slashes — installAs like 'libs/gdifonts' would create subdirs)
       const tmpZip = path.join(os.tmpdir(), `addon-${addonName.replace(/[\\/]/g, '_')}.zip`);
-      await retryAsync(() => new Promise((resolve, reject) => {
-        let settled = false;
-        const done = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
-        const okResolve = done(resolve);
-        const okReject = done(reject);
-        const download = (url, redirects = 0) => {
-          if (redirects > 10) return okReject(new Error('Too many redirects.'));
-          const mod = url.startsWith('https') ? https : require('http');
-          const req = mod.get(url, { headers: { 'User-Agent': 'XI-Launcher' } }, (res) => {
-            if (res.statusCode === 302 || res.statusCode === 301) {
-              if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
-              res.resume();
-              return download(res.headers.location, redirects + 1);
-            }
-            if (res.statusCode !== 200) {
-              return okReject(new Error(`Download failed with status ${res.statusCode}`));
-            }
-            const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
-            let receivedBytes = 0;
-            const file = fs.createWriteStream(tmpZip);
-            file.on('error', (err) => { try { res.destroy(); } catch {} okReject(err); });
-            res.on('data', (chunk) => {
-              receivedBytes += chunk.length;
-              if (!file.write(chunk)) res.pause();
-              const mb = (receivedBytes / 1048576).toFixed(1);
-              if (totalBytes > 0) {
-                const pct = 5 + Math.round((receivedBytes / totalBytes) * 55);
-                const totalMb = (totalBytes / 1048576).toFixed(1);
-                sendProgress(pct, `Downloading... ${mb} / ${totalMb} MB`);
-              } else {
-                sendProgress(Math.min(50, 5 + Math.round(receivedBytes / 20000)), `Downloading... ${mb} MB`);
-              }
-            });
-            file.on('drain', () => res.resume());
-            res.on('end', () => { file.end(); file.on('finish', okResolve); });
-            res.on('error', (err) => { file.destroy(); okReject(err); });
-          });
-          req.on('error', okReject);
-        };
-        download(zipUrl);
-      }), { label: `Addon ${addonName} download` });
+      await downloadFile(zipUrl, tmpZip, {
+        label: `Addon ${addonName} download`,
+        onProgress: (received, total) => {
+          const mb = (received / 1048576).toFixed(1);
+          if (total > 0) {
+            const pct = 5 + Math.round((received / total) * 55);
+            const totalMb = (total / 1048576).toFixed(1);
+            sendProgress(pct, `Downloading... ${mb} / ${totalMb} MB`);
+          } else {
+            sendProgress(Math.min(50, 5 + Math.round(received / 20000)), `Downloading... ${mb} MB`);
+          }
+        }
+      });
 
       sendProgress(65, 'Extracting...');
 
@@ -4716,7 +4585,7 @@ function registerIPC() {
         const destDir = path.join(tmpDir, relPath);
         fs.mkdirSync(path.dirname(destDir), { recursive: true });
         // Copy directory recursively
-        execSync(`xcopy "${dir}" "${destDir}\\" /E /I /H /Y /Q`, { timeout: 30000 });
+        copyRecursive(dir, destDir);
       }
 
       // Also backup launcher settings
@@ -4762,13 +4631,13 @@ function registerIPC() {
       const configAddons = path.join(tmpDir, 'config', 'addons');
 
       if (fs.existsSync(configBoot)) {
-        execSync(`xcopy "${configBoot}" "${path.join(ashitaPath, 'config', 'boot')}\\" /E /I /H /Y /Q`, { timeout: 30000 });
+        copyRecursive(configBoot, path.join(ashitaPath, 'config', 'boot'));
       }
       if (fs.existsSync(scripts)) {
-        execSync(`xcopy "${scripts}" "${path.join(ashitaPath, 'scripts')}\\" /E /I /H /Y /Q`, { timeout: 30000 });
+        copyRecursive(scripts, path.join(ashitaPath, 'scripts'));
       }
       if (fs.existsSync(configAddons)) {
-        execSync(`xcopy "${configAddons}" "${path.join(ashitaPath, 'config', 'addons')}\\" /E /I /H /Y /Q`, { timeout: 30000 });
+        copyRecursive(configAddons, path.join(ashitaPath, 'config', 'addons'));
       }
 
       // Restore launcher settings if present

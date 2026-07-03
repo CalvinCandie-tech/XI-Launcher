@@ -1629,15 +1629,25 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
         <div className="settings-backup-actions">
           <button className="btn btn-primary" onClick={async () => {
             if (!api) return;
-            const result = await api.backupAshitaConfig();
-            if (result.success) setApplyMessage(result.message);
-            else if (!result.cancelled) setApplyMessage(result.error);
+            try {
+              const result = await api.backupAshitaConfig();
+              if (result.success) { setApplyStatus('success'); setApplyMessage(result.message); }
+              else if (!result.cancelled) { setApplyStatus('error'); setApplyMessage(result.error); }
+            } catch (e) {
+              setApplyStatus('error'); setApplyMessage(`Backup failed: ${e.message}`);
+            }
+            setAutoClearTimeout(() => { setApplyStatus(''); setApplyMessage(''); }, 8000);
           }}>↑ Backup Config</button>
           <button className="btn btn-ghost" onClick={async () => {
             if (!api) return;
-            const result = await api.restoreAshitaConfig();
-            if (result.success) setApplyMessage(result.message);
-            else if (!result.cancelled) setApplyMessage(result.error);
+            try {
+              const result = await api.restoreAshitaConfig();
+              if (result.success) { setApplyStatus('success'); setApplyMessage(result.message); }
+              else if (!result.cancelled) { setApplyStatus('error'); setApplyMessage(result.error); }
+            } catch (e) {
+              setApplyStatus('error'); setApplyMessage(`Restore failed: ${e.message}`);
+            }
+            setAutoClearTimeout(() => { setApplyStatus(''); setApplyMessage(''); }, 8000);
           }}>↓ Restore from Backup</button>
         </div>
       </div>

@@ -53,7 +53,13 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
 
   useEffect(() => {
     if (!api?.getStartupWarnings) return;
-    api.getStartupWarnings().then(w => { if (w?.length) setStartupWarnings(w); });
+    api.getStartupWarnings().then(w => { if (w?.length) setStartupWarnings(w); }).catch(() => {});
+    // The Mark-of-the-Web unblock now runs in the background and may surface a
+    // warning after this tab has mounted — listen for late warnings too.
+    if (!api.onStartupWarning) return;
+    return api.onStartupWarning((msg) => {
+      setStartupWarnings(prev => prev.includes(msg) ? prev : [...prev, msg]);
+    });
   }, []);
 
   useEffect(() => {
@@ -162,6 +168,8 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
     try {
       const result = await api.checkServerStatus(config.serverHost, config.serverPort);
       setServerStatus(result);
+    } catch (e) {
+      setServerStatus({ online: false, error: e.message || 'Check failed' });
     } finally {
       setCheckingServer(false);
     }
@@ -184,21 +192,31 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
     setUpdateDlStatus('downloading');
     setUpdateDlError('');
     setUpdateDlProgress({ percent: 0, detail: 'Starting...' });
-    const result = await api.downloadAndInstallUpdate(updateInfo.downloadUrl);
-    if (!result.success) {
+    try {
+      const result = await api.downloadAndInstallUpdate(updateInfo.downloadUrl);
+      if (!result.success) {
+        setUpdateDlStatus('error');
+        setUpdateDlError(result.error || 'Update failed');
+      }
+    } catch (e) {
       setUpdateDlStatus('error');
-      setUpdateDlError(result.error || 'Update failed');
+      setUpdateDlError(e.message || 'Update failed');
     }
   };
 
   const handleManualCheck = async () => {
     setManualCheckMsg('Checking...');
-    const info = await onManualUpdateCheck();
-    if (!info || info.upToDate) {
-      setManualCheckMsg('You are on the latest version');
-      setTimeout(() => setManualCheckMsg(''), 3000);
-    } else {
-      setManualCheckMsg('');
+    try {
+      const info = await onManualUpdateCheck();
+      if (!info || info.upToDate) {
+        setManualCheckMsg('You are on the latest version');
+        setTimeout(() => setManualCheckMsg(''), 3000);
+      } else {
+        setManualCheckMsg('');
+      }
+    } catch (e) {
+      setManualCheckMsg('Update check failed');
+      setTimeout(() => setManualCheckMsg(''), 4000);
     }
   };
 

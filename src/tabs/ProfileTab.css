@@ -594,19 +594,19 @@
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  z-index: var(--z-dropdown, 100);
+  z-index: var(--z-dropdown);
   min-width: 180px;
   max-width: 260px;
-  background: var(--panel-bg, rgba(10, 14, 20, 0.95));
-  border: 1px solid rgba(var(--teal-rgb, 0, 200, 180), 0.3);
+  background: var(--bg-panel-alpha);
+  border: 1px solid rgba(var(--teal-rgb), 0.3);
   border-radius: 8px;
   padding: 10px 0;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
 .profile-mod-popover-header {
-  font-size: var(--text-xs, 11px);
-  color: var(--teal, #00c8b4);
+  font-size: var(--text-xs);
+  color: var(--teal);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 0 12px 6px;

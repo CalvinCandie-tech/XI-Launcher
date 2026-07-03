@@ -1,6 +1,8 @@
 {
   "name": "xi-launcher",
-  "version": "1.3.0",
+  "version": "1.4.0",
+  "description": "Launcher for FFXI-Crystal — profiles, Ashita/xiloader setup, mods, and updates",
+  "author": "FFXI-Crystal",
   "main": "electron/main.js",
   "homepage": "./",
   "scripts": {
@@ -35,7 +37,16 @@
       "package.json"
     ],
     "extraResources": [
-      "resources/xiloader.exe"
+      {
+        "from": "resources/xiloader.exe",
+        "to": "xiloader.exe"
+      }
+    ],
+    "extraFiles": [
+      {
+        "from": "runtime/music",
+        "to": "runtime/music"
+      }
     ],
     "extends": null,
     "forceCodeSigning": false,

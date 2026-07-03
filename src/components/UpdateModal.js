@@ -10,28 +10,42 @@ function UpdateModal({ updates, ashitaPath, onClose }) {
   );
   const [updating, setUpdating] = useState(false);
   const [progress, setProgress] = useState(null); // { current, total, name }
+  const [results, setResults] = useState({}); // name -> { status: 'ok'|'fail', error }
 
   const selectedCount = Object.values(checked).filter(Boolean).length;
+  const failedCount = Object.values(results).filter(r => r.status === 'fail').length;
+  const attempted = Object.keys(results).length > 0;
 
   const toggleItem = (name) => {
     if (updating) return;
     setChecked(prev => ({ ...prev, [name]: !prev[name] }));
   };
 
-  const handleUpdate = async () => {
-    const selected = updates.filter(u => checked[u.name]);
-    if (selected.length === 0) return;
+  const runUpdates = async (list) => {
+    if (list.length === 0) return;
     setUpdating(true);
-
-    for (let i = 0; i < selected.length; i++) {
-      const addon = selected[i];
-      setProgress({ current: i + 1, total: selected.length, name: addon.name });
-      await api.installAddon(ashitaPath, addon.installAs || addon.name, addon.repo, addon.subdir, addon.useRelease, addon.releaseFolder, addon.isPlugin, addon.ashitaRoot);
+    const outcome = {};
+    for (let i = 0; i < list.length; i++) {
+      const addon = list[i];
+      setProgress({ current: i + 1, total: list.length, name: addon.name });
+      try {
+        const r = await api.installAddon(ashitaPath, addon.installAs || addon.name, addon.repo, addon.subdir, addon.useRelease, addon.releaseFolder, addon.isPlugin, addon.ashitaRoot);
+        outcome[addon.name] = r && r.success === false
+          ? { status: 'fail', error: r.error || 'Update failed' }
+          : { status: 'ok' };
+      } catch (e) {
+        outcome[addon.name] = { status: 'fail', error: e.message || 'Update failed' };
+      }
+      setResults(prev => ({ ...prev, ...outcome }));
     }
-
     setUpdating(false);
-    onClose();
+    setProgress(null);
+    // Only auto-close when everything we just tried succeeded.
+    if (list.every(a => outcome[a.name]?.status === 'ok')) onClose();
   };
+
+  const handleUpdate = () => runUpdates(updates.filter(u => checked[u.name]));
+  const handleRetryFailed = () => runUpdates(updates.filter(u => results[u.name]?.status === 'fail'));
 
   return (
     <Modal onClose={updating ? undefined : onClose}>
@@ -41,17 +55,22 @@ function UpdateModal({ updates, ashitaPath, onClose }) {
           <p>{updates.length} addon{updates.length !== 1 ? 's' : ''} can be updated</p>
         </div>
         <div className="update-list">
-          {updates.map(u => (
-            <label key={u.name} className="update-item" style={{ cursor: updating ? 'default' : 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={checked[u.name]}
-                onChange={() => toggleItem(u.name)}
-                disabled={updating}
-              />
-              <span className="update-item-name">{u.name}</span>
-            </label>
-          ))}
+          {updates.map(u => {
+            const r = results[u.name];
+            return (
+              <label key={u.name} className="update-item" style={{ cursor: updating ? 'default' : 'pointer' }} title={r?.error || ''}>
+                <input
+                  type="checkbox"
+                  checked={checked[u.name]}
+                  onChange={() => toggleItem(u.name)}
+                  disabled={updating}
+                />
+                <span className="update-item-name">{u.name}</span>
+                {r?.status === 'ok' && <span className="pill pill-green pill-xs">✓ Updated</span>}
+                {r?.status === 'fail' && <span className="pill pill-red pill-xs">✕ Failed</span>}
+              </label>
+            );
+          })}
         </div>
         {updating && progress ? (
           <div className="update-progress">
@@ -64,6 +83,14 @@ function UpdateModal({ updates, ashitaPath, onClose }) {
                 style={{ width: `${(progress.current / progress.total) * 100}%` }}
               />
             </div>
+          </div>
+        ) : attempted && failedCount > 0 ? (
+          <div className="update-footer">
+            <div className="update-footer-msg">{failedCount} update{failedCount !== 1 ? 's' : ''} failed. Hover a ✕ for details.</div>
+            <button className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
+            <button className="btn btn-primary btn-sm" onClick={handleRetryFailed}>
+              Retry Failed ({failedCount})
+            </button>
           </div>
         ) : (
           <div className="update-footer">

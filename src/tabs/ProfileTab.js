@@ -23,7 +23,7 @@ function ProfileTab({ config, updateConfig }) {
   const [buildTools, setBuildTools] = useState(null);
   const [buildStatus, setBuildStatus] = useState('idle'); // idle | checking | cloning | building | copying | done | error
   const [buildLog, setBuildLog] = useState('');
-  const [downloadStatus, setDownloadStatus] = useState('idle');
+  const [downloadStatus, setDownloadStatus] = useState('idle'); // idle | checking | downloading | done | error
   const [downloadProgress, setDownloadProgress] = useState({ percent: 0, detail: '' });
   const [showScriptEditor, setShowScriptEditor] = useState(false);
   const [profileOverlays, setProfileOverlays] = useState({});
@@ -109,14 +109,40 @@ function ProfileTab({ config, updateConfig }) {
     setDownloadStatus('downloading');
     setDownloadProgress({ percent: 0, detail: 'Starting...' });
     setBuildLog('');
-    const result = await api.downloadXiloader(config.xiloaderPath);
-    if (result.success) {
-      setDownloadStatus('done');
-      setBuildLog(result.message);
-      checkPaths();
-    } else {
+    try {
+      const result = await api.downloadXiloader(config.xiloaderPath);
+      if (result.success) {
+        setDownloadStatus('done');
+        setBuildLog(result.message);
+        checkPaths();
+      } else {
+        setDownloadStatus('error');
+        setBuildLog(result.error);
+      }
+    } catch (e) {
       setDownloadStatus('error');
-      setBuildLog(result.error);
+      setBuildLog(`Download failed: ${e.message}`);
+    }
+  };
+
+  const checkXiloaderUpdate = async () => {
+    if (!api?.checkXiloaderUpdate) return;
+    setDownloadStatus('checking');
+    setDownloadProgress({ percent: 0, detail: 'Checking for updates...' });
+    setBuildLog('');
+    try {
+      const result = await api.checkXiloaderUpdate(config.xiloaderPath);
+      if (result.success) {
+        setDownloadStatus('done');
+        setBuildLog(result.upToDate ? `xiloader is already up to date (v${result.currentVersion}).` : result.message);
+        if (result.updated) checkPaths();
+      } else {
+        setDownloadStatus('error');
+        setBuildLog(result.error);
+      }
+    } catch (e) {
+      setDownloadStatus('error');
+      setBuildLog(`Update check failed: ${e.message}`);
     }
   };
 
@@ -305,6 +331,7 @@ function ProfileTab({ config, updateConfig }) {
   const downloadAndBuild = async () => {
     if (!api) return;
     const destDir = config.xiloaderPath || 'C:\\xiloader';
+    try {
 
     // Check tools first
     setBuildStatus('checking');
@@ -356,6 +383,10 @@ function ProfileTab({ config, updateConfig }) {
     setBuildStatus('done');
     setBuildLog(`xiloader.exe built and installed to ${destDir}`);
     checkPaths();
+    } catch (e) {
+      setBuildStatus('error');
+      setBuildLog(`Build failed: ${e.message}`);
+    }
   };
 
   const autoDetectPaths = async () => {
@@ -707,6 +738,22 @@ function ProfileTab({ config, updateConfig }) {
               } catch (e) { console.error('Failed to load profile settings', e); }
 
               const lines = result.content.split('\n');
+
+              // Guard: never rewrite a retail (PlayOnline) profile's boot lines.
+              // Retail profiles have an empty `file =` and a `command = /game ...`;
+              // overwriting them with xiloader lines makes the profile unable to
+              // reach PlayOnline. Detect and refuse.
+              const bootFile = (lines.find(l => l.replace(/\s/g, '').startsWith('file=')) || '');
+              const bootCmd = (lines.find(l => l.replace(/\s/g, '').startsWith('command=')) || '');
+              const fileVal = bootFile.slice(bootFile.indexOf('=') + 1).trim();
+              const cmdVal = bootCmd.slice(bootCmd.indexOf('=') + 1).trim();
+              const isRetail = cmdVal.startsWith('/game') || (fileVal === '' && !cmdVal.includes('--server'));
+              if (isRetail) {
+                setBuildLog(`"${targetProfile}" is a retail (PlayOnline) profile — private-server connection settings don't apply to it. Create or select a private-server profile to apply these settings.`);
+                setTimeout(() => setBuildLog(''), 9000);
+                return;
+              }
+
               const updated = lines.map(line => {
                 const trimmed = line.replace(/\s/g, '');
                 if (trimmed.startsWith('file=') && xiloaderDir) {
@@ -801,16 +848,24 @@ function ProfileTab({ config, updateConfig }) {
               <span className="pill pill-green">xiloader.exe already exists</span>
             )}
             <button
+              className="btn btn-ghost"
+              onClick={checkXiloaderUpdate}
+              disabled={downloadStatus === 'downloading' || downloadStatus === 'checking' || buildStatus === 'cloning' || buildStatus === 'building'}
+              title="Checks the installed version's embedded file version against the latest GitHub release, and downloads it if newer"
+            >
+              {downloadStatus === 'checking' ? '◌ Checking...' : '⟳ Check for Updates'}
+            </button>
+            <button
               className="btn btn-primary"
               onClick={downloadXiloader}
-              disabled={downloadStatus === 'downloading' || buildStatus === 'cloning' || buildStatus === 'building'}
+              disabled={downloadStatus === 'downloading' || downloadStatus === 'checking' || buildStatus === 'cloning' || buildStatus === 'building'}
             >
               {downloadStatus === 'downloading' ? '◌ Downloading...' : '↓ Download Pre-built'}
             </button>
             <button
               className="btn btn-ghost"
               onClick={downloadAndBuild}
-              disabled={buildStatus === 'cloning' || buildStatus === 'building' || buildStatus === 'copying' || buildStatus === 'checking' || downloadStatus === 'downloading'}
+              disabled={buildStatus === 'cloning' || buildStatus === 'building' || buildStatus === 'copying' || buildStatus === 'checking' || downloadStatus === 'downloading' || downloadStatus === 'checking'}
               title="Requires Git, CMake, and Visual Studio C++ build tools"
             >
               {buildStatus === 'checking' ? '◌ Checking tools...' :
@@ -821,7 +876,7 @@ function ProfileTab({ config, updateConfig }) {
             </button>
           </div>
         </div>
-        {downloadStatus === 'downloading' && (
+        {(downloadStatus === 'downloading' || downloadStatus === 'checking') && (
           <div className="profile-download-progress">
             <div className="profile-progress-bar">
               <div className="profile-progress-fill" style={{ width: `${downloadProgress.percent}%` }} />
