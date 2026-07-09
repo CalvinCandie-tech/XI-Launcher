@@ -1398,6 +1398,9 @@ function registerIPC() {
         // PowerShell single-quoted strings literal-escape '$' and backticks,
         // so we only need to double-up embedded single quotes for safety.
         const psQuote = (s) => "'" + String(s).replace(/'/g, "''") + "'";
+        // Unique scheduled-task name — created below and self-deleted by the
+        // script once the copy/relaunch is done.
+        const taskName = `XILauncherUpdate_${Date.now()}`;
         const psContent = [
           '$ErrorActionPreference = "SilentlyContinue"',
           // Wait up to 30s for the launcher to exit. Get-Process by base name
@@ -1420,25 +1423,38 @@ function registerIPC() {
           // Relaunch before cleanup so the tmpdir delete can't race the script.
           `Start-Process -FilePath ${psQuote(exePath)}`,
           `Remove-Item -Recurse -Force ${psQuote(tmpDir)} -ErrorAction SilentlyContinue`,
+          // Self-delete the scheduled task that ran this script.
+          `schtasks /delete /tn ${psQuote(taskName)} /f | Out-Null`,
         ].join('\r\n');
         fs.writeFileSync(ps1Path, psContent, 'utf-8');
 
-        // Launch the PowerShell script detached + hidden so the user sees no
-        // console window at any point during the update flow.
-        const child = spawn('powershell.exe', [
-          '-NoProfile',
-          '-NonInteractive',
-          '-WindowStyle', 'Hidden',
-          '-ExecutionPolicy', 'Bypass',
-          '-File', ps1Path,
-        ], {
-          detached: true,
-          stdio: 'ignore',
-          windowsHide: true,
-        });
-        // Confirm the process actually launched before we commit to exiting
-        if (!child.pid) throw new Error('Failed to launch update installer — update aborted.');
-        child.unref();
+        // Launch the update script via a Windows Scheduled Task rather than
+        // spawning it directly. Electron assigns every process it spawns to
+        // a Job Object with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE; when
+        // app.exit() below tears that job down, Windows kills detached/
+        // unref'd children too — Node's `detached` only sets
+        // CREATE_NEW_PROCESS_GROUP on Windows, not CREATE_BREAKAWAY_FROM_JOB.
+        // That was silently killing this exact script the instant the
+        // launcher closed, aborting the copy/relaunch with no visible error.
+        // A Scheduled Task runs under the Task Scheduler service, fully
+        // outside the launcher's process tree, so it survives app.exit().
+        const fallbackAt = new Date(Date.now() + 60000);
+        const pad = (n) => String(n).padStart(2, '0');
+        // Time only — no /sd. schtasks' /sd is parsed against the machine's
+        // regional date format (verified: MM/DD/YYYY errors out on en-GB
+        // Windows despite Microsoft's docs claiming a fixed format), so any
+        // hardcoded ordering breaks on some locale. Omitting /sd defaults to
+        // today, which is always correct for a fallback only ~1 min out.
+        const taskSt = `${pad(fallbackAt.getHours())}:${pad(fallbackAt.getMinutes())}`;
+        const taskCommand = `powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File \\"${ps1Path}\\"`;
+        try {
+          // /st is a fallback trigger (~1 min out) in case /run below doesn't
+          // fire; /run below forces immediate execution regardless.
+          execSync(`schtasks /create /tn "${taskName}" /tr "${taskCommand}" /sc once /st ${taskSt} /f`, { windowsHide: true, stdio: 'ignore' });
+          execSync(`schtasks /run /tn "${taskName}"`, { windowsHide: true, stdio: 'ignore' });
+        } catch (e) {
+          throw new Error(`Failed to schedule update installer — update aborted. (${e.message})`);
+        }
       } finally {
         process.noAsar = prevNoAsar;
       }

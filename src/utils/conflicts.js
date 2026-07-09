@@ -5,9 +5,9 @@
 // scripts: lowercase /load or /addon load name. displayNames: same order, used by the
 // conflict banner so neither tab has to cross-import the other catalogue for labels.
 export const CONFLICT_GROUPS = {
-  'hud-bars':    { label: 'HUD / Player Bars', scripts: ['xiui', 'xivbar'],            displayNames: ['HXUI', 'XIVBar'] },
+  'hud-bars':    { label: 'HUD / Player Bars', scripts: ['xiui', 'xivbar'],            displayNames: ['XIUI', 'XIVBar'] },
   'hotbar':      { label: 'Hotbar System',     scripts: ['thotbar', 'tcrossbar'],      displayNames: ['tHotBar', 'tCrossBar'] },
-  'party-list':  { label: 'Party List',        scripts: ['xivparty', 'xiui'],          displayNames: ['XivParty', 'HXUI'] },
+  'party-list':  { label: 'Party List',        scripts: ['xivparty', 'xiui'],          displayNames: ['XivParty', 'XIUI'] },
   'buff-timers': { label: 'Buff Timers',       scripts: ['statustimers', 'ttimers'],   displayNames: ['statustimers', 'tTimers'] },
   'gear-swap':   { label: 'Gear Swap Engine',  scripts: ['luashitacast', 'legacyac'],  displayNames: ['LuAshitacast', 'LegacyAC'] },
 };

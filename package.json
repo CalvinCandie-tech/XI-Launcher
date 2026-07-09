@@ -1,6 +1,6 @@
 {
   "name": "xi-launcher",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Launcher for FFXI-Crystal — profiles, Ashita/xiloader setup, mods, and updates",
   "author": "FFXI-Crystal",
   "main": "electron/main.js",
