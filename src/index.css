@@ -151,6 +151,83 @@ body::before {
   background: linear-gradient(to right, var(--teal-dim), var(--gold-dim), transparent);
 }
 
+/* ── Shared form language (from RegistryEditor — launcher-wide uniformity) ── */
+/* Gold in-panel group title with hairline underline */
+.group-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gold);
+  margin-bottom: 10px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Responsive field grid */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.form-field-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-field-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-bright, #f2e6cf);
+}
+
+/* "REC" recommended-value pill */
+.pill-rec {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #0a0c10;
+  background: linear-gradient(135deg, var(--teal), var(--gold));
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* Inherit the global input/select base (dark, bordered, mono) — just tighter */
+.form-input,
+.form-select {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.form-input:disabled,
+.form-select:disabled {
+  opacity: 0.5;
+}
+
+/* Dim hint under a control */
+.form-field-desc {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+/* Field spanning the full grid width (token inputs, device pickers, etc.) */
+.form-field-wide {
+  grid-column: 1 / -1;
+}
+
 /* Panels */
 .panel {
   background: var(--card-bg);
@@ -195,8 +272,8 @@ select {
   transition: border-color 0.2s;
 }
 input:focus, textarea:focus, select:focus {
-  border-color: var(--teal-dim);
-  box-shadow: 0 0 0 1px rgba(58, 184, 200, 0.1);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(200, 146, 42, 0.12);
 }
 input::placeholder, textarea::placeholder {
   color: var(--text-dim);

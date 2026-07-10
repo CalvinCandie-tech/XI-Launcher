@@ -29,7 +29,7 @@
 }
 
 .settings-hint {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-secondary);
   margin-bottom: 14px;
   line-height: 1.5;
@@ -131,15 +131,18 @@
   gap: 2px;
 }
 
+/* Typography aligned with the shared .form-field-name / .form-field-desc
+   (index.css) so row-style and grid-style settings read as one system. */
 .setting-name {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--text-bright, #f2e6cf);
 }
 
 .setting-hint-inline {
-  font-size: 13px;
-  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-secondary);
 }
 
 .setting-range-group {
@@ -194,17 +197,18 @@
 }
 
 .preset-name {
-  font-size: 15px;
-  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-bright, #f2e6cf);
 }
 .preset-name.gold {
   color: var(--gold);
 }
 
 .preset-desc {
-  font-size: 14px;
+  font-size: 11px;
   color: var(--text-secondary);
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .settings-sticky-bar {
@@ -703,9 +707,29 @@
   color: var(--text-dim);
 }
 
+.settings-subnav-btn {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: var(--bg-deepest-alpha);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.settings-subnav-btn:hover {
+  color: var(--gold-bright);
+  border-color: var(--gold-dim);
+  box-shadow: 0 0 8px var(--gold-glow);
+}
+
 .settings-subnav {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   flex-wrap: wrap;
   padding: 8px 12px;
   margin-bottom: 12px;

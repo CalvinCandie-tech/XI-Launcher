@@ -27,6 +27,41 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
   const [updateDlError, setUpdateDlError] = useState('');
   const [manualCheckMsg, setManualCheckMsg] = useState('');
 
+  // ── 📥 FFXI Files Updater (Vana-Time mirror or custom URL) ──
+  const [ffxiDlPercent, setFfxiDlPercent] = useState(0);
+  const [ffxiDlDetail, setFfxiDlDetail] = useState('');
+  const [ffxiUpdating, setFfxiUpdating] = useState(false);
+  const [ffxiMirrorUrl, setFfxiMirrorUrl] = useState('');
+  const [ffxiUpdaterStatus, setFfxiUpdaterStatus] = useState(null); // { ok: bool, msg: string }
+
+  useEffect(() => {
+    if (!api?.storeGet) return;
+    api.storeGet('ffxiUpdaterUrl').then(v => setFfxiMirrorUrl(v || ''));
+  }, []);
+
+  useEffect(() => {
+    if (!api?.onFullClientProgress) return;
+    return api.onFullClientProgress((pct, detail) => {
+      setFfxiDlPercent(pct);
+      setFfxiDlDetail(detail);
+    });
+  }, []);
+
+  const runFfxiUpdater = async () => {
+    if (!api?.downloadFullClient) return;
+    setFfxiUpdaterStatus(null);
+    setFfxiUpdating(true);
+    setFfxiDlDetail('Starting FFXI files update...');
+    if (api.storeSet) await api.storeSet('ffxiUpdaterUrl', ffxiMirrorUrl);
+    const result = await api.downloadFullClient(ffxiMirrorUrl);
+    setFfxiUpdating(false);
+    if (result.success) {
+      setFfxiUpdaterStatus({ ok: true, msg: result.message || 'FFXI files successfully updated!' });
+    } else {
+      setFfxiUpdaterStatus({ ok: false, msg: result.error });
+    }
+  };
+
   // Close profile dropdown when clicking outside
   useEffect(() => {
     if (!profileDropdownOpen) return;
@@ -500,7 +535,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
         {/* Multi-Box Launch */}
         {setupComplete && profiles.length > 1 && (
           <div className="home-panel-section home-panel-divider">
-            <button className="btn btn-ghost btn-sm home-full-btn" onClick={() => setMultiBoxOpen(o => !o)}>
+            <button className="btn btn-primary btn-sm home-full-btn" onClick={() => setMultiBoxOpen(o => !o)}>
               {multiBoxOpen ? '▾ Multi-Box Launch' : '▸ Multi-Box Launch'}
             </button>
             {multiBoxOpen && (
@@ -532,28 +567,59 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
           </div>
         )}
 
-        {/* Launch History */}
-        {config.launchHistory && config.launchHistory.length > 0 && (
+        {/* FFXI Files Updater */}
+        {setupComplete && (
           <div className="home-panel-section home-panel-divider">
-            <div className="home-panel-label home-panel-label-tight">Recent Launches</div>
-            <div className="home-history-list">
-              {config.launchHistory.slice(0, 5).map((entry, i) => (
-                <div key={i} className="home-history-row">
-                  <span className="home-history-name">{entry.profile}</span>
-                  <span>{new Date(entry.time).toLocaleString()}</span>
+            <div className="home-panel-label home-panel-label-tight">FFXI Files Updater</div>
+            <p className="home-multibox-hint" style={{ marginTop: 4 }}>
+              Downloads pre-patched FFXI files into your game folder. Leave blank for the default{' '}
+              <a href="#vana-time" onClick={e => { e.preventDefault(); api?.openExternal?.('https://vana-time.com/downloads'); }} style={{ color: 'var(--gold-bright, #e8b84a)' }}>Vana-Time</a>{' '}
+              mirror. Close FFXI before running.
+            </p>
+            <input
+              type="text"
+              value={ffxiMirrorUrl}
+              placeholder="Custom mirror link (optional, https)"
+              onChange={e => setFfxiMirrorUrl(e.target.value)}
+              disabled={ffxiUpdating}
+              spellCheck={false}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '0.45rem 0.6rem', margin: '0.4rem 0', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border, rgba(255,255,255,0.15))', borderRadius: 4, color: '#fff', fontFamily: 'monospace', fontSize: '0.75rem' }}
+            />
+            {ffxiUpdating && (
+              <div style={{ margin: '0.5rem 0' }}>
+                <div style={{ marginBottom: '0.3rem', color: 'var(--primary, #00ffff)', fontStyle: 'italic', fontSize: '0.72rem' }}>
+                  {ffxiDlDetail}
                 </div>
-              ))}
+                <div style={{ width: '100%', background: 'rgba(255,255,255,0.05)', borderRadius: 4, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{ width: `${ffxiDlPercent}%`, height: 6, background: 'linear-gradient(90deg, #00ced1, #00ffff)', transition: 'width 0.15s ease-out' }} />
+                </div>
+              </div>
+            )}
+            {ffxiUpdaterStatus && !ffxiUpdating && (
+              <div style={{ margin: '0.4rem 0', padding: '0.4rem 0.6rem', borderRadius: 4, fontSize: '0.72rem', background: ffxiUpdaterStatus.ok ? 'rgba(80, 200, 120, 0.12)' : 'rgba(220, 80, 80, 0.12)', border: `1px solid ${ffxiUpdaterStatus.ok ? 'rgba(80, 200, 120, 0.4)' : 'rgba(220, 80, 80, 0.4)'}`, color: ffxiUpdaterStatus.ok ? 'var(--ok, #6c6)' : 'var(--error, #e66)' }}>
+                {ffxiUpdaterStatus.ok ? '✔ ' : '✖ '}{ffxiUpdaterStatus.msg}
+              </div>
+            )}
+            <button
+              className="btn btn-primary btn-sm home-full-btn"
+              onClick={runFfxiUpdater}
+              disabled={ffxiUpdating}
+            >
+              {ffxiUpdating ? `◌ Updating (${ffxiDlPercent}%)` : '⚡ Run FFXI Files Updater'}
+            </button>
+            <div style={{ marginTop: '0.4rem', fontSize: '0.65rem', opacity: 0.55, textAlign: 'right', fontStyle: 'italic' }}>
+              contributed by Demetrie
             </div>
           </div>
         )}
 
         {setupComplete && (
           <div className="home-panel-section home-panel-divider home-panel-center">
-            <button className="btn btn-ghost btn-sm" onClick={handleManualCheck} disabled={!!updateDlStatus}>
+            <button className="btn btn-primary btn-sm home-full-btn" onClick={handleManualCheck} disabled={!!updateDlStatus}>
               {manualCheckMsg || 'Check for Updates'}
             </button>
             {onShowWizard && (
-              <button className="btn btn-ghost btn-sm" onClick={onShowWizard} style={{ marginTop: 4 }}>
+              <button className="btn btn-primary btn-sm home-full-btn" onClick={onShowWizard} style={{ marginTop: 4 }}>
                 Re-run Setup Wizard
               </button>
             )}

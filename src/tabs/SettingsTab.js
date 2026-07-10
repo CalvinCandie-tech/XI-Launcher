@@ -394,6 +394,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
     if (!api?.storeGet) return;
     api.storeGet('githubToken').then(v => setGithubToken(v || ''));
   }, []);
+  const [chosenPreset, setChosenPreset] = useState('');
   const [drawMob, setDrawMob] = useState('0');
   const [drawWorld, setDrawWorld] = useState('0');
   const [drawPending, setDrawPending] = useState(false);
@@ -873,7 +874,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
         ].map(nav => (
           <button
             key={nav.id}
-            className="btn btn-ghost btn-sm"
+            className="settings-subnav-btn"
             onClick={() => {
               const el = document.getElementById(nav.id);
               const container = document.querySelector('.app-content');
@@ -939,74 +940,87 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
       )}
 
       <div className="section-header" id="section-graphics">Graphics Presets</div>
-      <p className="settings-hint settings-hint-tight">Quick-apply a full configuration including resolution, graphics quality and sound settings.</p>
-      <div className="presets-grid">
-        {RECOMMENDED_PRESETS.map(preset => {
-          const isActive = Object.entries(preset.values).every(([k, v]) => getValue(k) === v);
-          return (
-            <div key={preset.name} className={`preset-card panel ${isActive ? 'preset-active' : ''}`} onClick={() => applyPreset(preset)}>
-              <div className="preset-card-header">
-                <h3 className={`preset-name cinzel ${isActive ? 'gold' : ''}`}>{preset.name}</h3>
-                {isActive && <span className="pill pill-gold settings-pill-sm">Active</span>}
-              </div>
-              <p className="preset-desc">{preset.desc}</p>
-              <button className="btn btn-ghost btn-sm settings-preset-action">
-                {isActive ? 'Selected' : 'Apply Preset'}
+      <div className="panel">
+        <div className="form-grid">
+          <div className="form-field">
+            <div className="form-field-label">
+              <span className="form-field-name">Preset</span>
+              {(() => {
+                const active = RECOMMENDED_PRESETS.find(preset => Object.entries(preset.values).every(([k, v]) => getValue(k) === v));
+                return active ? <span className="pill pill-gold settings-pill-sm">Active: {active.name}</span> : null;
+              })()}
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <select className="form-select" style={{ flex: 1 }} value={chosenPreset} onChange={e => setChosenPreset(e.target.value)}>
+                <option value="">Choose a preset…</option>
+                {RECOMMENDED_PRESETS.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+              </select>
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={!chosenPreset}
+                onClick={() => { const p = RECOMMENDED_PRESETS.find(x => x.name === chosenPreset); if (p) applyPreset(p); }}
+              >
+                Apply
               </button>
             </div>
-          );
-        })}
+            <p className="form-field-desc">
+              {(RECOMMENDED_PRESETS.find(p => p.name === chosenPreset) || {}).desc
+                || 'Quick-apply a full configuration including resolution, graphics quality and sound settings.'}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="section-header" id="section-display">Screen (Overlay) Resolution</div>
       <div className="panel">
         <p className="settings-hint">The resolution of the 2D overlay (UI, menus, text). This is what your monitor displays. The aspect addon reads this from the profile to calculate correct widescreen ratios.</p>
-        {['4:3', '16:9', '16:10', 'Ultrawide', 'Super Ultrawide'].map(group => {
-          const presets = SCREEN_PRESETS.filter(p => p.group === group);
-          return (
-            <div key={group} className="res-group">
-              <span className="res-group-label">{group}</span>
-              <div className="res-presets">
-                {presets.map(p => (
-                  <button
-                    key={p.label}
-                    className={`res-preset-btn ${screenW === p.w && screenH === p.h ? 'active' : ''}`}
-                    onClick={() => setScreenRes(p.w, p.h)}
-                  >
-                    <span className="res-preset-label">{p.label}</span>
-                    <span className="res-preset-ratio">{p.ratio}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-        <div className="res-custom">
-          <label>Custom:</label>
-          <input type="number" value={screenW} onChange={e => { const v = parseInt(e.target.value) || 0; setPending('0001', v); setPending('0037', v); }} className="settings-input-sm" />
-          <span>x</span>
-          <input type="number" value={screenH} onChange={e => { const v = parseInt(e.target.value) || 0; setPending('0002', v); setPending('0038', v); }} className="settings-input-sm" />
+        <div className="form-grid">
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Resolution preset</span></div>
+            <select
+              className="form-select"
+              value={`${screenW}x${screenH}`}
+              onChange={e => { const p = SCREEN_PRESETS.find(x => `${x.w}x${x.h}` === e.target.value); if (p) setScreenRes(p.w, p.h); }}
+            >
+              {!SCREEN_PRESETS.some(p => p.w === screenW && p.h === screenH) && (
+                <option value={`${screenW}x${screenH}`}>Custom ({screenW}x{screenH})</option>
+              )}
+              {['4:3', '16:9', '16:10', 'Ultrawide', 'Super Ultrawide'].map(group => (
+                <optgroup key={group} label={group}>
+                  {SCREEN_PRESETS.filter(p => p.group === group).map(p => (
+                    <option key={p.label} value={`${p.w}x${p.h}`}>{p.label} — {p.ratio}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <p className="form-field-desc">Quick-pick a standard resolution — fills the width and height fields.</p>
+          </div>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Window width</span></div>
+            <input type="number" className="form-input" value={screenW} onChange={e => { const v = parseInt(e.target.value) || 0; setPending('0001', v); setPending('0037', v); }} />
+            <p className="form-field-desc">Game window resolution width (pixels).</p>
+          </div>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Window height</span></div>
+            <input type="number" className="form-input" value={screenH} onChange={e => { const v = parseInt(e.target.value) || 0; setPending('0002', v); setPending('0038', v); }} />
+            <p className="form-field-desc">Game window resolution height (pixels).</p>
+          </div>
         </div>
       </div>
 
       <div className="section-header">Display Mode</div>
       <div className="panel">
-        <p className="settings-hint">Controls how FFXI is displayed on your screen.</p>
-        <div className="display-mode-row">
-          {[
-            { val: 0, label: 'Fullscreen', desc: 'Exclusive fullscreen — best performance but alt-tab can cause crashes without dgVoodoo2' },
-            { val: 1, label: 'Windowed', desc: 'Runs in a window — most compatible, easy to alt-tab' },
-            { val: 3, label: 'Borderless Windowed', desc: 'Borderless fullscreen window — easy alt-tab, no screen flash' },
-          ].map(m => (
-            <button
-              key={m.val}
-              className={`display-mode-btn ${getValue('0034') === m.val ? 'active' : ''}`}
-              onClick={() => setPending('0034', m.val)}
-            >
-              <span className="display-mode-label">{m.label}</span>
-              <span className="display-mode-desc">{m.desc}</span>
-            </button>
-          ))}
+        <div className="form-grid">
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Window mode</span><span className="pill-rec">Rec</span></div>
+            <select className="form-select" value={getValue('0034')} onChange={e => setPending('0034', parseInt(e.target.value))}>
+              <option value={-1}>Default (FFXI Config)</option>
+              <option value={0}>Fullscreen</option>
+              <option value={1}>Windowed</option>
+              <option value={3}>Borderless Windowed</option>
+            </select>
+            <p className="form-field-desc">How the game window is presented. Windowed is most compatible and easy to alt-tab. Fullscreen performs best but alt-tab can crash without dgVoodoo2. Borderless gives easy alt-tab with no screen flash.</p>
+          </div>
         </div>
       </div>
 
@@ -1015,200 +1029,185 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
         <p className="settings-hint">
           The resolution 3D geometry is rendered at before scaling. Setting higher than screen res creates oversampling AA — the biggest visual improvement. Recommended: 2x screen res.
         </p>
-        {['Standard', 'Ultrawide', 'Super Ultrawide'].map(group => {
-          const presets = BG_PRESETS.filter(p => p.group === group);
-          return (
-            <div key={group} className="res-group">
-              <span className="res-group-label">{group}</span>
-              <div className="res-presets">
-                {presets.map(p => (
-                  <button
-                    key={p.label}
-                    className={`res-preset-btn ${bgW === p.w && bgH === p.h ? 'active' : ''}`}
-                    onClick={() => setBgRes(p.w, p.h)}
-                  >
-                    <span className="res-preset-label">{p.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-        <div className="res-custom">
-          <label>Custom:</label>
-          <input type="number" value={bgW} onChange={e => setPending('0003', parseInt(e.target.value) || 0)} className="settings-input-sm" />
-          <span>x</span>
-          <input type="number" value={bgH} onChange={e => setPending('0004', parseInt(e.target.value) || 0)} className="settings-input-sm" />
+        <div className="form-grid">
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Resolution preset</span></div>
+            <select
+              className="form-select"
+              value={`${bgW}x${bgH}`}
+              onChange={e => { const p = BG_PRESETS.find(x => `${x.w}x${x.h}` === e.target.value); if (p) setBgRes(p.w, p.h); }}
+            >
+              {!BG_PRESETS.some(p => p.w === bgW && p.h === bgH) && (
+                <option value={`${bgW}x${bgH}`}>Custom ({bgW}x{bgH})</option>
+              )}
+              {['Standard', 'Ultrawide', 'Super Ultrawide'].map(group => (
+                <optgroup key={group} label={group}>
+                  {BG_PRESETS.filter(p => p.group === group).map(p => (
+                    <option key={p.label} value={`${p.w}x${p.h}`}>{p.label}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <p className="form-field-desc">Quick-pick a render resolution — 2x your screen resolution is the sweet spot.</p>
+          </div>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Background width</span><span className="pill-rec">Rec</span></div>
+            <input type="number" className="form-input" value={bgW} onChange={e => setPending('0003', parseInt(e.target.value) || 0)} />
+            <p className="form-field-desc">Internal render (background) width. Higher = sharper world, more GPU. Best divisible by 2.</p>
+          </div>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Background height</span><span className="pill-rec">Rec</span></div>
+            <input type="number" className="form-input" value={bgH} onChange={e => setPending('0004', parseInt(e.target.value) || 0)} />
+            <p className="form-field-desc">Internal render (background) height. Best divisible by 2.</p>
+          </div>
         </div>
       </div>
 
       <div className="section-header">Graphics Quality</div>
       <div className="panel">
-        <p className="settings-hint">Controls how FFXI renders textures and effects. Set to -1 to use the value from FFXI Config.</p>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Mip Mapping</span>
-            <span className="setting-hint-inline">Reduces texture shimmer and flickering on distant surfaces (0=Off, 6=Best Quality)</span>
+        <p className="settings-hint">Controls how FFXI renders textures and effects. "Default" uses the value from FFXI Config.</p>
+        <div className="form-grid">
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Mip Mapping</span><span className="pill-rec">Rec</span></div>
+            <select className="form-select" value={getValue('0000')} onChange={e => setPending('0000', parseInt(e.target.value))}>
+              <option value={-1}>Default (FFXI Config)</option>
+              <option value={0}>Off</option>
+              <option value={1}>On - Lowest</option>
+              <option value={2}>On - Low</option>
+              <option value={3}>On - Medium</option>
+              <option value={4}>On - High</option>
+              <option value={5}>On - Very High</option>
+              <option value={6}>On - Best Quality</option>
+            </select>
+            <p className="form-field-desc">Reduces texture shimmer on distant surfaces. 6 = best quality.</p>
           </div>
-          <select value={getValue('0000')} onChange={e => setPending('0000', parseInt(e.target.value))}>
-            <option value={-1}>Default (FFXI Config)</option>
-            <option value={0}>Off</option>
-            <option value={1}>On - Lowest</option>
-            <option value={2}>On - Low</option>
-            <option value={3}>On - Medium</option>
-            <option value={4}>On - High</option>
-            <option value={5}>On - Very High</option>
-            <option value={6}>On - Best Quality</option>
-          </select>
-        </div>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Texture Compression</span>
-            <span className="setting-hint-inline">Controls texture quality — uncompressed is sharper but uses more VRAM</span>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Texture Compression</span><span className="pill-rec">Rec</span></div>
+            <select className="form-select" value={getValue('0018')} onChange={e => setPending('0018', parseInt(e.target.value))}>
+              <option value={-1}>Default (FFXI Config)</option>
+              <option value={0}>High (Compressed)</option>
+              <option value={1}>Low</option>
+              <option value={2}>Uncompressed</option>
+            </select>
+            <p className="form-field-desc">Uncompressed is sharper but uses more VRAM.</p>
           </div>
-          <select value={getValue('0018')} onChange={e => setPending('0018', parseInt(e.target.value))}>
-            <option value={-1}>Default (FFXI Config)</option>
-            <option value={0}>High (Compressed)</option>
-            <option value={1}>Low</option>
-            <option value={2}>Uncompressed</option>
-          </select>
-        </div>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Bump Mapping</span>
-            <span className="setting-hint-inline">Adds surface depth to walls, terrain and other textures</span>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Bump Mapping</span><span className="pill-rec">Rec</span></div>
+            <select className="form-select" value={getValue('0017')} onChange={e => setPending('0017', parseInt(e.target.value))}>
+              <option value={-1}>Default (FFXI Config)</option>
+              <option value={0}>Off</option>
+              <option value={1}>On</option>
+            </select>
+            <p className="form-field-desc">Surface bump-mapping detail on walls and terrain.</p>
           </div>
-          <select value={getValue('0017')} onChange={e => setPending('0017', parseInt(e.target.value))}>
-            <option value={-1}>Default (FFXI Config)</option>
-            <option value={0}>Off</option>
-            <option value={1}>On</option>
-          </select>
-        </div>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Environment Animation</span>
-            <span className="setting-hint-inline">Animated effects like swaying trees, flowing water and weather particles</span>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Environment Animation</span></div>
+            <select className="form-select" value={getValue('0011')} onChange={e => setPending('0011', parseInt(e.target.value))}>
+              <option value={-1}>Default (FFXI Config)</option>
+              <option value={0}>Off</option>
+              <option value={1}>Normal</option>
+              <option value={2}>Smooth</option>
+            </select>
+            <p className="form-field-desc">Swaying trees, flowing water and weather particles.</p>
           </div>
-          <select value={getValue('0011')} onChange={e => setPending('0011', parseInt(e.target.value))}>
-            <option value={-1}>Default (FFXI Config)</option>
-            <option value={0}>Off</option>
-            <option value={1}>Normal</option>
-            <option value={2}>Smooth</option>
-          </select>
-        </div>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Texture Compression Level</span>
-            <span className="setting-hint-inline">Secondary compression toggle — set to Uncompressed for best quality</span>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Texture Compression (2)</span><span className="pill-rec">Rec</span></div>
+            <select className="form-select" value={getValue('0019')} onChange={e => setPending('0019', parseInt(e.target.value))}>
+              <option value={-1}>Default (FFXI Config)</option>
+              <option value={0}>Compressed</option>
+              <option value={1}>Uncompressed</option>
+            </select>
+            <p className="form-field-desc">Secondary compression toggle — Uncompressed = best quality.</p>
           </div>
-          <select value={getValue('0019')} onChange={e => setPending('0019', parseInt(e.target.value))}>
-            <option value={-1}>Default (FFXI Config)</option>
-            <option value={0}>Compressed</option>
-            <option value={1}>Uncompressed</option>
-          </select>
-        </div>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Font Compression</span>
-            <span className="setting-hint-inline">Text rendering quality — High Quality gives the sharpest in-game text</span>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Font Compression</span><span className="pill-rec">Rec</span></div>
+            <select className="form-select" value={getValue('0036')} onChange={e => setPending('0036', parseInt(e.target.value))}>
+              <option value={-1}>Default (FFXI Config)</option>
+              <option value={0}>Compressed</option>
+              <option value={1}>Uncompressed</option>
+              <option value={2}>High Quality</option>
+            </select>
+            <p className="form-field-desc">High Quality gives the sharpest in-game text.</p>
           </div>
-          <select value={getValue('0036')} onChange={e => setPending('0036', parseInt(e.target.value))}>
-            <option value={-1}>Default (FFXI Config)</option>
-            <option value={0}>Compressed</option>
-            <option value={1}>Uncompressed</option>
-            <option value={2}>High Quality</option>
-          </select>
-        </div>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Gamma</span>
-            <span className="setting-hint-inline">Adjusts overall screen brightness — increase if the game looks too dark</span>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Gamma</span></div>
+            <div className="setting-range-group">
+              <input type="range" min={0} max={100} value={getValue('0028') === -1 ? 0 : getValue('0028')} onChange={e => setPending('0028', parseInt(e.target.value))} />
+              <span className="mono settings-range-value">{getValue('0028') === -1 ? 'Default' : getValue('0028')}</span>
+            </div>
+            <p className="form-field-desc">Overall brightness — increase if the game looks too dark.</p>
           </div>
-          <div className="setting-range-group">
-            <input type="range" min={0} max={100} value={getValue('0028') === -1 ? 0 : getValue('0028')} onChange={e => setPending('0028', parseInt(e.target.value))} />
-            <span className="mono settings-range-value">{getValue('0028') === -1 ? 'Default' : getValue('0028')}</span>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Hardware Mouse</span></div>
+            <select className="form-select" value={getValue('0021')} onChange={e => setPending('0021', parseInt(e.target.value))}>
+              <option value={-1}>Default (FFXI Config)</option>
+              <option value={0}>Off</option>
+              <option value={1}>On</option>
+            </select>
+            <p className="form-field-desc">Hardware cursor instead of software-rendered — reduces mouse lag.</p>
           </div>
-        </div>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Hardware Mouse</span>
-            <span className="setting-hint-inline">Use hardware cursor instead of software-rendered — reduces mouse lag</span>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Graphics Stabilization</span><span className="pill-rec">Rec</span></div>
+            <select className="form-select" value={getValue('0040')} onChange={e => setPending('0040', parseInt(e.target.value))}>
+              <option value={-1}>Default (FFXI Config)</option>
+              <option value={0}>Off</option>
+              <option value={1}>On</option>
+            </select>
+            <p className="form-field-desc">Client graphics stabilization. Usually left Off.</p>
           </div>
-          <select value={getValue('0021')} onChange={e => setPending('0021', parseInt(e.target.value))}>
-            <option value={-1}>Default (FFXI Config)</option>
-            <option value={0}>Off</option>
-            <option value={1}>On</option>
-          </select>
-        </div>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Graphics Stabilization</span>
-            <span className="setting-hint-inline">May help reduce visual glitches on some hardware</span>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Maintain Aspect Ratio</span></div>
+            <select className="form-select" value={getValue('0044')} onChange={e => setPending('0044', parseInt(e.target.value))}>
+              <option value={-1}>Default (FFXI Config)</option>
+              <option value={0}>Off</option>
+              <option value={1}>On</option>
+            </select>
+            <p className="form-field-desc">Keep the correct aspect ratio when the window is resized.</p>
           </div>
-          <select value={getValue('0040')} onChange={e => setPending('0040', parseInt(e.target.value))}>
-            <option value={-1}>Default (FFXI Config)</option>
-            <option value={0}>Off</option>
-            <option value={1}>On</option>
-          </select>
-        </div>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Maintain Aspect Ratio</span>
-            <span className="setting-hint-inline">Keep the window aspect ratio when resizing</span>
-          </div>
-          <select value={getValue('0044')} onChange={e => setPending('0044', parseInt(e.target.value))}>
-            <option value={-1}>Default (FFXI Config)</option>
-            <option value={0}>Off</option>
-            <option value={1}>On</option>
-          </select>
         </div>
       </div>
 
       <div className="section-header" id="section-performance">Performance</div>
       <div className="section-header settings-subheader">Draw Distance</div>
       <div className="panel">
-        <p className="settings-hint">Controls how far the game renders entities and terrain. Uses the <strong>drawdistance</strong> addon — it will be auto-enabled when you apply these settings. Higher values show more of the world but may impact performance in crowded zones.</p>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Entity / Mob Distance</span>
-            <span className="setting-hint-inline">How far NPCs, players and monsters render</span>
+        <p className="settings-hint">Controls how far the game renders entities and terrain. Uses the <strong>drawdistance</strong> addon — it will be auto-enabled when you apply these settings.</p>
+        <div className="form-grid">
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Entity / Mob Distance</span></div>
+            <select className="form-select" value={drawMob} onChange={e => { setDrawMob(e.target.value); setDrawPending(true); setPendingWrites(p => ({ ...p, _drawdistance: true })); }}>
+              {DRAW_DISTANCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <p className="form-field-desc">How far NPCs, players and monsters render. Higher may impact performance in crowded zones.</p>
           </div>
-          <select value={drawMob} onChange={e => { setDrawMob(e.target.value); setDrawPending(true); setPendingWrites(p => ({ ...p, _drawdistance: true })); }}>
-            {DRAW_DISTANCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">World / Terrain Distance</span>
-            <span className="setting-hint-inline">How far terrain, buildings and objects render</span>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">World / Terrain Distance</span></div>
+            <select className="form-select" value={drawWorld} onChange={e => { setDrawWorld(e.target.value); setDrawPending(true); setPendingWrites(p => ({ ...p, _drawdistance: true })); }}>
+              {DRAW_DISTANCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <p className="form-field-desc">How far terrain, buildings and objects render.</p>
           </div>
-          <select value={drawWorld} onChange={e => { setDrawWorld(e.target.value); setDrawPending(true); setPendingWrites(p => ({ ...p, _drawdistance: true })); }}>
-            {DRAW_DISTANCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
         </div>
       </div>
 
       <div className="section-header">Frame Rate</div>
       <div className="panel">
         <p className="settings-hint">Controls FFXI's frame rate divisor via the <strong>fps</strong> addon — it will be auto-enabled when you apply these settings. FFXI's engine ties game logic to frame rate, so 60 FPS makes movement and animations smoother but may cause minor timing quirks on some private servers.</p>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">FPS Divisor</span>
-            <span className="setting-hint-inline">Sets the frame rate cap on launch</span>
+        <div className="form-grid">
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">FPS Divisor</span></div>
+            <select className="form-select" value={fpsDivisor} onChange={e => { setFpsDivisor(e.target.value); setFpsPending(true); setPendingWrites(p => ({ ...p, _fps: true })); }}>
+              {FPS_DIVISOR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <p className="form-field-desc">Sets the frame rate cap on launch.</p>
           </div>
-          <select value={fpsDivisor} onChange={e => { setFpsDivisor(e.target.value); setFpsPending(true); setPendingWrites(p => ({ ...p, _fps: true })); }}>
-            {FPS_DIVISOR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Show FPS Counter</span>
-            <span className="setting-hint-inline">Display the FPS overlay on screen at launch</span>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Show FPS Counter</span></div>
+            <select className="form-select" value={fpsShow ? 'on' : 'off'} onChange={e => { setFpsShow(e.target.value === 'on'); setFpsPending(true); setPendingWrites(p => ({ ...p, _fps: true })); }}>
+              <option value="off">Off</option>
+              <option value="on">On</option>
+            </select>
+            <p className="form-field-desc">Display the FPS overlay on screen at launch.</p>
           </div>
-          <select value={fpsShow ? 'on' : 'off'} onChange={e => { setFpsShow(e.target.value === 'on'); setFpsPending(true); setPendingWrites(p => ({ ...p, _fps: true })); }}>
-            <option value="off">Off</option>
-            <option value="on">On</option>
-          </select>
         </div>
       </div>
 
@@ -1216,37 +1215,33 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
       <div className="section-header settings-subheader">Sound Settings</div>
       <div className="panel">
         <p className="settings-hint">Controls FFXI's sound system. Disabling sound can improve performance on low-end hardware.</p>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Sound</span>
-            <span className="setting-hint-inline">Master toggle for all in-game audio including music, SFX and ambient sounds</span>
+        <div className="form-grid">
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Sound</span></div>
+            <select className="form-select" value={getValue('0007')} onChange={e => setPending('0007', parseInt(e.target.value))}>
+              <option value={-1}>Default (FFXI Config)</option>
+              <option value={0}>Off</option>
+              <option value={1}>On</option>
+            </select>
+            <p className="form-field-desc">Master toggle for all in-game audio — music, SFX and ambient sounds.</p>
           </div>
-          <select value={getValue('0007')} onChange={e => setPending('0007', parseInt(e.target.value))}>
-            <option value={-1}>Default (FFXI Config)</option>
-            <option value={0}>Off</option>
-            <option value={1}>On</option>
-          </select>
-        </div>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Max Simultaneous Sounds</span>
-            <span className="setting-hint-inline">How many sound effects can play at the same time (12-20)</span>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Max Simultaneous Sounds</span></div>
+            <div className="setting-range-group">
+              <input type="range" min={12} max={20} step={1} value={getValue('0029') === -1 ? 20 : getValue('0029')} onChange={e => setPending('0029', parseInt(e.target.value))} />
+              <span className="mono settings-range-value">{getValue('0029') === -1 ? 'Default' : getValue('0029')}</span>
+            </div>
+            <p className="form-field-desc">How many sound effects can play at the same time (12–20).</p>
           </div>
-          <div className="setting-range-group">
-            <input type="range" min={12} max={20} step={1} value={getValue('0029') === -1 ? 20 : getValue('0029')} onChange={e => setPending('0029', parseInt(e.target.value))} />
-            <span className="mono settings-range-value">{getValue('0029') === -1 ? 'Default' : getValue('0029')}</span>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Sound Always On</span></div>
+            <select className="form-select" value={getValue('0035')} onChange={e => setPending('0035', parseInt(e.target.value))}>
+              <option value={-1}>Default (FFXI Config)</option>
+              <option value={0}>Off</option>
+              <option value={1}>On</option>
+            </select>
+            <p className="form-field-desc">Keep playing audio when the game is in the background.</p>
           </div>
-        </div>
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Sound Always On</span>
-            <span className="setting-hint-inline">Keep playing audio when the game is in the background</span>
-          </div>
-          <select value={getValue('0035')} onChange={e => setPending('0035', parseInt(e.target.value))}>
-            <option value={-1}>Default (FFXI Config)</option>
-            <option value={0}>Off</option>
-            <option value={1}>On</option>
-          </select>
         </div>
       </div>
 
@@ -1254,37 +1249,32 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
       <div className="panel">
         <p className="settings-hint">Configure gamepad settings. These are written to your Ashita profile and override FFXI's built-in gamepad config. Leave disabled if you play with keyboard and mouse.</p>
 
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Disable Gamepad Enumeration</span>
-            <span className="setting-hint-inline">Prevents Ashita from scanning for controllers — fixes micro-stutter when no gamepad is connected</span>
+        <div className="form-grid">
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Disable Gamepad Enumeration</span></div>
+            <label className="toggle">
+              <input type="checkbox" checked={disableEnumeration} onChange={e => {
+                setDisableEnumeration(e.target.checked);
+                setDisableEnumPending(true);
+                setPendingWrites(p => ({ ...p, _disableEnum: true }));
+              }} />
+              <span className="toggle-slider" />
+            </label>
+            <p className="form-field-desc">Prevents Ashita from scanning for controllers — fixes micro-stutter when no gamepad is connected.</p>
           </div>
-          <label className="toggle">
-            <input type="checkbox" checked={disableEnumeration} onChange={e => {
-              setDisableEnumeration(e.target.checked);
-              setDisableEnumPending(true);
-              setPendingWrites(p => ({ ...p, _disableEnum: true }));
-            }} />
-            <span className="toggle-slider" />
-          </label>
-        </div>
 
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Enable Gamepad</span>
-            <span className="setting-hint-inline">{PADMODE_HINTS[0]}</span>
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Enable Gamepad</span></div>
+            <label className="toggle">
+              <input type="checkbox" checked={getPadmode()[0] === 1} onChange={e => setPadmodeFlag(0, e.target.checked)} />
+              <span className="toggle-slider" />
+            </label>
+            <p className="form-field-desc">{PADMODE_HINTS[0]}</p>
           </div>
-          <label className="toggle">
-            <input type="checkbox" checked={getPadmode()[0] === 1} onChange={e => setPadmodeFlag(0, e.target.checked)} />
-            <span className="toggle-slider" />
-          </label>
-        </div>
-        {getPadmode()[0] === 1 && (
-          <div className="setting-row setting-row-stack">
-            <div className="setting-info">
-              <span className="setting-name">Controller Device (GUID)</span>
-              <span className="setting-hint-inline">Select which controller Ashita should use. Leave on "Auto-detect" to use the first controller found.</span>
-            </div>
+
+          {getPadmode()[0] === 1 && (
+          <div className="form-field form-field-wide">
+            <div className="form-field-label"><span className="form-field-name">Controller Device (GUID)</span></div>
             <div className="gp-guid-controls">
               <div className="gp-guid-row">
                 <select
@@ -1325,8 +1315,10 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
                 )}
               </div>
             </div>
+            <p className="form-field-desc">Select which controller Ashita should use. Leave on "Auto-detect" to use the first controller found.</p>
           </div>
-        )}
+          )}
+        </div>
       </div>
 
       {getPadmode()[0] === 1 && (
@@ -1540,49 +1532,38 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
 
       <div className="section-header" id="section-app">Miscellaneous</div>
       <div className="panel">
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Opening Movie</span>
-            <span className="setting-hint-inline">Show the intro cinematic when launching the game</span>
+        <div className="form-grid">
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Opening Movie</span></div>
+            <select className="form-select" value={getValue('0022')} onChange={e => setPending('0022', parseInt(e.target.value))}>
+              <option value={-1}>Default (FFXI Config)</option>
+              <option value={0}>Off</option>
+              <option value={1}>On</option>
+            </select>
+            <p className="form-field-desc">Show the intro cinematic when launching the game.</p>
           </div>
-          <select value={getValue('0022')} onChange={e => setPending('0022', parseInt(e.target.value))}>
-            <option value={-1}>Default (FFXI Config)</option>
-            <option value={0}>Off</option>
-            <option value={1}>On</option>
-          </select>
         </div>
       </div>
 
-      <div className="section-header">Launcher</div>
       <div className="section-header">Launcher Settings</div>
       <div className="panel">
-        <div className="setting-row">
-          <div className="setting-info">
-            <span className="setting-name">Minimize to System Tray</span>
-            <span className="setting-hint-inline">Keep the launcher running in the background when you close the window</span>
+        <div className="form-grid">
+          <div className="form-field">
+            <div className="form-field-label"><span className="form-field-name">Minimize to System Tray</span></div>
+            <div className="toggle" onClick={() => {
+              const next = !minimizeToTray;
+              setMinimizeToTray(next);
+              if (api?.setMinimizeToTray) api.setMinimizeToTray(next);
+            }}>
+              <input type="checkbox" checked={minimizeToTray} readOnly />
+              <span className="toggle-slider" />
+            </div>
+            <p className="form-field-desc">Keep the launcher running in the background when you close the window.</p>
           </div>
-          <div className="toggle" onClick={() => {
-            const next = !minimizeToTray;
-            setMinimizeToTray(next);
-            if (api?.setMinimizeToTray) api.setMinimizeToTray(next);
-          }}>
-            <input type="checkbox" checked={minimizeToTray} readOnly />
-            <span className="toggle-slider" />
-          </div>
-        </div>
 
-        <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.5rem' }}>
-          <div className="setting-info">
-            <span className="setting-name">GitHub Token (optional)</span>
-            <span className="setting-hint-inline">
-              Lifts GitHub API rate-limiting from 60 → 5000 requests/hour. Without one, installing many addons in a row can fail with "HTTP 403" errors until the next hour. Token is stored locally only.{' '}
-              <a href="#" onClick={(e) => { e.preventDefault(); if (api?.openExternal) api.openExternal('https://github.com/settings/tokens'); }}>
-                Create a token →
-              </a>{' '}
-              (no scopes needed for public repos — leave them all unchecked)
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <div className="form-field form-field-wide">
+            <div className="form-field-label"><span className="form-field-name">GitHub Token (optional)</span></div>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <input
               type="password"
               value={githubToken}
@@ -1615,9 +1596,17 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
               </button>
             )}
           </div>
-          {githubTokenStatus && (
-            <span className="setting-hint-inline" style={{ color: 'var(--ok, #6c6)' }}>{githubTokenStatus}</span>
-          )}
+            <p className="form-field-desc">
+              Lifts GitHub API rate-limiting from 60 → 5000 requests/hour. Without one, installing many addons in a row can fail with "HTTP 403" errors until the next hour. Token is stored locally only.{' '}
+              <a href="#github-token" onClick={(e) => { e.preventDefault(); if (api?.openExternal) api.openExternal('https://github.com/settings/tokens'); }} style={{ color: 'var(--gold-bright, #e8b84a)' }}>
+                Create a token →
+              </a>{' '}
+              (no scopes needed for public repos — leave them all unchecked)
+            </p>
+            {githubTokenStatus && (
+              <p className="form-field-desc" style={{ color: 'var(--ok, #6c6)' }}>{githubTokenStatus}</p>
+            )}
+          </div>
         </div>
       </div>
 

@@ -5,6 +5,7 @@ const os = require('os');
 const https = require('https');
 const { execSync, spawn, exec, execFile } = require('child_process');
 const yauzl = require('yauzl');
+const crypto = require('crypto');
 
 /**
  * Extract a zip file using yauzl (streaming, handles large files, reports progress).
@@ -110,6 +111,7 @@ const activeDownloads = {};
 // Single-flight guard for the self-updater so double-clicks don't race on the
 // shared tmpdir (the handler rmSync's it before writing).
 let updateInProgress = false;
+let fullClientUpdateInProgress = false;
 
 // Runtime folder — always relative to the app root so bundled files stay in one place
 const appRoot = isDev ? path.join(__dirname, '..') : path.dirname(app.getPath('exe'));
@@ -1473,6 +1475,189 @@ function registerIPC() {
       updateInProgress = false;
       sendProgress(0, '');
       return { success: false, error: friendlyError(e, 'App update') };
+    }
+  });
+
+  // ── 📥 FFXI FILES UPDATER (Vana-Time mirror or custom URL) ──
+  ipcMain.handle('download-full-client', async (_, customUrl) => {
+    if (fullClientUpdateInProgress) {
+      return { success: false, error: 'An FFXI files update is already in progress.' };
+    }
+    fullClientUpdateInProgress = true;
+
+    const sendProgress = (percent, detail) => {
+      try { mainWindow?.webContents?.send('full-client-download-progress', percent, detail); } catch {}
+    };
+
+    const tmpDir = path.join(os.tmpdir(), 'xi-launcher-ffxi-client');
+    const tmpZipFile = path.join(tmpDir, 'ffxi_full_client.zip');
+
+    try {
+      const clientUrl = (customUrl || '').trim()
+        || 'https://vana-time.com/api/v1/downloads/ffxiFullClient-2026-07.zip';
+
+      // https only — a checksum is worthless if the transport can be tampered with
+      if (!clientUrl.startsWith('https://')) {
+        return { success: false, error: 'Invalid link. Address must begin with https:// (plain http is not allowed for game file downloads).' };
+      }
+      try { new URL(clientUrl); } catch {
+        return { success: false, error: 'Invalid link. Could not parse the download address.' };
+      }
+
+      // The target must already exist — extracting into a freshly created empty
+      // folder just hides a misconfigured path (and Program Files needs admin).
+      const targetFfxiPath = store.get('ffxiPath')
+        || 'C:\\Program Files (x86)\\PlayOnline\\SquareEnix\\FINAL FANTASY XI';
+      if (!fs.existsSync(targetFfxiPath)) {
+        return { success: false, error: `FFXI directory not found: ${targetFfxiPath} — set your FFXI path in the Profiles tab first.` };
+      }
+
+      // Refuse to overwrite game files while the client holds them open — a
+      // half-applied update is worse than no update.
+      sendProgress(1, 'Checking that FFXI is not running...');
+      const runningGameExe = await new Promise((resolve) => {
+        const gameExes = ['pol.exe', 'xiloader.exe', 'Ashita-cli.exe'];
+        exec('tasklist /NH', { windowsHide: true }, (err, stdout) => {
+          if (err || !stdout) return resolve(null);
+          const lower = stdout.toLowerCase();
+          resolve(gameExes.find(exe => lower.includes(exe.toLowerCase())) || null);
+        });
+      });
+      if (runningGameExe) {
+        return { success: false, error: `FFXI appears to be running (${runningGameExe}). Close the game and Ashita, then retry.` };
+      }
+
+      fs.mkdirSync(tmpDir, { recursive: true });
+      if (fs.existsSync(tmpZipFile)) fs.unlinkSync(tmpZipFile);
+
+      sendProgress(2, 'Connecting to file mirror...');
+
+      const { net } = require('electron');
+
+      const fetchText = (url) => new Promise((resolve, reject) => {
+        const request = net.request({ method: 'GET', url, redirect: 'follow' });
+        request.on('response', (response) => {
+          if (response.statusCode && response.statusCode >= 400) {
+            return reject(new Error(`HTTP ${response.statusCode}`));
+          }
+          let body = '';
+          response.on('data', (chunk) => { body += chunk.toString('utf8'); if (body.length > 4096) request.abort(); });
+          response.on('end', () => resolve(body));
+          response.on('error', reject);
+        });
+        request.on('error', reject);
+        request.end();
+      });
+
+      const downloadFileStream = (url) => new Promise((resolve, reject) => {
+        const request = net.request({ method: 'GET', url, redirect: 'follow' });
+
+        request.on('response', (response) => {
+          if (response.statusCode && response.statusCode >= 400) {
+            return reject(new Error(`Server returned HTTP Error Status: ${response.statusCode}`));
+          }
+
+          const totalSize = parseInt(response.headers['content-length'] || '0', 10);
+          let downloaded = 0;
+          const writeStream = fs.createWriteStream(tmpZipFile);
+
+          // pipe() handles backpressure — a bare write() loop buffers the whole
+          // archive in RAM when the network outruns the disk.
+          response.pipe(writeStream);
+
+          response.on('data', (chunk) => {
+            downloaded += chunk.length;
+            if (totalSize > 0) {
+              const pct = Math.round((downloaded / totalSize) * 100);
+              const scaledPct = 5 + Math.round(pct * 0.65);
+              sendProgress(scaledPct, `Downloading FFXI update files... ${pct}% (${(downloaded / 1024 / 1024).toFixed(1)} MB / ${(totalSize / 1024 / 1024).toFixed(1)} MB)`);
+            } else {
+              sendProgress(15, `Downloading... (${(downloaded / 1024 / 1024).toFixed(1)} MB received)`);
+            }
+          });
+
+          response.on('error', (err) => { try { writeStream.destroy(); } catch {} reject(err); });
+
+          writeStream.on('finish', () => {
+            const finalSize = fs.existsSync(tmpZipFile) ? fs.statSync(tmpZipFile).size : 0;
+
+            // Check for truncated stream
+            if (totalSize > 0 && finalSize < totalSize) {
+              return reject(new Error(`Update download interrupted! Only received ${(finalSize / 1024 / 1024).toFixed(1)} MB of ${(totalSize / 1024 / 1024).toFixed(1)} MB.`));
+            }
+            if (finalSize === 0) {
+              return reject(new Error('Downloaded update file is empty (0 bytes).'));
+            }
+
+            // Check for HTML error pages masquerading as a ZIP
+            if (finalSize < 1024 * 1024) {
+              try {
+                const headSample = fs.readFileSync(tmpZipFile, 'utf8').substring(0, 500);
+                if (headSample.includes('<!DOCTYPE html>') || headSample.includes('<html') || headSample.includes('Cloudflare')) {
+                  return reject(new Error('The download mirror returned an HTML webpage error instead of a ZIP file. The mirror link may be locked behind authentication or hotlinking protections.'));
+                }
+              } catch (checkErr) {}
+            }
+
+            resolve();
+          });
+
+          writeStream.on('error', (err) => { try { response.destroy?.(); } catch {} reject(err); });
+        });
+
+        request.on('error', (err) => reject(err));
+        request.end();
+      });
+
+      await downloadFileStream(clientUrl);
+
+      // Vana-Time publishes a SHA256 for every archive at <file>.zip/checksum.
+      // Verify when available; a custom mirror without the endpoint proceeds
+      // unverified but the user is told so.
+      sendProgress(72, 'Verifying download checksum...');
+      let checksumNote = '';
+      let expectedHash = null;
+      try {
+        const checksumBody = await fetchText(`${clientUrl}/checksum`);
+        const match = checksumBody.match(/\b[a-fA-F0-9]{64}\b/);
+        if (match) expectedHash = match[0].toLowerCase();
+      } catch {}
+
+      if (expectedHash) {
+        const actualHash = await new Promise((resolve, reject) => {
+          const hash = crypto.createHash('sha256');
+          const rs = fs.createReadStream(tmpZipFile);
+          rs.on('error', reject);
+          rs.on('data', (chunk) => hash.update(chunk));
+          rs.on('end', () => resolve(hash.digest('hex')));
+        });
+        if (actualHash !== expectedHash) {
+          try { fs.unlinkSync(tmpZipFile); } catch {}
+          return { success: false, error: `Checksum mismatch — the downloaded file does not match the hash published by the mirror. Download deleted; nothing was installed. (expected ${expectedHash.slice(0, 12)}…, got ${actualHash.slice(0, 12)}…)` };
+        }
+        sendProgress(75, 'Checksum verified ✔ — applying update files...');
+      } else {
+        checksumNote = ' (mirror did not publish a checksum — download was not verified)';
+        sendProgress(75, 'No checksum published by this mirror — proceeding unverified...');
+      }
+
+      await extractZip(tmpZipFile, targetFfxiPath, (pct, filename) => {
+        const scaledExtractPct = 77 + Math.round(pct * 0.21);
+        sendProgress(scaledExtractPct, `Applying updates: ${pct}% — ${path.basename(filename)}`);
+      });
+
+      sendProgress(99, 'Cleaning up...');
+      try { if (fs.existsSync(tmpZipFile)) fs.unlinkSync(tmpZipFile); } catch {}
+
+      sendProgress(100, 'FFXI files successfully updated!');
+      return { success: true, message: `FFXI files updated in ${targetFfxiPath}${checksumNote}` };
+
+    } catch (err) {
+      console.error('❌ [FFXI Files Updater Failure]:', err.message);
+      try { if (fs.existsSync(tmpZipFile)) fs.unlinkSync(tmpZipFile); } catch {}
+      return { success: false, error: err.message };
+    } finally {
+      fullClientUpdateInProgress = false;
     }
   });
 

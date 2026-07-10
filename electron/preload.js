@@ -200,4 +200,13 @@ contextBridge.exposeInMainWorld('xiAPI', {
 
   // Game controller enumeration
   enumerateGameControllers: () => ipcRenderer.invoke('enumerate-game-controllers'),
+
+  // ── VANA-TIME CUSTOM CONTEXT BINDINGS ──
+  // Accept the custom URL string as a parameter and forward it to the main handler
+  downloadFullClient: (customUrl) => ipcRenderer.invoke('download-full-client', customUrl),
+  onFullClientProgress: (callback) => {
+    const handler = (_, percent, detail) => callback(percent, detail);
+    ipcRenderer.on('full-client-download-progress', handler);
+    return () => ipcRenderer.removeListener('full-client-download-progress', handler);
+  },
 });
