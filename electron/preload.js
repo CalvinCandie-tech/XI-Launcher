@@ -134,6 +134,14 @@ contextBridge.exposeInMainWorld('xiAPI', {
     return () => ipcRenderer.removeListener('ashita-install-progress', handler);
   },
 
+  // Prerequisite runtime installer (VC++ redistributables + .NET Framework)
+  installPrerequisites: () => ipcRenderer.invoke('install-prerequisites'),
+  onPrerequisitesProgress: (callback) => {
+    const handler = (_, percent, detail) => callback(percent, detail);
+    ipcRenderer.on('prerequisites-progress', handler);
+    return () => ipcRenderer.removeListener('prerequisites-progress', handler);
+  },
+
   // Addon update check
   checkAddonUpdates: (addonList, force) => ipcRenderer.invoke('check-addon-updates', addonList, force),
 

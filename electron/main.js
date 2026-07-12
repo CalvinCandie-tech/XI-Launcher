@@ -2063,6 +2063,109 @@ function registerIPC() {
     });
   }
 
+  ipcMain.handle('install-prerequisites', async () => {
+    const tmpDir = path.join(app.getPath('temp'), `xi-launcher-prereqs-${Date.now()}`);
+    const sendProgress = (percent, detail) => {
+      try { mainWindow?.webContents?.send('prerequisites-progress', percent, detail); } catch {}
+    };
+    const cleanup = () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} };
+
+    try {
+      fs.mkdirSync(tmpDir, { recursive: true });
+
+      // Phase 1 (0-50%): download and checksum-verify every installer before
+      // anything is executed. A mismatch aborts the whole batch immediately.
+      const downloaded = [];
+      for (let i = 0; i < PREREQUISITES.length; i++) {
+        const item = PREREQUISITES[i];
+        const destPath = path.join(tmpDir, item.filename);
+        const baseP = Math.round((i / PREREQUISITES.length) * 50);
+        const spanP = Math.round(50 / PREREQUISITES.length);
+
+        sendProgress(baseP, `Downloading ${item.name}...`);
+        await downloadFile(item.url, destPath, {
+          label: item.name,
+          onProgress: (received, total) => {
+            if (total > 0) {
+              const pct = baseP + Math.round((received / total) * spanP);
+              const mb = (received / 1048576).toFixed(1);
+              const totalMb = (total / 1048576).toFixed(1);
+              sendProgress(pct, `Downloading ${item.name}... ${mb} / ${totalMb} MB`);
+            }
+          }
+        });
+
+        sendProgress(baseP + spanP, `Verifying ${item.name}...`);
+        const actualHash = await sha256File(destPath);
+        if (actualHash.toLowerCase() !== item.sha256.toLowerCase()) {
+          cleanup();
+          return { success: false, error: `Checksum verification failed for ${item.name}. The downloaded file may be corrupted or tampered with. Nothing was installed. (expected ${item.sha256.slice(0, 12)}…, got ${actualHash.slice(0, 12)}…)` };
+        }
+        downloaded.push({ ...item, localPath: destPath });
+      }
+
+      // Phase 2 (50-55%): build the elevated inner script.
+      sendProgress(50, 'Preparing installation...');
+      const progressLog = path.join(tmpDir, 'progress.log');
+      const resultFile = path.join(tmpDir, 'result.json');
+      fs.writeFileSync(progressLog, '', 'utf-8');
+      const innerScript = buildPrereqInnerScript(downloaded, progressLog, resultFile);
+      const innerScriptPath = path.join(tmpDir, 'inner.ps1');
+      fs.writeFileSync(innerScriptPath, innerScript, 'utf-8');
+
+      // Phase 3 (55-95%): launch elevated (one UAC prompt for the whole batch) via
+      // Node's async spawn (through runPowerShellFile) so the main process stays
+      // responsive, and poll progressLog concurrently to drive per-component
+      // progress — the -Wait call itself gives no visibility into what's running.
+      sendProgress(55, 'Requesting administrator permission...');
+      const outerScript = `Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','${escapePSString(innerScriptPath)}' -Verb RunAs -Wait -WindowStyle Hidden`;
+
+      let lastLineCount = 0;
+      const totalMarkers = downloaded.length * 2; // STARTED + DONE per component
+      const pollTimer = setInterval(() => {
+        try {
+          const lines = fs.readFileSync(progressLog, 'utf-8').split('\n').filter(Boolean);
+          for (let i = lastLineCount; i < lines.length; i++) {
+            const parts = lines[i].split('|');
+            const stageMarker = parts[0];
+            const name = parts[1];
+            const pct = 55 + Math.round(((i + 1) / totalMarkers) * 40);
+            if (stageMarker === 'STARTED') sendProgress(pct, `Installing ${name}... please wait`);
+            else if (stageMarker === 'DONE') sendProgress(pct, `${name} finished`);
+          }
+          lastLineCount = lines.length;
+        } catch {}
+      }, 500);
+
+      try {
+        await runPowerShellFile(outerScript, 600000); // 10 minutes for the whole batch
+      } catch (e) {
+        clearInterval(pollTimer);
+        cleanup();
+        const msg = e.message || '';
+        if (msg.includes('elevation') || msg.includes('denied') || msg.includes('UAC')) {
+          return { success: false, error: 'Administrator permission is required to install these components. Installation was cancelled.' };
+        }
+        return { success: false, error: `Installation failed: ${msg}` };
+      }
+      clearInterval(pollTimer);
+
+      // Phase 4 (95-100%): read results, classify, report.
+      sendProgress(95, 'Verifying results...');
+      let exitCodesByName = {};
+      try { exitCodesByName = JSON.parse(fs.readFileSync(resultFile, 'utf-8')); } catch {}
+      const results = classifyPrereqResults(downloaded, exitCodesByName);
+      const allSuccess = results.every(r => r.success);
+      const anyRebootRequired = results.some(r => r.exitCode === 3010);
+      cleanup();
+      sendProgress(100, allSuccess ? 'All prerequisites installed successfully' : 'Some components failed');
+      return { success: allSuccess, results, anyRebootRequired };
+    } catch (e) {
+      cleanup();
+      return { success: false, error: `Installation failed: ${e.message}` };
+    }
+  });
+
   // Watch for game process to exit, then notify renderer (per-profile watchers for multi-box)
   const gameExitWatchers = new Map();
   const watchForGameExit = (processName, profileKey) => {
