@@ -2044,7 +2044,7 @@ function registerIPC() {
     for (const item of items) {
       const safeName = escapePSString(item.name);
       lines.push(`Add-Content -Path '${escapePSString(progressLogPath)}' -Value 'STARTED|${safeName}'`);
-      lines.push(`$p = Start-Process -FilePath '${escapePSString(item.localPath)}' -ArgumentList '${item.args}' -Wait -PassThru`);
+      lines.push(`$p = Start-Process -FilePath '${escapePSString(item.localPath)}' -ArgumentList '${escapePSString(item.args)}' -Wait -PassThru`);
       lines.push(`$results['${safeName}'] = $p.ExitCode`);
       lines.push(`Add-Content -Path '${escapePSString(progressLogPath)}' -Value ('DONE|${safeName}|' + $p.ExitCode)`);
     }
