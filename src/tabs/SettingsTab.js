@@ -1695,12 +1695,12 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
           </div>
         )}
         {prereqResult && prereqResult.success && (
-          <p className="settings-hint settings-hint-compact" style={{ color: 'var(--ok, #6c6)' }}>
+          <p className="settings-hint settings-hint-compact" style={{ color: 'var(--green)' }}>
             ✓ All prerequisites installed{prereqResult.anyRebootRequired ? ' — a restart may be needed for some changes to take effect' : ''}
           </p>
         )}
         {prereqResult && !prereqResult.success && (
-          <p className="settings-hint settings-hint-compact" style={{ color: 'var(--error, #e66)' }}>
+          <p className="settings-hint settings-hint-compact" style={{ color: 'var(--red)' }}>
             {prereqResult.error || `Some components failed: ${prereqResult.results.filter(r => !r.success).map(r => r.component).join(', ')}.`}
           </p>
         )}
