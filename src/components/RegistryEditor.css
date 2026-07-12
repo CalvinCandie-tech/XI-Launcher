@@ -72,17 +72,6 @@
   color: var(--text-bright, #f2e6cf);
 }
 
-.registry-field-rec {
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #0a0c10;
-  background: linear-gradient(135deg, var(--teal), var(--gold));
-  border-radius: 4px;
-  padding: 1px 5px;
-}
-
 .registry-field-input {
   width: 100%;
   padding: 6px 8px;

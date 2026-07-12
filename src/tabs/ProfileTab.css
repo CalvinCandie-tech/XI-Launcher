@@ -3,13 +3,13 @@
 }
 
 .profile-hint {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-secondary);
   margin-bottom: 14px;
   line-height: 1.5;
 }
 
-/* Path rows */
+/* Path rows — legacy classes kept for DgVoodoo/SetupWizard/XIPivot until those tabs convert */
 .path-row {
   display: flex;
   align-items: center;
@@ -74,7 +74,7 @@
 
 /* xiloader build section */
 .xiloader-build-panel p {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.6;
   margin-bottom: 8px;
@@ -132,67 +132,32 @@
   padding-bottom: 4px;
 }
 
-.server-intro {
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
-  margin-bottom: 20px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--border);
-}
-
-.server-intro-icon {
-  font-size: 28px;
-  flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  background: var(--active-bg);
-  border: 1px solid rgba(58, 184, 200, 0.15);
-}
-
-.server-intro-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-bright);
-  margin-bottom: 4px;
-}
-
-.server-intro-desc {
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
 .server-group {
   margin-bottom: 18px;
 }
 
-.server-group-label {
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--teal);
-  margin-bottom: 10px;
+/* Advanced per-profile xiloader override (collapsible) */
+.profile-xiloader-summary {
+  cursor: pointer;
 }
 
-.server-group-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
+.profile-xiloader-body {
+  margin-top: 10px;
 }
 
-.server-field-host {
-  grid-column: 1;
+.profile-xiloader-warn {
+  color: var(--gold);
+  margin-bottom: 8px;
 }
 
-.server-field-port {
-  grid-column: 2;
+.profile-xiloader-ok {
+  color: var(--green);
 }
+
+.profile-xiloader-err {
+  color: var(--red);
+}
+
 
 .server-summary {
   display: flex;
@@ -314,13 +279,8 @@
   border-top: 1px solid var(--border);
   background: var(--active-bg);
 }
-.profiles-create-type {
-  display: flex;
-  gap: 4px;
+.profiles-create-select {
   width: 100%;
-}
-.profiles-create-type .btn {
-  flex: 1;
 }
 .profiles-create input {
   flex: 1;
@@ -462,13 +422,6 @@
 
 .profile-active-pill {
   font-size: 10px;
-}
-
-.profile-hairpin-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
 }
 
 .profile-hint-inline {

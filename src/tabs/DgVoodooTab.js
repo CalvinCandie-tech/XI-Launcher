@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './DgVoodooTab.css';
+import RecPill from '../components/RecPill';
 
 const api = window.xiAPI;
 
@@ -28,14 +29,14 @@ const RECOMMENDED_SETTINGS = {
 const MSAA_OPTIONS = [
   { value: 'off', label: 'Off' },
   { value: '2x', label: '2x MSAA' },
-  { value: '4x', label: '4x MSAA (Recommended)' },
+  { value: '4x', label: '4x MSAA' },
   { value: '8x', label: '8x MSAA (Heavy)' }
 ];
 
 const VRAM_OPTIONS = [
   { value: '512', label: '512 MB' },
   { value: '1024', label: '1024 MB' },
-  { value: '2048', label: '2048 MB (Recommended)' },
+  { value: '2048', label: '2048 MB' },
   { value: '4096', label: '4096 MB (HD Textures)' }
 ];
 
@@ -51,7 +52,7 @@ const AF_OPTIONS = [
   { value: '2x', label: '2x' },
   { value: '4x', label: '4x' },
   { value: '8x', label: '8x' },
-  { value: '16x', label: '16x (Recommended)' }
+  { value: '16x', label: '16x' }
 ];
 
 function DgVoodooTab({ config, updateConfig }) {
@@ -262,6 +263,19 @@ function DgVoodooTab({ config, updateConfig }) {
     setSettings(prev => ({ ...prev, [key]: value }));
   };
 
+  // Live REC pill wired to the shared component, driven by RECOMMENDED_SETTINGS.
+  const recPill = (k) => (
+    <RecPill
+      match={settings[k] === RECOMMENDED_SETTINGS[k]}
+      onApply={() => updateSetting(k, RECOMMENDED_SETTINGS[k])}
+    />
+  );
+
+  // Derive the "(Recommended)" option suffix from RECOMMENDED_SETTINGS so the
+  // pill and the option labels can never recommend different values.
+  const optLabel = (k, value, label) =>
+    RECOMMENDED_SETTINGS[k] === value ? `${label} (Recommended)` : label;
+
   const currentStep = STEPS[step];
   const canGoNext = () => {
     if (currentStep === 'copy' && !dgvStatus.d3d8Exists && copyStatus !== 'done') return false;
@@ -292,155 +306,162 @@ function DgVoodooTab({ config, updateConfig }) {
   }
 
   const renderSettingsGrid = () => (
-    <>
-      <div className="dgv-settings-grid">
-        <div className="dgv-setting-card">
-          <label>Output API</label>
-          <select value={settings.outputAPI} onChange={e => updateSetting('outputAPI', e.target.value)}>
-            <option value="d3d11">Direct3D 11 (Recommended)</option>
-            <option value="d3d12">Direct3D 12 (Experimental)</option>
-          </select>
-        </div>
-
-        <div className="dgv-setting-card">
-          <label>Anti-Aliasing (MSAA)</label>
-          <select value={settings.msaa} onChange={e => updateSetting('msaa', e.target.value)}>
-            {MSAA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-
-        <div className="dgv-setting-card">
-          <label>Anisotropic Filtering</label>
-          <select value={settings.anisotropic} onChange={e => updateSetting('anisotropic', e.target.value)}>
-            {AF_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-
-        <div className="dgv-setting-card">
-          <label>Scaling Mode</label>
-          <select value={settings.scalingMode} onChange={e => updateSetting('scalingMode', e.target.value)}>
-            <option value="stretched_ar">Stretched (Keep Aspect Ratio)</option>
-            <option value="stretched">Stretched (Fill Screen)</option>
-            <option value="centered">Centered</option>
-            <option value="unspecified">Unspecified</option>
-          </select>
-        </div>
-
-        <div className="dgv-setting-card">
-          <label>VSync</label>
-          <select value={settings.vsync ? 'on' : 'off'} onChange={e => updateSetting('vsync', e.target.value === 'on')}>
-            <option value="on">On (Prevents tearing)</option>
-            <option value="off">Off</option>
-          </select>
-        </div>
-
-        <div className="dgv-setting-card">
-          <label>Resolution</label>
-          <select value={settings.resolution} onChange={e => updateSetting('resolution', e.target.value)}>
-            <option value="app_controlled">Application Controlled (Use FFXI Settings)</option>
-            <option value="1920x1080">1920x1080 (1080p)</option>
-            <option value="2560x1440">2560x1440 (1440p)</option>
-            <option value="3840x2160">3840x2160 (4K)</option>
-          </select>
-        </div>
-
-        <div className="dgv-setting-card">
-          <label>Depth Buffer Precision</label>
-          <select value={settings.depthBuffer} onChange={e => updateSetting('depthBuffer', e.target.value)}>
-            <option value="appdriven">App Driven (Default)</option>
-            <option value="forcemin24bit">Force 24-bit (Recommended — Fixes Z-fighting)</option>
-            <option value="force32bit">Force 32-bit</option>
-          </select>
-          <span className="dgv-field-hint">Fixes flickering terrain and disappearing textures</span>
-        </div>
-
-        <div className="dgv-setting-card">
-          <label>Reported VRAM</label>
-          <select value={settings.vram} onChange={e => updateSetting('vram', e.target.value)}>
-            {VRAM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <span className="dgv-field-hint">Set higher for HD texture packs</span>
-        </div>
-
-        <div className="dgv-setting-card">
-          <label>FPS Limit</label>
-          <select value={settings.fpsLimit} onChange={e => updateSetting('fpsLimit', e.target.value)}>
-            {FPS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <span className="dgv-field-hint">Cap frame rate to reduce GPU heat</span>
-        </div>
-
-        <div className="dgv-setting-card">
-          <label>Fullscreen Mode</label>
-          <select value={settings.fullscreenAttr} onChange={e => updateSetting('fullscreenAttr', e.target.value)}>
-            <option value="default">Exclusive Fullscreen</option>
-            <option value="fake">Fake Fullscreen (Borderless)</option>
-          </select>
-          <span className="dgv-field-hint">Fake avoids alt-tab crashes</span>
-        </div>
-
-        <div className="dgv-setting-card">
-          <label>Upscale Filter</label>
-          <select value={settings.resampling} onChange={e => updateSetting('resampling', e.target.value)}>
-            <option value="pointsampled">Point Sampled (Pixelated)</option>
-            <option value="bilinear">Bilinear (Default)</option>
-            <option value="bicubic">Bicubic (Sharper)</option>
-            <option value="lanczos-2">Lanczos-2 (Sharp)</option>
-            <option value="lanczos-3">Lanczos-3 (Sharpest)</option>
-          </select>
-          <span className="dgv-field-hint">Filter used when dgVoodoo upscales the image</span>
-        </div>
-
-        <div className="dgv-setting-card">
-          <label>Mipmapping</label>
-          <select value={settings.mipmapping} onChange={e => updateSetting('mipmapping', e.target.value)}>
-            <option value="appdriven">App Driven</option>
-            <option value="disabled">Disabled (Sharper distant textures)</option>
-            <option value="autogen_bilinear">Auto-Generate Bilinear</option>
-          </select>
-        </div>
+    <div className="form-grid">
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">Output API</span>{recPill('outputAPI')}</div>
+        <select className="form-select" value={settings.outputAPI} onChange={e => updateSetting('outputAPI', e.target.value)}>
+          <option value="d3d11">{optLabel('outputAPI', 'd3d11', 'Direct3D 11')}</option>
+          <option value="d3d12">Direct3D 12 (Experimental)</option>
+        </select>
+        <p className="form-field-desc">Modern API that FFXI's DirectX 8 calls are translated to. Direct3D 11 is the stable choice.</p>
       </div>
 
-      <div className="dgv-setting dgv-setting-check">
-        <label>
-          <input type="checkbox" checked={!settings.watermark} onChange={e => updateSetting('watermark', !e.target.checked)} />
-          Hide dgVoodoo watermark
-        </label>
-        <span className="dgv-field-hint">Removes the dgVoodoo logo from the bottom-right corner</span>
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">Anti-Aliasing (MSAA)</span>{recPill('msaa')}</div>
+        <select className="form-select" value={settings.msaa} onChange={e => updateSetting('msaa', e.target.value)}>
+          {MSAA_OPTIONS.map(o => <option key={o.value} value={o.value}>{optLabel('msaa', o.value, o.label)}</option>)}
+        </select>
+        <p className="form-field-desc">Smooths jagged edges on models and terrain. 4x is the quality/performance sweet spot.</p>
       </div>
 
-      <div className="dgv-setting dgv-setting-check">
-        <label>
-          <input type="checkbox" checked={settings.fastVram} onChange={e => updateSetting('fastVram', e.target.checked)} />
-          Fast Video Memory Access
-        </label>
-        <span className="dgv-field-hint">Improves performance — disable if you see black textures with HD packs</span>
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">Anisotropic Filtering</span>{recPill('anisotropic')}</div>
+        <select className="form-select" value={settings.anisotropic} onChange={e => updateSetting('anisotropic', e.target.value)}>
+          {AF_OPTIONS.map(o => <option key={o.value} value={o.value}>{optLabel('anisotropic', o.value, o.label)}</option>)}
+        </select>
+        <p className="form-field-desc">Sharpens ground and wall textures viewed at an angle. 16x is cheap on modern GPUs.</p>
       </div>
 
-      <div className="dgv-setting dgv-setting-check">
-        <label>
-          <input type="checkbox" checked={settings.keepFilter} onChange={e => updateSetting('keepFilter', e.target.checked)} />
-          Preserve Point-Sampled Textures
-        </label>
-        <span className="dgv-field-hint">Prevents transparent texture artifacts when forcing anisotropic filtering (trees, windows)</span>
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">Scaling Mode</span>{recPill('scalingMode')}</div>
+        <select className="form-select" value={settings.scalingMode} onChange={e => updateSetting('scalingMode', e.target.value)}>
+          <option value="stretched_ar">Stretched (Keep Aspect Ratio)</option>
+          <option value="stretched">Stretched (Fill Screen)</option>
+          <option value="centered">Centered</option>
+          <option value="unspecified">Unspecified</option>
+        </select>
+        <p className="form-field-desc">How the image fills the screen when upscaled.</p>
       </div>
 
-      <div className="dgv-setting dgv-setting-check">
-        <label>
-          <input type="checkbox" checked={settings.captureMouse} onChange={e => updateSetting('captureMouse', e.target.checked)} />
-          Capture Mouse
-        </label>
-        <span className="dgv-field-hint">Locks cursor inside game window — disable for multiboxing</span>
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">VSync</span>{recPill('vsync')}</div>
+        <select className="form-select" value={settings.vsync ? 'on' : 'off'} onChange={e => updateSetting('vsync', e.target.value === 'on')}>
+          <option value="on">On</option>
+          <option value="off">Off</option>
+        </select>
+        <p className="form-field-desc">Syncs frames to your monitor's refresh rate to prevent screen tearing.</p>
       </div>
-    </>
+
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">Resolution</span>{recPill('resolution')}</div>
+        <select className="form-select" value={settings.resolution} onChange={e => updateSetting('resolution', e.target.value)}>
+          <option value="app_controlled">Application Controlled (Use FFXI Settings)</option>
+          <option value="1920x1080">1920x1080 (1080p)</option>
+          <option value="2560x1440">2560x1440 (1440p)</option>
+          <option value="3840x2160">3840x2160 (4K)</option>
+        </select>
+        <p className="form-field-desc">Output resolution override — Application Controlled uses FFXI's own settings.</p>
+      </div>
+
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">Depth Buffer Precision</span>{recPill('depthBuffer')}</div>
+        <select className="form-select" value={settings.depthBuffer} onChange={e => updateSetting('depthBuffer', e.target.value)}>
+          <option value="appdriven">App Driven (Default)</option>
+          <option value="forcemin24bit">{optLabel('depthBuffer', 'forcemin24bit', 'Force 24-bit')}</option>
+          <option value="force32bit">Force 32-bit</option>
+        </select>
+        <p className="form-field-desc">Force 24-bit fixes Z-fighting — flickering terrain and disappearing textures.</p>
+      </div>
+
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">Reported VRAM</span>{recPill('vram')}</div>
+        <select className="form-select" value={settings.vram} onChange={e => updateSetting('vram', e.target.value)}>
+          {VRAM_OPTIONS.map(o => <option key={o.value} value={o.value}>{optLabel('vram', o.value, o.label)}</option>)}
+        </select>
+        <p className="form-field-desc">Video memory reported to the game. Set higher for HD texture packs.</p>
+      </div>
+
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">FPS Limit</span>{recPill('fpsLimit')}</div>
+        <select className="form-select" value={settings.fpsLimit} onChange={e => updateSetting('fpsLimit', e.target.value)}>
+          {FPS_OPTIONS.map(o => <option key={o.value} value={o.value}>{optLabel('fpsLimit', o.value, o.label)}</option>)}
+        </select>
+        <p className="form-field-desc">Cap the frame rate to reduce GPU heat and noise.</p>
+      </div>
+
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">Fullscreen Mode</span>{recPill('fullscreenAttr')}</div>
+        <select className="form-select" value={settings.fullscreenAttr} onChange={e => updateSetting('fullscreenAttr', e.target.value)}>
+          <option value="default">Exclusive Fullscreen</option>
+          <option value="fake">Fake Fullscreen (Borderless)</option>
+        </select>
+        <p className="form-field-desc">Fake Fullscreen avoids alt-tab crashes.</p>
+      </div>
+
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">Upscale Filter</span>{recPill('resampling')}</div>
+        <select className="form-select" value={settings.resampling} onChange={e => updateSetting('resampling', e.target.value)}>
+          <option value="pointsampled">Point Sampled (Pixelated)</option>
+          <option value="bilinear">Bilinear (Default)</option>
+          <option value="bicubic">Bicubic (Sharper)</option>
+          <option value="lanczos-2">Lanczos-2 (Sharp)</option>
+          <option value="lanczos-3">Lanczos-3 (Sharpest)</option>
+        </select>
+        <p className="form-field-desc">Filter used when dgVoodoo upscales the image.</p>
+      </div>
+
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">Mipmapping</span>{recPill('mipmapping')}</div>
+        <select className="form-select" value={settings.mipmapping} onChange={e => updateSetting('mipmapping', e.target.value)}>
+          <option value="appdriven">App Driven</option>
+          <option value="disabled">Disabled (Sharper distant textures)</option>
+          <option value="autogen_bilinear">Auto-Generate Bilinear</option>
+        </select>
+        <p className="form-field-desc">How texture mipmaps are generated for distant surfaces.</p>
+      </div>
+
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">dgVoodoo Watermark</span>{recPill('watermark')}</div>
+        <select className="form-select" value={settings.watermark ? 'show' : 'hide'} onChange={e => updateSetting('watermark', e.target.value === 'show')}>
+          <option value="hide">{optLabel('watermark', false, 'Hidden')}</option>
+          <option value="show">Visible</option>
+        </select>
+        <p className="form-field-desc">The dgVoodoo logo in the bottom-right corner of the screen.</p>
+      </div>
+
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">Fast Video Memory Access</span>{recPill('fastVram')}</div>
+        <select className="form-select" value={settings.fastVram ? 'on' : 'off'} onChange={e => updateSetting('fastVram', e.target.value === 'on')}>
+          <option value="on">On</option>
+          <option value="off">Off</option>
+        </select>
+        <p className="form-field-desc">Improves performance — turn Off if you see black textures with HD packs.</p>
+      </div>
+
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">Preserve Point-Sampled Textures</span>{recPill('keepFilter')}</div>
+        <select className="form-select" value={settings.keepFilter ? 'on' : 'off'} onChange={e => updateSetting('keepFilter', e.target.value === 'on')}>
+          <option value="on">On</option>
+          <option value="off">Off</option>
+        </select>
+        <p className="form-field-desc">Prevents transparent texture artifacts (trees, windows) when forcing anisotropic filtering.</p>
+      </div>
+
+      <div className="form-field">
+        <div className="form-field-label"><span className="form-field-name">Capture Mouse</span>{recPill('captureMouse')}</div>
+        <select className="form-select" value={settings.captureMouse ? 'on' : 'off'} onChange={e => updateSetting('captureMouse', e.target.value === 'on')}>
+          <option value="off">Off</option>
+          <option value="on">On</option>
+        </select>
+        <p className="form-field-desc">Locks the cursor inside the game window — keep Off for multiboxing.</p>
+      </div>
+    </div>
   );
 
   return (
     <div className="dgv-tab">
-      <div className="dgv-header">
-        <h2>dgVoodoo2 Setup</h2>
-        <p>Step-by-step graphics wrapper configuration for FFXI</p>
-      </div>
+      <div className="section-header">dgVoodoo2 Setup</div>
+      <p className="dgv-desc dgv-tab-intro">Step-by-step graphics wrapper configuration for FFXI.</p>
 
       {/* Status bar */}
       <div className="dgv-status-bar">
@@ -467,7 +488,7 @@ function DgVoodooTab({ config, updateConfig }) {
             onClick={() => setStep(i)}
           >
             <span className="dgv-step-num">{i + 1}</span>
-            <span className="dgv-step-label">{STEP_LABELS[i]}</span>
+            <span>{STEP_LABELS[i]}</span>
           </button>
         ))}
       </div>
@@ -478,7 +499,7 @@ function DgVoodooTab({ config, updateConfig }) {
         {currentStep === 'overview' && (
           <div className="dgv-step-content">
             <div className="panel dgv-panel">
-              <h3 className="dgv-step-title">What is dgVoodoo2?</h3>
+              <h3 className="group-title">What is dgVoodoo2?</h3>
               <p className="dgv-desc">
                 dgVoodoo2 is a graphics wrapper that translates FFXI's old DirectX 8 calls into modern
                 DirectX 11. This gives you access to features the original engine can't provide:
@@ -526,7 +547,7 @@ function DgVoodooTab({ config, updateConfig }) {
             {setupComplete && (
               <>
                 <div className="panel dgv-panel">
-                  <h3 className="dgv-step-title">Graphics Settings</h3>
+                  <h3 className="group-title">Graphics Settings</h3>
                   <p className="dgv-desc">
                     Adjust your dgVoodoo2 configuration. Changes are written to <code>dgVoodoo.conf</code> in your FFXI directory.
                   </p>
@@ -578,7 +599,7 @@ function DgVoodooTab({ config, updateConfig }) {
         {currentStep === 'download' && (
           <div className="dgv-step-content">
             <div className="panel dgv-panel">
-              <h3 className="dgv-step-title">Download dgVoodoo2</h3>
+              <h3 className="group-title">Download dgVoodoo2</h3>
               <p className="dgv-desc">
                 We can download and extract the correct dgVoodoo2 release automatically, or you can
                 grab it manually from GitHub.
@@ -648,7 +669,7 @@ function DgVoodooTab({ config, updateConfig }) {
             </div>
 
             <div className="panel dgv-panel">
-              <h4 className="dgv-step-title" style={{ fontSize: 14 }}>Manual Download</h4>
+              <h4 className="group-title">Manual Download</h4>
               <p className="dgv-hint" style={{ marginBottom: 10 }}>
                 If you prefer to download manually, click below to open the releases page.
               </p>
@@ -679,7 +700,7 @@ function DgVoodooTab({ config, updateConfig }) {
         {currentStep === 'defender' && (
           <div className="dgv-step-content">
             <div className="panel dgv-panel">
-              <h3 className="dgv-step-title">Add Windows Defender Exclusion</h3>
+              <h3 className="group-title">Add Windows Defender Exclusion</h3>
               <p className="dgv-desc">
                 You <strong>must</strong> add your FFXI folder as a Defender exclusion <strong>before</strong> copying
                 the dgVoodoo2 files. Otherwise Windows will quarantine them immediately.
@@ -747,7 +768,7 @@ function DgVoodooTab({ config, updateConfig }) {
             </div>
 
             <div className="panel dgv-panel">
-              <h4 className="dgv-step-title" style={{ fontSize: 14 }}>Manual Method</h4>
+              <h4 className="group-title">Manual Method</h4>
               <p className="dgv-hint" style={{ marginBottom: 10 }}>
                 If the automatic method doesn't work, you can add the exclusion manually through Windows Security.
               </p>
@@ -793,7 +814,7 @@ function DgVoodooTab({ config, updateConfig }) {
         {currentStep === 'copy' && (
           <div className="dgv-step-content">
             <div className="panel dgv-panel">
-              <h3 className="dgv-step-title">Install dgVoodoo2 Files</h3>
+              <h3 className="group-title">Install dgVoodoo2 Files</h3>
               <p className="dgv-desc">
                 Point us to the folder where you extracted dgVoodoo2. We'll copy the correct files
                 into your FFXI directory.
@@ -806,29 +827,36 @@ function DgVoodooTab({ config, updateConfig }) {
                 </div>
               ) : null}
 
-              <div className="dgv-field">
-                <label>dgVoodoo2 Extracted Folder</label>
-                <span className="dgv-field-hint">
-                  The folder containing <code>dgVoodooCpl.exe</code> and the <code>MS</code> subfolder
-                </span>
-                <div className="dgv-field-row">
-                  <input
-                    type="text"
-                    value={sourcePath}
-                    onChange={e => setSourcePath(e.target.value)}
-                    placeholder="C:\dgVoodoo2"
-                  />
-                  <button className="btn btn-ghost btn-sm" onClick={browseDgVoodoo}>Browse</button>
-                  <span className={`pill ${sourceValid ? 'pill-green' : sourcePath ? 'pill-red' : ''}`} style={{ fontSize: 10 }}>
-                    {sourceValid ? 'Valid' : sourcePath ? 'Invalid' : ''}
-                  </span>
-                </div>
-                {sourcePath && !sourceValid && (
-                  <p className="dgv-field-error">
-                    Could not find <code>MS\x86\D3D8.dll</code> in this folder. Make sure you selected the
-                    root dgVoodoo2 folder (the one containing <code>dgVoodooCpl.exe</code>).
+              <div className="form-grid">
+                <div className="form-field form-field-wide">
+                  <div className="form-field-label">
+                    <span className="form-field-name">dgVoodoo2 Extracted Folder</span>
+                    {sourcePath && (
+                      <span className={`pill ${sourceValid ? 'pill-green' : 'pill-red'} pill-sm`}>
+                        {sourceValid ? 'Valid' : 'Invalid'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="form-control-row">
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={sourcePath}
+                      onChange={e => setSourcePath(e.target.value)}
+                      placeholder="C:\dgVoodoo2"
+                    />
+                    <button className="btn btn-ghost btn-sm" onClick={browseDgVoodoo}>Browse</button>
+                  </div>
+                  <p className="form-field-desc">
+                    The folder containing <code>dgVoodooCpl.exe</code> and the <code>MS</code> subfolder.
                   </p>
-                )}
+                  {sourcePath && !sourceValid && (
+                    <p className="dgv-field-error">
+                      Could not find <code>MS\x86\D3D8.dll</code> in this folder. Make sure you selected the
+                      root dgVoodoo2 folder (the one containing <code>dgVoodooCpl.exe</code>).
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div className="dgv-action-box">
@@ -886,7 +914,7 @@ function DgVoodooTab({ config, updateConfig }) {
         {currentStep === 'configure' && (
           <div className="dgv-step-content">
             <div className="panel dgv-panel">
-              <h3 className="dgv-step-title">Quick Configure (Recommended)</h3>
+              <h3 className="group-title">Quick Configure (Recommended)</h3>
               <p className="dgv-desc">
                 Choose your graphics settings below and we'll write an optimized <code>dgVoodoo.conf</code> for FFXI.
               </p>
@@ -919,7 +947,7 @@ function DgVoodooTab({ config, updateConfig }) {
             </div>
 
             <div className="panel dgv-panel">
-              <h4 className="dgv-step-title" style={{ fontSize: 14 }}>Advanced: Use dgVoodoo2 GUI</h4>
+              <h4 className="group-title">Advanced: Use dgVoodoo2 GUI</h4>
               <p className="dgv-hint">
                 Launch dgVoodooCpl.exe for full control over all settings. Make sure it was
                 copied to your FFXI directory in the previous step.
@@ -959,7 +987,7 @@ function DgVoodooTab({ config, updateConfig }) {
         {currentStep === 'verify' && (
           <div className="dgv-step-content">
             <div className="panel dgv-panel">
-              <h3 className="dgv-step-title">Verify Installation</h3>
+              <h3 className="group-title">Verify Installation</h3>
               <p className="dgv-desc">
                 Let's make sure everything is in place.
               </p>
@@ -1024,7 +1052,7 @@ function DgVoodooTab({ config, updateConfig }) {
             </div>
 
             <div className="panel dgv-panel">
-              <h4 className="dgv-step-title" style={{ fontSize: 14 }}>Troubleshooting</h4>
+              <h4 className="group-title">Troubleshooting</h4>
               <div className="dgv-faq">
                 <details>
                   <summary>DLL files keep disappearing</summary>

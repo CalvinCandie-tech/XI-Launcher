@@ -7,6 +7,14 @@
   align-items: flex-start;
 }
 
+/* Bottom-left utility corner (Re-run Setup Wizard) */
+.home-wizard-corner {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 10;
+}
+
 /* Left side — video shows through */
 .home-left {
   flex: 1;
@@ -113,8 +121,10 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: var(--text-dim);
+  color: var(--gold);
   margin-bottom: 10px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border);
 }
 
 /* Profile display */
@@ -122,22 +132,21 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
-  background: var(--card-bg);
+  padding: 8px 12px;
+  background: var(--bg-deepest-alpha);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 .home-profile-display:hover {
-  border-color: var(--border-bright);
-  background: var(--bg-hover);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(200, 146, 42, 0.12);
 }
 
 .home-profile-name {
-  font-size: 16px;
-  color: var(--gold);
-  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
 }
 
 .home-profile-change {
@@ -154,9 +163,10 @@
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  background: rgba(10, 12, 16, 0.95);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: var(--bg-deepest-alpha);
+  border: 1px solid var(--gold-dim);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 8px var(--gold-glow);
   overflow: hidden;
   z-index: 20;
   max-height: 200px;
@@ -168,15 +178,16 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
-  font-size: 14px;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-family: var(--font-mono);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.1s;
 }
 .home-profile-option:hover {
   background: var(--bg-hover);
-  color: var(--text-primary);
+  color: var(--gold-bright);
 }
 .home-profile-option.active {
   color: var(--gold);
@@ -191,10 +202,11 @@
 .home-profile-manage {
   border-top: 1px solid var(--border);
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 12px;
+  font-family: var(--font-body);
 }
 .home-profile-manage:hover {
-  color: var(--teal);
+  color: var(--gold-bright);
 }
 
 .home-profile-none {
@@ -238,12 +250,8 @@
   padding: 8px 12px;
 }
 
-.home-profile-type {
-  display: flex;
-  gap: 4px;
-}
-.home-profile-type .btn {
-  flex: 1;
+.home-full-input {
+  width: 100%;
 }
 
 /* Progress bar */
@@ -282,13 +290,35 @@
   gap: 8px;
 }
 
-.home-launch-toggle {
-  display: flex;
-  gap: 4px;
+/* FFXI Files Updater */
+.home-ffxiupd-field {
+  margin: 6px 0 8px;
 }
-
-.home-launch-toggle .btn {
-  flex: 1;
+.home-ffxiupd-link {
+  color: var(--gold-bright);
+}
+.home-ffxiupd-status {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.home-ffxiupd-status.ok {
+  background: var(--green-alpha);
+  border: 1px solid var(--green-border);
+  color: var(--green);
+}
+.home-ffxiupd-status.err {
+  background: var(--red-alpha);
+  border: 1px solid var(--red-border);
+  color: var(--red);
+}
+.home-contrib-credit {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: right;
+  font-style: italic;
 }
 
 .btn.home-start-btn {
@@ -567,9 +597,6 @@
   border-top: 1px solid var(--border);
   padding-top: 12px;
 }
-.home-panel-center {
-  text-align: center;
-}
 .home-panel-label-tight {
   margin-bottom: 6px;
 }
@@ -589,20 +616,36 @@
   gap: 4px;
   margin-bottom: 10px;
 }
+.home-multibox-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
 .home-multibox-label {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: var(--text-sm);
+  font-size: 13px;
+  font-family: var(--font-mono);
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: transparent;
-  transition: background 0.15s;
+  padding: 6px 10px;
+  border-radius: 5px;
+  background: var(--bg-deepest-alpha);
+  border: 1px solid var(--border);
+  transition: all 0.15s;
+}
+.home-multibox-label:hover {
+  border-color: var(--gold-dim);
+  color: var(--gold-bright);
 }
 .home-multibox-label.selected {
-  background: var(--teal-alpha);
+  background: var(--active-bg);
+  border-color: var(--gold-dim);
+  color: var(--gold);
+}
+.home-multibox-label input[type="checkbox"] {
+  accent-color: var(--gold);
 }
 .home-multibox-log {
   font-size: var(--text-xs);

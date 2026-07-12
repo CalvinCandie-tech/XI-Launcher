@@ -180,6 +180,7 @@ function ReShadeTab({ config, updateConfig, onNavigate }) {
       return !currentEffect?.enabled;
     });
   })?.name || 'Custom';
+  const activePresetObj = PRESETS.find(p => p.name === activePreset);
 
   const queueWrite = (newEffects) => {
     effectsRef.current = newEffects;
@@ -311,18 +312,26 @@ function ReShadeTab({ config, updateConfig, onNavigate }) {
       {status?.installed && enabled && (
         <>
           <div className="section-header">Presets</div>
-          <div className="reshade-presets-list">
-            {PRESETS.map(preset => (
-              <div
-                key={preset.name}
-                className={`reshade-preset-row ${activePreset === preset.name ? 'active' : ''}`}
-                onClick={() => applyPreset(preset)}
-              >
-                <div className="reshade-preset-name cinzel">{preset.name}</div>
-                <div className="reshade-preset-desc">{preset.desc}</div>
-                <div className="reshade-preset-count">{preset.count} effects</div>
+          <div className="panel">
+            <div className="form-grid">
+              <div className="form-field">
+                <div className="form-field-label">
+                  <span className="form-field-name">Preset</span>
+                </div>
+                <select
+                  className="form-select"
+                  value={activePresetObj ? activePreset : ''}
+                  onChange={e => { const p = PRESETS.find(x => x.name === e.target.value); if (p) applyPreset(p); }}
+                >
+                  <option value="" disabled>Custom</option>
+                  {PRESETS.map(p => <option key={p.name} value={p.name}>{p.name} ({p.count} effects)</option>)}
+                </select>
+                <p className="form-field-desc">
+                  {activePresetObj?.desc
+                    || 'Current effect values match no preset — fine-tune individual effects below, or pick a preset to apply it.'}
+                </p>
               </div>
-            ))}
+            </div>
           </div>
 
           <CollapsibleSection title="Customize Effects" defaultOpen={false}>

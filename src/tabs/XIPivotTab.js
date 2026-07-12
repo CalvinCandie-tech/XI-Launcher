@@ -555,17 +555,22 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
 
       <div className="section-header">DATs Root Path</div>
       <div className="panel">
-        <p className="xipivot-hint">The root directory where overlay folders are stored. Default is <code className="mono">{config.ashitaPath}\polplugins\DATs</code>.</p>
-        <div className="xipivot-path-row">
-          <input
-            type="text"
-            value={pivotConfig.rootPath || ''}
-            onChange={e => setPivotConfig(prev => ({ ...prev, rootPath: e.target.value }))}
-            onBlur={e => saveConfig({ rootPath: e.target.value })}
-            className="xipivot-flex-1"
-            placeholder={config.ashitaPath}
-          />
-          <button className="btn btn-ghost btn-sm" onClick={browseRoot}>Browse</button>
+        <div className="form-grid">
+          <div className="form-field form-field-wide">
+            <div className="form-field-label"><span className="form-field-name">DATs root folder</span></div>
+            <div className="form-control-row">
+              <input
+                type="text"
+                className="form-input"
+                value={pivotConfig.rootPath || ''}
+                onChange={e => setPivotConfig(prev => ({ ...prev, rootPath: e.target.value }))}
+                onBlur={e => saveConfig({ rootPath: e.target.value })}
+                placeholder={config.ashitaPath}
+              />
+              <button className="btn btn-ghost btn-sm" onClick={browseRoot}>Browse</button>
+            </div>
+            <p className="form-field-desc">The root directory where overlay folders are stored. Default is <code>{config.ashitaPath}\polplugins\DATs</code>.</p>
+          </div>
         </div>
       </div>
 
@@ -705,8 +710,14 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
                       {pack.releaseAsset && pack.resolutions && (
                         <div className="hdpack-resolution">
                           <span className="hdpack-res-label">Resolution:</span>
-                          <button className={`btn btn-sm ${remapsterRes === '1024' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setRemapsterRes('1024'); updateConfig('remapsterRes', '1024'); }}>1024</button>
-                          <button className={`btn btn-sm ${remapsterRes === '2048' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setRemapsterRes('2048'); updateConfig('remapsterRes', '2048'); }}>2048</button>
+                          <select
+                            className="form-select hdpack-res-select"
+                            value={remapsterRes}
+                            onChange={e => { setRemapsterRes(e.target.value); updateConfig('remapsterRes', e.target.value); }}
+                          >
+                            <option value="1024">1024</option>
+                            <option value="2048">2048 (Recommended)</option>
+                          </select>
                         </div>
                       )}
                       {pack.manual ? (
@@ -778,9 +789,13 @@ function XIPivotTab({ config, updateConfig, onSettingsSaved }) {
               {pack.variants && (
                 <div className="hdpack-resolution">
                   <span className="hdpack-res-label">Variant:</span>
-                  {pack.variants.map(v => (
-                    <button key={v} className={`btn btn-sm ${xiviewVariant === v ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setXiviewVariant(v); updateConfig('xiviewVariant', v); }}>{v}</button>
-                  ))}
+                  <select
+                    className="form-select hdpack-res-select"
+                    value={xiviewVariant}
+                    onChange={e => { setXiviewVariant(e.target.value); updateConfig('xiviewVariant', e.target.value); }}
+                  >
+                    {pack.variants.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
                 </div>
               )}
               {pack.manual ? (

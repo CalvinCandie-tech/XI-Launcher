@@ -513,22 +513,15 @@ function ProfileTab({ config, updateConfig }) {
             </div>
           ))}
           <div className="profiles-create">
-            <div className="profiles-create-type">
-              <button
-                className={`btn btn-sm ${newProfileType === 'private' ? 'btn-primary' : 'btn-ghost'}`}
-                onClick={() => setNewProfileType('private')}
-                title="Uses Ashita bootloader to connect to a private server"
-              >
-                Private
-              </button>
-              <button
-                className={`btn btn-sm ${newProfileType === 'retail' ? 'btn-primary' : 'btn-ghost'}`}
-                onClick={() => setNewProfileType('retail')}
-                title="Connects through PlayOnline for official servers"
-              >
-                Retail
-              </button>
-            </div>
+            <select
+              className="form-select profiles-create-select"
+              value={newProfileType}
+              onChange={e => setNewProfileType(e.target.value)}
+              title="Private uses the Ashita bootloader to connect to a private server; Retail connects through PlayOnline"
+            >
+              <option value="private">Private server</option>
+              <option value="retail">Retail (PlayOnline)</option>
+            </select>
             <input
               type="text"
               placeholder="New profile name..."
@@ -596,76 +589,77 @@ function ProfileTab({ config, updateConfig }) {
 
       <div className="section-header">Private Server Connection</div>
       <div className="panel server-panel">
-        <div className="server-intro">
-          <div className="server-intro-icon">⚡</div>
-          <div className="server-intro-text">
-            <p className="server-intro-title">Connect to a Private Server</p>
-            <p className="server-intro-desc">
-              These settings let you bypass PlayOnline and connect directly to a private server using <strong>xiloader</strong>.
-              Enter the server address and your login credentials below, then use the <strong>"Launch via xiloader"</strong> button at the bottom.
-              If you only play on retail, you can skip this section entirely.
-            </p>
-          </div>
-        </div>
+        <p className="profile-hint">
+          These settings let you bypass PlayOnline and connect directly to a private server using <strong>xiloader</strong>.
+          Enter the server address and your login credentials, then apply them to a profile below.
+          If you only play on retail, you can skip this section entirely.
+        </p>
 
         <div className="server-group">
-          <div className="server-group-label">Server Address</div>
-          <div className="server-group-row">
-            <div className="field-row server-field-host">
-              <label>Hostname</label>
-              <span className="field-hint">e.g. play.myserver.com or an IP address</span>
+          <div className="group-title">Server Address</div>
+          <div className="form-grid">
+            <div className="form-field">
+              <div className="form-field-label"><span className="form-field-name">Hostname</span></div>
               <input
                 type="text"
+                className="form-input"
                 value={config.serverHost || ''}
                 placeholder="play.myserver.com"
                 onChange={e => updateConfig('serverHost', e.target.value)}
               />
+              <p className="form-field-desc">Server address — e.g. play.myserver.com or an IP address.</p>
             </div>
-            <div className="field-row server-field-port">
-              <label>Port</label>
-              <span className="field-hint">Default: 54231</span>
+            <div className="form-field">
+              <div className="form-field-label"><span className="form-field-name">Port</span></div>
               <input
                 type="text"
+                className="form-input"
                 value={config.serverPort || ''}
                 placeholder="54231"
                 onChange={e => updateConfig('serverPort', e.target.value)}
               />
+              <p className="form-field-desc">Login server port. Default: 54231.</p>
             </div>
           </div>
         </div>
 
         <div className="server-group">
-          <div className="server-group-label">Login Credentials</div>
-          <div className="server-group-row">
-            <div className="field-row">
-              <label>Username</label>
-              <span className="field-hint">Your account name on the private server</span>
+          <div className="group-title">Login Credentials</div>
+          <div className="form-grid">
+            <div className="form-field">
+              <div className="form-field-label"><span className="form-field-name">Username</span></div>
               <input
                 type="text"
+                className="form-input"
                 value={config.loginUser || ''}
                 placeholder="Enter username"
                 onChange={e => updateConfig('loginUser', e.target.value)}
               />
+              <p className="form-field-desc">Your account name on the private server.</p>
             </div>
-            <div className="field-row">
-              <label>Password</label>
-              <span className="field-hint">Your account password</span>
+            <div className="form-field">
+              <div className="form-field-label"><span className="form-field-name">Password</span></div>
               <input
                 type="password"
+                className="form-input"
                 value={config.loginPass || ''}
                 placeholder="Enter password"
                 onChange={e => updateConfig('loginPass', e.target.value)}
               />
+              <p className="form-field-desc">Your account password.</p>
             </div>
-          </div>
-          <div className="profile-hairpin-row">
-            <button
-              className={`btn btn-sm ${config.hairpin ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => updateConfig('hairpin', !config.hairpin)}
-            >
-              {config.hairpin ? '✓ Hairpin Enabled' : 'Hairpin Off'}
-            </button>
-            <span className="field-hint profile-hint-inline">Use --hairpin flag for NAT loopback connections</span>
+            <div className="form-field">
+              <div className="form-field-label"><span className="form-field-name">Hairpin</span></div>
+              <select
+                className="form-select"
+                value={config.hairpin ? 'on' : 'off'}
+                onChange={e => updateConfig('hairpin', e.target.value === 'on')}
+              >
+                <option value="off">Off</option>
+                <option value="on">Enabled</option>
+              </select>
+              <p className="form-field-desc">Adds the --hairpin flag for NAT loopback connections (server on your own network).</p>
+            </div>
           </div>
           <div className="credential-warning">
             🔒 Credentials are stored locally on this device only. They are not sent anywhere except to the server you connect to.
@@ -673,41 +667,44 @@ function ProfileTab({ config, updateConfig }) {
         </div>
 
         <details className="server-group profile-xiloader-override">
-          <summary className="server-group-label" style={{ cursor: 'pointer' }}>
+          <summary className="group-title profile-xiloader-summary">
             Advanced: Custom xiloader for this profile (optional)
           </summary>
-          <div style={{ marginTop: '0.5rem' }}>
-            <p className="field-hint" style={{ marginBottom: '0.5rem' }}>
+          <div className="profile-xiloader-body">
+            <p className="profile-hint">
               Most users can ignore this. Some private servers (often 75-cap) need a specific xiloader version that differs from the launcher's bundled one. Pick the folder containing the <code>xiloader.exe</code> you want to use for <strong>{targetProfile || 'this profile'}</strong>. Leave blank to use the launcher default.
             </p>
             {!targetProfile && (
-              <p className="field-hint" style={{ color: 'var(--warn, #c90)' }}>
+              <p className="form-field-desc profile-xiloader-warn">
                 Select or activate a profile above to configure a per-profile xiloader.
               </p>
             )}
-            <div className="server-group-row" style={{ alignItems: 'flex-end', gap: '0.5rem' }}>
-              <div className="field-row" style={{ flex: 1 }}>
-                <label>xiloader folder for this profile</label>
-                <input
-                  type="text"
-                  value={profileXiloader}
-                  placeholder={config.xiloaderPath ? `(default: ${config.xiloaderPath})` : 'Pick the folder containing xiloader.exe'}
-                  onChange={e => setProfileXiloader(e.target.value)}
-                  onBlur={() => saveProfileXiloader(profileXiloader)}
-                  disabled={!targetProfile}
-                />
+            <div className="form-grid">
+              <div className="form-field form-field-wide">
+                <div className="form-field-label"><span className="form-field-name">xiloader folder for this profile</span></div>
+                <div className="form-control-row">
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={profileXiloader}
+                    placeholder={config.xiloaderPath ? `(default: ${config.xiloaderPath})` : 'Pick the folder containing xiloader.exe'}
+                    onChange={e => setProfileXiloader(e.target.value)}
+                    onBlur={() => saveProfileXiloader(profileXiloader)}
+                    disabled={!targetProfile}
+                  />
+                  <button className="btn btn-sm btn-ghost" onClick={browseProfileXiloader} disabled={!targetProfile}>Browse</button>
+                  <button className="btn btn-sm btn-ghost" onClick={() => saveProfileXiloader('')} disabled={!targetProfile || !profileXiloader}>Use Default</button>
+                </div>
+                {profileXiloader && (
+                  <p className={`form-field-desc ${profileXiloaderExists ? 'profile-xiloader-ok' : 'profile-xiloader-err'}`}>
+                    {profileXiloaderExists ? '✓ Found xiloader.exe' : '⚠ xiloader.exe not found in this folder'}
+                  </p>
+                )}
+                {profileXiloaderStatus && (
+                  <p className="form-field-desc">{profileXiloaderStatus}</p>
+                )}
               </div>
-              <button className="btn btn-sm btn-ghost" onClick={browseProfileXiloader} disabled={!targetProfile}>Browse</button>
-              <button className="btn btn-sm btn-ghost" onClick={() => saveProfileXiloader('')} disabled={!targetProfile || !profileXiloader}>Use Default</button>
             </div>
-            {profileXiloader && (
-              <p className="field-hint" style={{ marginTop: '0.5rem', color: profileXiloaderExists ? 'var(--ok, #6c6)' : 'var(--err, #c66)' }}>
-                {profileXiloaderExists ? '✓ Found xiloader.exe' : '⚠ xiloader.exe not found in this folder'}
-              </p>
-            )}
-            {profileXiloaderStatus && (
-              <p className="field-hint" style={{ marginTop: '0.5rem' }}>{profileXiloaderStatus}</p>
-            )}
           </div>
         </details>
 
@@ -801,33 +798,35 @@ function ProfileTab({ config, updateConfig }) {
             {autoDetectMsg.text}
           </div>
         )}
-        <PathRow
-          label="Ashita v4 Path"
-          hint="The folder containing Ashita-cli.exe — the v4 injection framework that loads addons and plugins"
-          value={config.ashitaPath}
-          found={pathStatus.ashita}
-          onBrowse={() => handleBrowse('ashitaPath', config.ashitaPath)}
-          onChange={(v) => updateConfig('ashitaPath', v)}
-          onBlur={checkPaths}
-        />
-        <PathRow
-          label="FFXI Install Path"
-          hint="Your Final Fantasy XI game installation folder (where the game's ROM and DAT files live)"
-          value={config.ffxiPath}
-          found={pathStatus.ffxi}
-          onBrowse={() => handleBrowse('ffxiPath', config.ffxiPath)}
-          onChange={(v) => updateConfig('ffxiPath', v)}
-          onBlur={checkPaths}
-        />
-        <PathRow
-          label="xiloader Path"
-          hint="Optional — only needed for private servers. Points to the folder containing xiloader.exe"
-          value={config.xiloaderPath}
-          found={pathStatus.xiloader}
-          onBrowse={() => handleBrowse('xiloaderPath', config.xiloaderPath)}
-          onChange={(v) => updateConfig('xiloaderPath', v)}
-          onBlur={checkPaths}
-        />
+        <div className="form-grid">
+          <PathRow
+            label="Ashita v4 Path"
+            hint="The folder containing Ashita-cli.exe — the v4 injection framework that loads addons and plugins."
+            value={config.ashitaPath}
+            found={pathStatus.ashita}
+            onBrowse={() => handleBrowse('ashitaPath', config.ashitaPath)}
+            onChange={(v) => updateConfig('ashitaPath', v)}
+            onBlur={checkPaths}
+          />
+          <PathRow
+            label="FFXI Install Path"
+            hint="Your Final Fantasy XI game installation folder (where the game's ROM and DAT files live)."
+            value={config.ffxiPath}
+            found={pathStatus.ffxi}
+            onBrowse={() => handleBrowse('ffxiPath', config.ffxiPath)}
+            onChange={(v) => updateConfig('ffxiPath', v)}
+            onBlur={checkPaths}
+          />
+          <PathRow
+            label="xiloader Path"
+            hint="Optional — only needed for private servers. Points to the folder containing xiloader.exe."
+            value={config.xiloaderPath}
+            found={pathStatus.xiloader}
+            onBrowse={() => handleBrowse('xiloaderPath', config.xiloaderPath)}
+            onChange={(v) => updateConfig('xiloaderPath', v)}
+            onBlur={checkPaths}
+          />
+        </div>
       </div>
 
       <div className="section-header">Get xiloader</div>
@@ -939,22 +938,24 @@ function ProfileTab({ config, updateConfig }) {
 
 function PathRow({ label, hint, value, found, onBrowse, onChange, onBlur }) {
   return (
-    <div className="path-row">
-      <div className="path-label-group">
-        <label className="path-label">{label}</label>
-        {hint && <span className="path-hint">{hint}</span>}
+    <div className="form-field form-field-wide">
+      <div className="form-field-label">
+        <span className="form-field-name">{label}</span>
+        <span className={`pill ${found ? 'pill-green' : 'pill-red'} pill-sm`}>
+          {found ? 'Found' : 'Not Found'}
+        </span>
       </div>
-      <input
-        type="text"
-        className="path-input"
-        value={value || ''}
-        onChange={e => onChange(e.target.value)}
-        onBlur={onBlur}
-      />
-      <button className="btn btn-ghost btn-sm" onClick={onBrowse}>Browse</button>
-      <span className={`pill ${found ? 'pill-green' : 'pill-red'}`}>
-        {found ? 'Found' : 'Not Found'}
-      </span>
+      <div className="form-control-row">
+        <input
+          type="text"
+          className="form-input"
+          value={value || ''}
+          onChange={e => onChange(e.target.value)}
+          onBlur={onBlur}
+        />
+        <button className="btn btn-ghost btn-sm" onClick={onBrowse}>Browse</button>
+      </div>
+      {hint && <p className="form-field-desc">{hint}</p>}
     </div>
   );
 }

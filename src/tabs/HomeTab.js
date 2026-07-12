@@ -4,7 +4,7 @@ import { DEFAULT_PROFILE_INI } from '../utils/profileTemplates';
 
 const api = window.xiAPI;
 
-function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, launchLog, updateInfo, onManualUpdateCheck, onSkipVersion, onDismissUpdate, onShowWizard }) {
+function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, launchLog, updateInfo, onSkipVersion, onDismissUpdate, onShowWizard }) {
   const [status, setStatus] = useState({ ashita: false, ffxi: false, xiloader: false, profileCount: 0 });
   const [startupWarnings, setStartupWarnings] = useState([]);
   const [creating, setCreating] = useState(false);
@@ -25,7 +25,6 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
   const [updateDlStatus, setUpdateDlStatus] = useState(''); // '' | 'downloading' | 'installing' | 'error'
   const [updateDlProgress, setUpdateDlProgress] = useState({ percent: 0, detail: '' });
   const [updateDlError, setUpdateDlError] = useState('');
-  const [manualCheckMsg, setManualCheckMsg] = useState('');
 
   // ── 📥 FFXI Files Updater (Vana-Time mirror or custom URL) ──
   const [ffxiDlPercent, setFfxiDlPercent] = useState(0);
@@ -239,22 +238,6 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
     }
   };
 
-  const handleManualCheck = async () => {
-    setManualCheckMsg('Checking...');
-    try {
-      const info = await onManualUpdateCheck();
-      if (!info || info.upToDate) {
-        setManualCheckMsg('You are on the latest version');
-        setTimeout(() => setManualCheckMsg(''), 3000);
-      } else {
-        setManualCheckMsg('');
-      }
-    } catch (e) {
-      setManualCheckMsg('Update check failed');
-      setTimeout(() => setManualCheckMsg(''), 4000);
-    }
-  };
-
   const setupComplete = status.ashita && status.ffxi && config.activeProfile;
   const stepsComplete = [status.ashita, status.ffxi, !!config.activeProfile].filter(Boolean).length;
 
@@ -343,8 +326,15 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
           <div className="home-panel-label">Game Profile</div>
           {profiles.length > 0 ? (
             <div className="home-profile-switcher" ref={dropdownRef}>
-              <div className="home-profile-display" role="button" aria-expanded={profileDropdownOpen} onClick={() => setProfileDropdownOpen(prev => !prev)}>
-                <span className="home-profile-name cinzel">{config.activeProfile || 'Select profile'}</span>
+              <div
+                className="home-profile-display"
+                role="button"
+                tabIndex={0}
+                aria-expanded={profileDropdownOpen}
+                onClick={() => setProfileDropdownOpen(prev => !prev)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setProfileDropdownOpen(prev => !prev); } }}
+              >
+                <span className="home-profile-name mono">{config.activeProfile || 'Select profile'}</span>
                 <span className="home-profile-change">{profileDropdownOpen ? '▲' : '▼'}</span>
               </div>
               {profileDropdownOpen && (
@@ -422,16 +412,14 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
           <div className="home-panel-section">
             <div className="home-panel-label">Quick Setup</div>
             <div className="home-quick-create">
-              <div className="home-profile-type">
-                <button
-                  className={`btn btn-sm ${profileType === 'private' ? 'btn-primary' : 'btn-ghost'}`}
-                  onClick={() => setProfileType('private')}
-                >Private Server</button>
-                <button
-                  className={`btn btn-sm ${profileType === 'retail' ? 'btn-primary' : 'btn-ghost'}`}
-                  onClick={() => setProfileType('retail')}
-                >Retail</button>
-              </div>
+              <select
+                className="form-select home-full-input"
+                value={profileType}
+                onChange={e => setProfileType(e.target.value)}
+              >
+                <option value="private">Private server</option>
+                <option value="retail">Retail (PlayOnline)</option>
+              </select>
               <input
                 type="text"
                 value={newName}
@@ -466,15 +454,16 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
         {/* Start Game */}
         {setupComplete && (
           <div className="home-panel-section home-panel-launch">
-            <div className="home-launch-toggle">
-              <button
-                className={`btn btn-sm ${!config.useXiloader ? 'btn-primary' : 'btn-ghost'}`}
-                onClick={() => updateConfig('useXiloader', false)}
-              >Ashita</button>
-              <button
-                className={`btn btn-sm ${config.useXiloader ? 'btn-primary' : 'btn-ghost'}`}
-                onClick={() => updateConfig('useXiloader', true)}
-              >xiloader</button>
+            <div className="form-field">
+              <div className="form-field-label"><span className="form-field-name">Launch method</span></div>
+              <select
+                className="form-select"
+                value={config.useXiloader ? 'xiloader' : 'ashita'}
+                onChange={e => updateConfig('useXiloader', e.target.value === 'xiloader')}
+              >
+                <option value="ashita">Ashita (boot file from profile)</option>
+                <option value="xiloader">xiloader (private server)</option>
+              </select>
             </div>
             {config.serverHost && (
               <div className="home-conn-section">
@@ -535,9 +524,17 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
         {/* Multi-Box Launch */}
         {setupComplete && profiles.length > 1 && (
           <div className="home-panel-section home-panel-divider">
-            <button className="btn btn-primary btn-sm home-full-btn" onClick={() => setMultiBoxOpen(o => !o)}>
-              {multiBoxOpen ? '▾ Multi-Box Launch' : '▸ Multi-Box Launch'}
-            </button>
+            <div
+              className="home-profile-display"
+              role="button"
+              tabIndex={0}
+              aria-expanded={multiBoxOpen}
+              onClick={() => setMultiBoxOpen(o => !o)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setMultiBoxOpen(o => !o); } }}
+            >
+              <span className="home-multibox-title">Multi-Box Launch</span>
+              <span className="home-profile-change">{multiBoxOpen ? '▲' : '▼'}</span>
+            </div>
             {multiBoxOpen && (
               <div className="home-multibox-body">
                 <p className="home-multibox-hint">
@@ -571,32 +568,33 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
         {setupComplete && (
           <div className="home-panel-section home-panel-divider">
             <div className="home-panel-label home-panel-label-tight">FFXI Files Updater</div>
-            <p className="home-multibox-hint" style={{ marginTop: 4 }}>
-              Downloads pre-patched FFXI files into your game folder. Leave blank for the default{' '}
-              <a href="#vana-time" onClick={e => { e.preventDefault(); api?.openExternal?.('https://vana-time.com/downloads'); }} style={{ color: 'var(--gold-bright, #e8b84a)' }}>Vana-Time</a>{' '}
-              mirror. Close FFXI before running.
-            </p>
-            <input
-              type="text"
-              value={ffxiMirrorUrl}
-              placeholder="Custom mirror link (optional, https)"
-              onChange={e => setFfxiMirrorUrl(e.target.value)}
-              disabled={ffxiUpdating}
-              spellCheck={false}
-              style={{ width: '100%', boxSizing: 'border-box', padding: '0.45rem 0.6rem', margin: '0.4rem 0', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border, rgba(255,255,255,0.15))', borderRadius: 4, color: '#fff', fontFamily: 'monospace', fontSize: '0.75rem' }}
-            />
+            <div className="form-field home-ffxiupd-field">
+              <div className="form-field-label"><span className="form-field-name">Mirror URL</span></div>
+              <input
+                type="text"
+                className="form-input"
+                value={ffxiMirrorUrl}
+                placeholder="Custom mirror link (optional, https)"
+                onChange={e => setFfxiMirrorUrl(e.target.value)}
+                disabled={ffxiUpdating}
+                spellCheck={false}
+              />
+              <p className="form-field-desc">
+                Downloads pre-patched FFXI files into your game folder. Leave blank for the default{' '}
+                <a href="#vana-time" className="home-ffxiupd-link" onClick={e => { e.preventDefault(); api?.openExternal?.('https://vana-time.com/downloads'); }}>Vana-Time</a>{' '}
+                mirror. Close FFXI before running.
+              </p>
+            </div>
             {ffxiUpdating && (
-              <div style={{ margin: '0.5rem 0' }}>
-                <div style={{ marginBottom: '0.3rem', color: 'var(--primary, #00ffff)', fontStyle: 'italic', fontSize: '0.72rem' }}>
-                  {ffxiDlDetail}
+              <div className="home-install-progress">
+                <div className="home-progress-bar home-progress-bar-tight">
+                  <div className="home-progress-fill" style={{ width: `${ffxiDlPercent}%` }} />
                 </div>
-                <div style={{ width: '100%', background: 'rgba(255,255,255,0.05)', borderRadius: 4, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                  <div style={{ width: `${ffxiDlPercent}%`, height: 6, background: 'linear-gradient(90deg, #00ced1, #00ffff)', transition: 'width 0.15s ease-out' }} />
-                </div>
+                <span className="home-progress-text">{ffxiDlDetail}</span>
               </div>
             )}
             {ffxiUpdaterStatus && !ffxiUpdating && (
-              <div style={{ margin: '0.4rem 0', padding: '0.4rem 0.6rem', borderRadius: 4, fontSize: '0.72rem', background: ffxiUpdaterStatus.ok ? 'rgba(80, 200, 120, 0.12)' : 'rgba(220, 80, 80, 0.12)', border: `1px solid ${ffxiUpdaterStatus.ok ? 'rgba(80, 200, 120, 0.4)' : 'rgba(220, 80, 80, 0.4)'}`, color: ffxiUpdaterStatus.ok ? 'var(--ok, #6c6)' : 'var(--error, #e66)' }}>
+              <div className={`home-ffxiupd-status ${ffxiUpdaterStatus.ok ? 'ok' : 'err'}`}>
                 {ffxiUpdaterStatus.ok ? '✔ ' : '✖ '}{ffxiUpdaterStatus.msg}
               </div>
             )}
@@ -607,26 +605,22 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
             >
               {ffxiUpdating ? `◌ Updating (${ffxiDlPercent}%)` : '⚡ Run FFXI Files Updater'}
             </button>
-            <div style={{ marginTop: '0.4rem', fontSize: '0.65rem', opacity: 0.55, textAlign: 'right', fontStyle: 'italic' }}>
+            <div className="home-contrib-credit">
               contributed by Demetrie
             </div>
           </div>
         )}
 
-        {setupComplete && (
-          <div className="home-panel-section home-panel-divider home-panel-center">
-            <button className="btn btn-primary btn-sm home-full-btn" onClick={handleManualCheck} disabled={!!updateDlStatus}>
-              {manualCheckMsg || 'Check for Updates'}
-            </button>
-            {onShowWizard && (
-              <button className="btn btn-primary btn-sm home-full-btn" onClick={onShowWizard} style={{ marginTop: 4 }}>
-                Re-run Setup Wizard
-              </button>
-            )}
-          </div>
-        )}
-
       </div>
+
+      {/* Bottom-left utility corner */}
+      {setupComplete && onShowWizard && (
+        <div className="home-wizard-corner">
+          <button className="btn btn-primary btn-sm" onClick={onShowWizard}>
+            Re-run Setup Wizard
+          </button>
+        </div>
+      )}
     </div>
   );
 }

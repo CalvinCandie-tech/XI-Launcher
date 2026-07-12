@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Modal from './Modal';
+import RecPill from './RecPill';
 import { getSection, setSectionValues } from '../utils/iniParser';
 import './RegistryEditor.css';
 
@@ -82,6 +83,18 @@ const REGISTRY_GROUPS = [
   },
 ];
 
+// Recommended values by registry key — single source of truth, also consumed
+// by SettingsTab's REC pills so the two UIs can never disagree.
+export const REGISTRY_RECS = (() => {
+  const map = {};
+  for (const group of REGISTRY_GROUPS) {
+    for (const f of group.fields) {
+      if (f.rec !== undefined) map[f.key] = f.rec;
+    }
+  }
+  return map;
+})();
+
 const DEFAULT = '-1';
 
 function RegistryEditor({ iniContent, onSave, onClose }) {
@@ -159,7 +172,10 @@ function RegistryEditor({ iniContent, onSave, onClose }) {
                       <div className="registry-field-label">
                         <span className="registry-field-name">{f.label}</span>
                         {f.rec !== undefined && (
-                          <span className="registry-field-rec" title="Recommended value">rec</span>
+                          <RecPill
+                            match={String(val) === String(f.rec)}
+                            onApply={() => setVal(f.key, f.rec)}
+                          />
                         )}
                       </div>
                       {f.type === 'select' ? (

@@ -206,16 +206,6 @@ function App() {
     }).catch((err) => console.error('Update check failed:', err));
   }, []);
 
-  const handleManualUpdateCheck = async () => {
-    if (!api?.checkForUpdates) return null;
-    const info = await api.checkForUpdates();
-    if (info && !info.upToDate && info.latest) {
-      setUpdateInfo(info);
-      return info;
-    }
-    return info;
-  };
-
   const handleSkipVersion = async (version) => {
     if (!api?.skipUpdateVersion) return;
     await api.skipUpdateVersion(version);
@@ -633,7 +623,7 @@ function App() {
   const renderTabContent = (tab) => {
     const tabProps = { config, updateConfig };
     switch (tab) {
-      case 'home': return <HomeTab {...tabProps} onNavigate={guardedSetActiveTab} onLaunch={handleLaunch} isLaunching={isLaunching} launchLog={launchLog} updateInfo={updateInfo} onManualUpdateCheck={handleManualUpdateCheck} onSkipVersion={handleSkipVersion} onDismissUpdate={handleDismissUpdate} onShowWizard={() => setShowWizard(true)} />;
+      case 'home': return <HomeTab {...tabProps} onNavigate={guardedSetActiveTab} onLaunch={handleLaunch} isLaunching={isLaunching} launchLog={launchLog} updateInfo={updateInfo} onSkipVersion={handleSkipVersion} onDismissUpdate={handleDismissUpdate} onShowWizard={() => setShowWizard(true)} />;
       case 'profiles': return <ProfileTab {...tabProps} />;
       case 'addons': return <AddonsTab {...tabProps} onCheckAddonUpdates={handleManualAddonCheck} />;
       case 'plugins': return <PluginsTab {...tabProps} />;

@@ -190,16 +190,32 @@ body::before {
   color: var(--text-bright, #f2e6cf);
 }
 
-/* "REC" recommended-value pill */
+/* "REC" recommended-value pill — lit when the current value matches the
+   recommendation, dim outline when it doesn't (click to apply) */
 .pill-rec {
   font-size: 9px;
   font-weight: 700;
+  font-family: inherit;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #0a0c10;
   background: linear-gradient(135deg, var(--teal), var(--gold));
+  border: 1px solid transparent;
   border-radius: 4px;
   padding: 1px 5px;
+  line-height: 1.4;
+}
+button.pill-rec {
+  cursor: pointer;
+}
+.pill-rec.off {
+  background: transparent;
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+button.pill-rec.off:hover {
+  color: var(--gold-bright);
+  border-color: var(--gold-dim);
 }
 
 /* Inherit the global input/select base (dark, bordered, mono) — just tighter */
@@ -222,11 +238,30 @@ body::before {
   line-height: 1.35;
   color: var(--text-secondary);
 }
+.form-field-desc code {
+  background: var(--bg-deepest);
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
 
 /* Field spanning the full grid width (token inputs, device pickers, etc.) */
 .form-field-wide {
   grid-column: 1 / -1;
 }
+
+/* Input + button(s) on one row inside a form-field */
+.form-control-row {
+  display: flex;
+  gap: 8px;
+}
+.form-control-row .form-input,
+.form-control-row .form-select {
+  flex: 1;
+  min-width: 0;
+}
+
 
 /* Panels */
 .panel {
@@ -364,6 +399,16 @@ input::placeholder, textarea::placeholder {
 .pill-gold { color: var(--gold); border-color: rgba(200, 146, 42, 0.2); }
 .pill-teal::before { background: var(--teal); }
 .pill-teal { color: var(--teal); border-color: rgba(58, 184, 200, 0.2); }
+
+/* Compact pill variant — must follow .pill so its metrics win the cascade */
+.pill-sm {
+  font-size: 10px;
+  padding: 2px 8px;
+}
+/* Right-align compact pills inside form-field label rows */
+.form-field-label .pill-sm {
+  margin-left: auto;
+}
 
 /* Toggle switch */
 .toggle {

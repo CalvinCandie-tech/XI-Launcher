@@ -2,21 +2,8 @@
   max-width: 100%;
 }
 
-.dgv-header {
-  margin-bottom: 16px;
-}
-.dgv-header h2 {
-  font-family: var(--font-display);
-  font-size: 20px;
-  background: linear-gradient(135deg, var(--teal), var(--gold));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  letter-spacing: 0.05em;
-  margin-bottom: 4px;
-}
-.dgv-header p {
-  font-size: 13px;
-  color: var(--text-dim);
+.dgv-tab-intro {
+  margin-top: -6px;
 }
 
 /* Status bar */
@@ -57,17 +44,22 @@
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: transparent;
+  background: var(--bg-deepest-alpha);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-dim);
+  border-radius: 5px;
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
-  font-size: 12px;
+  transition: color 0.15s, border-color 0.15s, box-shadow 0.15s;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .dgv-step-btn:hover {
-  border-color: var(--teal-dim);
-  color: var(--text-secondary);
+  color: var(--gold-bright);
+  border-color: var(--gold-dim);
+  box-shadow: 0 0 8px var(--gold-glow);
 }
 .dgv-step-btn.active {
   background: var(--active-bg);
@@ -110,11 +102,6 @@
 .dgv-step-btn.done .dgv-step-num {
   background: var(--green);
   color: var(--bg-deepest);
-}
-.dgv-step-label {
-  font-family: var(--font-body);
-  font-weight: 600;
-  letter-spacing: 0.02em;
 }
 
 /* Body */
@@ -160,15 +147,8 @@
   opacity: 0.8;
 }
 
-.dgv-step-title {
-  font-family: var(--font-display);
-  font-size: 16px;
-  color: var(--gold);
-  margin-bottom: 8px;
-}
-
 .dgv-desc {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.6;
   margin-bottom: 16px;
@@ -407,36 +387,6 @@
 }
 
 /* ── Fields ── */
-.dgv-field {
-  margin-bottom: 14px;
-}
-.dgv-field label {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-.dgv-field-hint {
-  display: block;
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-bottom: 6px;
-}
-.dgv-field-hint code {
-  background: var(--bg-deepest);
-  padding: 1px 4px;
-  border-radius: 2px;
-  font-size: 11px;
-}
-.dgv-field-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.dgv-field-row input {
-  flex: 1;
-}
 .dgv-field-error {
   font-size: 12px;
   color: var(--red);
@@ -516,72 +466,6 @@
   font-size: 14px;
   color: var(--text-primary);
   margin-bottom: 4px;
-}
-
-/* ── Settings grid (addon-card style tiles) ── */
-.dgv-settings-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin: 14px 0;
-}
-.dgv-setting-card {
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 14px;
-  transition: border-color 0.2s;
-}
-.dgv-setting-card:hover {
-  border-color: var(--border-bright);
-}
-.dgv-setting-card label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-}
-.dgv-setting-card select {
-  width: 100%;
-  padding: 7px 10px;
-  background: var(--bg-deepest);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-family: var(--font-body);
-}
-.dgv-setting-card select:focus {
-  border-color: var(--teal);
-  outline: none;
-}
-
-.dgv-setting label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 4px;
-}
-
-.dgv-setting-check {
-  margin: 10px 0;
-}
-.dgv-setting-check label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.dgv-setting-check input[type="checkbox"] {
-  width: auto;
-  accent-color: var(--teal);
-}
-.dgv-setting-check .dgv-field-hint {
-  margin-left: 26px;
-  margin-top: 2px;
 }
 
 .dgv-config-divider {

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './SettingsTab.css';
 import Modal from '../components/Modal';
+import RecPill from '../components/RecPill';
+import { REGISTRY_RECS } from '../components/RegistryEditor';
 import { getSection, setSectionValues, getScriptName } from '../utils/iniParser';
 
 const api = window.xiAPI;
@@ -556,6 +558,21 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
     setPendingWrites(prev => ({ ...prev, [key]: value }));
   };
 
+  // Whether the key is explicitly set anywhere (pending edit, INI override,
+  // or actual registry value) — getValue's `?? 0` fallback must not light a
+  // rec-0 pill for a key that simply doesn't exist.
+  const hasExplicitValue = (key) =>
+    key in pendingWrites || (key in iniValues && iniValues[key] !== -1) || key in regValues;
+
+  // Live REC pill wired to the shared component; rec values come from
+  // RegistryEditor's REGISTRY_RECS so the two UIs can never disagree.
+  const recPill = (k) => (
+    <RecPill
+      match={hasExplicitValue(k) && String(getValue(k)) === String(REGISTRY_RECS[k])}
+      onApply={() => setPending(k, parseInt(REGISTRY_RECS[k], 10))}
+    />
+  );
+
   const getPadmode = () => {
     const raw = getValue('padmode000');
     if (!raw || raw === '-1') return [0, 0, 0, 0, 0, 0];
@@ -1062,11 +1079,12 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
       <div className="panel">
         <div className="form-grid">
           <div className="form-field">
-            <div className="form-field-label"><span className="form-field-name">Window mode</span><span className="pill-rec">Rec</span></div>
+            <div className="form-field-label"><span className="form-field-name">Window mode</span>{recPill('0034')}</div>
             <select className="form-select" value={getValue('0034')} onChange={e => setPending('0034', parseInt(e.target.value))}>
               <option value={-1}>Default (FFXI Config)</option>
               <option value={0}>Fullscreen</option>
               <option value={1}>Windowed</option>
+              <option value={2}>Fullscreen Windowed</option>
               <option value={3}>Borderless Windowed</option>
             </select>
             <p className="form-field-desc">How the game window is presented. Windowed is most compatible and easy to alt-tab. Fullscreen performs best but alt-tab can crash without dgVoodoo2. Borderless gives easy alt-tab with no screen flash.</p>
@@ -1101,12 +1119,12 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
             <p className="form-field-desc">Quick-pick a render resolution — 2x your screen resolution is the sweet spot.</p>
           </div>
           <div className="form-field">
-            <div className="form-field-label"><span className="form-field-name">Background width</span><span className="pill-rec">Rec</span></div>
+            <div className="form-field-label"><span className="form-field-name">Background width</span>{recPill('0003')}</div>
             <input type="number" className="form-input" value={bgW} onChange={e => setPending('0003', parseInt(e.target.value) || 0)} />
             <p className="form-field-desc">Internal render (background) width. Higher = sharper world, more GPU. Best divisible by 2.</p>
           </div>
           <div className="form-field">
-            <div className="form-field-label"><span className="form-field-name">Background height</span><span className="pill-rec">Rec</span></div>
+            <div className="form-field-label"><span className="form-field-name">Background height</span>{recPill('0004')}</div>
             <input type="number" className="form-input" value={bgH} onChange={e => setPending('0004', parseInt(e.target.value) || 0)} />
             <p className="form-field-desc">Internal render (background) height. Best divisible by 2.</p>
           </div>
@@ -1118,7 +1136,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
         <p className="settings-hint">Controls how FFXI renders textures and effects. "Default" uses the value from FFXI Config.</p>
         <div className="form-grid">
           <div className="form-field">
-            <div className="form-field-label"><span className="form-field-name">Mip Mapping</span><span className="pill-rec">Rec</span></div>
+            <div className="form-field-label"><span className="form-field-name">Mip Mapping</span>{recPill('0000')}</div>
             <select className="form-select" value={getValue('0000')} onChange={e => setPending('0000', parseInt(e.target.value))}>
               <option value={-1}>Default (FFXI Config)</option>
               <option value={0}>Off</option>
@@ -1132,7 +1150,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
             <p className="form-field-desc">Reduces texture shimmer on distant surfaces. 6 = best quality.</p>
           </div>
           <div className="form-field">
-            <div className="form-field-label"><span className="form-field-name">Texture Compression</span><span className="pill-rec">Rec</span></div>
+            <div className="form-field-label"><span className="form-field-name">Texture Compression</span>{recPill('0018')}</div>
             <select className="form-select" value={getValue('0018')} onChange={e => setPending('0018', parseInt(e.target.value))}>
               <option value={-1}>Default (FFXI Config)</option>
               <option value={0}>High (Compressed)</option>
@@ -1142,7 +1160,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
             <p className="form-field-desc">Uncompressed is sharper but uses more VRAM.</p>
           </div>
           <div className="form-field">
-            <div className="form-field-label"><span className="form-field-name">Bump Mapping</span><span className="pill-rec">Rec</span></div>
+            <div className="form-field-label"><span className="form-field-name">Bump Mapping</span>{recPill('0017')}</div>
             <select className="form-select" value={getValue('0017')} onChange={e => setPending('0017', parseInt(e.target.value))}>
               <option value={-1}>Default (FFXI Config)</option>
               <option value={0}>Off</option>
@@ -1161,7 +1179,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
             <p className="form-field-desc">Swaying trees, flowing water and weather particles.</p>
           </div>
           <div className="form-field">
-            <div className="form-field-label"><span className="form-field-name">Texture Compression (2)</span><span className="pill-rec">Rec</span></div>
+            <div className="form-field-label"><span className="form-field-name">Texture Compression (2)</span>{recPill('0019')}</div>
             <select className="form-select" value={getValue('0019')} onChange={e => setPending('0019', parseInt(e.target.value))}>
               <option value={-1}>Default (FFXI Config)</option>
               <option value={0}>Compressed</option>
@@ -1170,7 +1188,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
             <p className="form-field-desc">Secondary compression toggle — Uncompressed = best quality.</p>
           </div>
           <div className="form-field">
-            <div className="form-field-label"><span className="form-field-name">Font Compression</span><span className="pill-rec">Rec</span></div>
+            <div className="form-field-label"><span className="form-field-name">Font Compression</span>{recPill('0036')}</div>
             <select className="form-select" value={getValue('0036')} onChange={e => setPending('0036', parseInt(e.target.value))}>
               <option value={-1}>Default (FFXI Config)</option>
               <option value={0}>Compressed</option>
@@ -1197,7 +1215,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
             <p className="form-field-desc">Hardware cursor instead of software-rendered — reduces mouse lag.</p>
           </div>
           <div className="form-field">
-            <div className="form-field-label"><span className="form-field-name">Graphics Stabilization</span><span className="pill-rec">Rec</span></div>
+            <div className="form-field-label"><span className="form-field-name">Graphics Stabilization</span>{recPill('0040')}</div>
             <select className="form-select" value={getValue('0040')} onChange={e => setPending('0040', parseInt(e.target.value))}>
               <option value={-1}>Default (FFXI Config)</option>
               <option value={0}>Off</option>
