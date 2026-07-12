@@ -430,6 +430,26 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
   const gamepadTestRef = useRef(null);
   const [detectedControllers, setDetectedControllers] = useState([]);
   const [controllersLoading, setControllersLoading] = useState(false);
+  const [prereqInstalling, setPrereqInstalling] = useState(false);
+  const [prereqProgress, setPrereqProgress] = useState({ percent: 0, detail: '' });
+  const [prereqResult, setPrereqResult] = useState(null);
+
+  useEffect(() => {
+    if (!api?.onPrerequisitesProgress) return;
+    const unsub = api.onPrerequisitesProgress((percent, detail) => {
+      setPrereqProgress({ percent, detail });
+    });
+    return unsub;
+  }, []);
+
+  const installPrerequisites = async () => {
+    setPrereqInstalling(true);
+    setPrereqResult(null);
+    setPrereqProgress({ percent: 0, detail: 'Starting...' });
+    const result = await api.installPrerequisites();
+    setPrereqInstalling(false);
+    setPrereqResult(result);
+  };
 
   // Load registry values (read-only baseline) and INI overrides
   const loadValues = useCallback(async () => {
@@ -1654,6 +1674,36 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
           </div>
         </div>
         <span className="settings-logs-arrow">↗</span>
+      </div>
+
+      <div className="section-header">System Prerequisites</div>
+      <div className="panel">
+        <p className="settings-hint settings-hint-compact">
+          Visual C++ Runtimes and .NET Framework required by FFXI, PlayOnline, Ashita, and Windower. Safe to run any time — already-installed components are detected and skipped automatically.
+        </p>
+        <div className="settings-prereq-actions">
+          <button className="btn btn-primary" onClick={installPrerequisites} disabled={prereqInstalling}>
+            {prereqInstalling ? 'Installing...' : '↓ Verify & Install Prerequisites'}
+          </button>
+        </div>
+        {prereqInstalling && (
+          <div className="settings-prereq-progress-box">
+            <div className="settings-prereq-progress-bar">
+              <div className="settings-prereq-progress-fill" style={{ width: `${prereqProgress.percent}%` }} />
+            </div>
+            <span className="settings-prereq-progress-text">{prereqProgress.detail}</span>
+          </div>
+        )}
+        {prereqResult && prereqResult.success && (
+          <p className="settings-hint settings-hint-compact" style={{ color: 'var(--ok, #6c6)' }}>
+            ✓ All prerequisites installed{prereqResult.anyRebootRequired ? ' — a restart may be needed for some changes to take effect' : ''}
+          </p>
+        )}
+        {prereqResult && !prereqResult.success && (
+          <p className="settings-hint settings-hint-compact" style={{ color: 'var(--error, #e66)' }}>
+            {prereqResult.error || `Some components failed: ${prereqResult.results.filter(r => !r.success).map(r => r.component).join(', ')}.`}
+          </p>
+        )}
       </div>
 
       {(pendingCount > 0 || applyStatus) && (
