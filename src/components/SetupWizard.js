@@ -20,6 +20,9 @@ function SetupWizard({ config, updateConfig, onComplete }) {
   const [ffxiFound, setFfxiFound] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [installProgress, setInstallProgress] = useState({ percent: 0, detail: '' });
+  const [prereqInstalling, setPrereqInstalling] = useState(false);
+  const [prereqProgress, setPrereqProgress] = useState({ percent: 0, detail: '' });
+  const [prereqResult, setPrereqResult] = useState(null); // { success, results, anyRebootRequired, error }
   const [xiloaderFound, setXiloaderFound] = useState(false);
   const [xiloaderDownloading, setXiloaderDownloading] = useState(false);
   const [xiloaderProgress, setXiloaderProgress] = useState({ percent: 0, detail: '' });
@@ -53,6 +56,14 @@ function SetupWizard({ config, updateConfig, onComplete }) {
     if (!api?.onAshitaInstallProgress) return;
     const unsub = api.onAshitaInstallProgress((percent, detail) => {
       setInstallProgress({ percent, detail });
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (!api?.onPrerequisitesProgress) return;
+    const unsub = api.onPrerequisitesProgress((percent, detail) => {
+      setPrereqProgress({ percent, detail });
     });
     return unsub;
   }, []);
@@ -136,6 +147,15 @@ function SetupWizard({ config, updateConfig, onComplete }) {
     }
   };
 
+  const installPrerequisites = async () => {
+    setPrereqInstalling(true);
+    setPrereqResult(null);
+    setPrereqProgress({ percent: 0, detail: 'Starting...' });
+    const result = await api.installPrerequisites();
+    setPrereqInstalling(false);
+    setPrereqResult(result);
+  };
+
   const savePaths = () => {
     updateConfig('ashitaPath', ashitaPath);
     updateConfig('ffxiPath', ffxiPath);
@@ -193,6 +213,41 @@ function SetupWizard({ config, updateConfig, onComplete }) {
                 <li><strong>Ashita v4</strong> — the addon framework (we can install this for you)</li>
                 <li>A <strong>server address</strong> if connecting to a private server</li>
               </ul>
+
+              <div className="wizard-field">
+                <label>System Prerequisites</label>
+                <span className="field-hint">Visual C++ Runtimes and .NET Framework — required by FFXI, PlayOnline, Ashita, and Windower</span>
+                {!prereqInstalling && !prereqResult && (
+                  <button className="btn btn-primary btn-sm wizard-action-btn" onClick={installPrerequisites}>
+                    ↓ Verify &amp; Install Prerequisites
+                  </button>
+                )}
+                {prereqInstalling && (
+                  <div className="wizard-progress-wrapper">
+                    <div className="wizard-progress-track">
+                      <div className="wizard-progress-bar" style={{ width: `${prereqProgress.percent}%` }} />
+                    </div>
+                    <span className="wizard-progress-detail">{prereqProgress.detail}</span>
+                  </div>
+                )}
+                {prereqResult && prereqResult.success && (
+                  <p className="wizard-status-msg wizard-status-msg-success">
+                    ✓ All prerequisites installed{prereqResult.anyRebootRequired ? ' — a restart may be needed for some changes to take effect' : ''}
+                  </p>
+                )}
+                {prereqResult && !prereqResult.success && prereqResult.error && (
+                  <p className="wizard-status-msg wizard-status-msg-error">
+                    {prereqResult.error}{' '}
+                    <span className="wizard-link" onClick={installPrerequisites}>Retry</span>
+                  </p>
+                )}
+                {prereqResult && !prereqResult.success && !prereqResult.error && prereqResult.results && (
+                  <p className="wizard-status-msg wizard-status-msg-error">
+                    Some components failed: {prereqResult.results.filter(r => !r.success).map(r => r.component).join(', ')}.{' '}
+                    <span className="wizard-link" onClick={installPrerequisites}>Retry</span>
+                  </p>
+                )}
+              </div>
             </>
           )}
 
