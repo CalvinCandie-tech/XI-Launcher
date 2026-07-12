@@ -909,6 +909,36 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
         ))}
       </div>
 
+      <div className="section-header">System Prerequisites</div>
+      <div className="panel">
+        <p className="settings-hint settings-hint-compact">
+          Visual C++ Runtimes and .NET Framework required by FFXI, PlayOnline, Ashita, and Windower. Safe to run any time — already-installed components are detected and skipped automatically.
+        </p>
+        <div className="settings-prereq-actions">
+          <button className="btn btn-primary" onClick={installPrerequisites} disabled={prereqInstalling}>
+            {prereqInstalling ? 'Installing...' : '↓ Verify & Install Prerequisites'}
+          </button>
+        </div>
+        {prereqInstalling && (
+          <div className="settings-prereq-progress-box">
+            <div className="settings-prereq-progress-bar">
+              <div className="settings-prereq-progress-fill" style={{ width: `${prereqProgress.percent}%` }} />
+            </div>
+            <span className="settings-prereq-progress-text">{prereqProgress.detail}</span>
+          </div>
+        )}
+        {prereqResult && prereqResult.success && (
+          <p className="settings-hint settings-hint-compact" style={{ color: 'var(--green)' }}>
+            ✓ All prerequisites installed{prereqResult.anyRebootRequired ? ' — a restart may be needed for some changes to take effect' : ''}
+          </p>
+        )}
+        {prereqResult && !prereqResult.success && (
+          <p className="settings-hint settings-hint-compact" style={{ color: 'var(--red)' }}>
+            {prereqResult.error || `Some components failed: ${prereqResult.results.filter(r => !r.success).map(r => r.component).join(', ')}.`}
+          </p>
+        )}
+      </div>
+
       <div className="settings-warning panel">
         Settings are saved to your Ashita profile and take effect next time you launch the game. Set a value to -1 to use the default from FFXI Config / Windows registry.
       </div>
@@ -1674,36 +1704,6 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
           </div>
         </div>
         <span className="settings-logs-arrow">↗</span>
-      </div>
-
-      <div className="section-header">System Prerequisites</div>
-      <div className="panel">
-        <p className="settings-hint settings-hint-compact">
-          Visual C++ Runtimes and .NET Framework required by FFXI, PlayOnline, Ashita, and Windower. Safe to run any time — already-installed components are detected and skipped automatically.
-        </p>
-        <div className="settings-prereq-actions">
-          <button className="btn btn-primary" onClick={installPrerequisites} disabled={prereqInstalling}>
-            {prereqInstalling ? 'Installing...' : '↓ Verify & Install Prerequisites'}
-          </button>
-        </div>
-        {prereqInstalling && (
-          <div className="settings-prereq-progress-box">
-            <div className="settings-prereq-progress-bar">
-              <div className="settings-prereq-progress-fill" style={{ width: `${prereqProgress.percent}%` }} />
-            </div>
-            <span className="settings-prereq-progress-text">{prereqProgress.detail}</span>
-          </div>
-        )}
-        {prereqResult && prereqResult.success && (
-          <p className="settings-hint settings-hint-compact" style={{ color: 'var(--green)' }}>
-            ✓ All prerequisites installed{prereqResult.anyRebootRequired ? ' — a restart may be needed for some changes to take effect' : ''}
-          </p>
-        )}
-        {prereqResult && !prereqResult.success && (
-          <p className="settings-hint settings-hint-compact" style={{ color: 'var(--red)' }}>
-            {prereqResult.error || `Some components failed: ${prereqResult.results.filter(r => !r.success).map(r => r.component).join(', ')}.`}
-          </p>
-        )}
       </div>
 
       {(pendingCount > 0 || applyStatus) && (
