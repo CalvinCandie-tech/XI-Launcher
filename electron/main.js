@@ -2035,6 +2035,34 @@ function registerIPC() {
     });
   }
 
+  // Builds the PowerShell script that runs (elevated) all downloaded installers in
+  // sequence, logging STARTED/DONE lines to progressLogPath as it goes (polled by
+  // the non-elevated main process for live UI progress) and writing final exit
+  // codes as JSON to resultFilePath.
+  function buildPrereqInnerScript(items, progressLogPath, resultFilePath) {
+    const lines = ['$results = @{}'];
+    for (const item of items) {
+      const safeName = escapePSString(item.name);
+      lines.push(`Add-Content -Path '${escapePSString(progressLogPath)}' -Value 'STARTED|${safeName}'`);
+      lines.push(`$p = Start-Process -FilePath '${escapePSString(item.localPath)}' -ArgumentList '${item.args}' -Wait -PassThru`);
+      lines.push(`$results['${safeName}'] = $p.ExitCode`);
+      lines.push(`Add-Content -Path '${escapePSString(progressLogPath)}' -Value ('DONE|${safeName}|' + $p.ExitCode)`);
+    }
+    lines.push(`$results | ConvertTo-Json | Set-Content -Path '${escapePSString(resultFilePath)}'`);
+    return lines.join('\n');
+  }
+
+  // Turns the { name: exitCode } map read back from resultFilePath into a
+  // per-component success/failure list, using each PREREQUISITES entry's own
+  // successCodes (0, 3010, and — for the four VC++ entries — 1638).
+  function classifyPrereqResults(items, exitCodesByName) {
+    return items.map((item) => {
+      const exitCode = exitCodesByName[item.name];
+      const success = item.successCodes.includes(exitCode);
+      return { component: item.name, success, exitCode: exitCode === undefined ? null : exitCode };
+    });
+  }
+
   // Watch for game process to exit, then notify renderer (per-profile watchers for multi-box)
   const gameExitWatchers = new Map();
   const watchForGameExit = (processName, profileKey) => {
