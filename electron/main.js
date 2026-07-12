@@ -1975,6 +1975,65 @@ function registerIPC() {
     }
   });
 
+  // Five official Microsoft installers covering the runtime prerequisites FFXI/
+  // PlayOnline/Ashita/Windower depend on. URLs and hashes sourced from Microsoft's
+  // winget-pkgs manifests and Microsoft Download Center, verified 2026-07-12 — see
+  // docs/superpowers/specs/2026-07-12-prerequisite-runtime-installer-design.md.
+  // VC++ 2015-2022 covers both the 2015 and 2017 requirements (shared runtime).
+  // .NET 4.5.2 covers the .NET 4.0 requirement (in-place upgrade model).
+  const PREREQUISITES = [
+    {
+      name: 'Visual C++ 2010 SP1 Redistributable (x86)',
+      filename: 'vcredist_2010_x86.exe',
+      url: 'https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x86.exe',
+      sha256: '99dce3c841cc6028560830f7866c9ce2928c98cf3256892ef8e6cf755147b0d8',
+      args: '/quiet /norestart',
+      successCodes: [0, 3010, 1638]
+    },
+    {
+      name: 'Visual C++ 2012 Update 4 Redistributable (x86)',
+      filename: 'vcredist_2012_x86.exe',
+      url: 'https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x86.exe',
+      sha256: 'b924ad8062eaf4e70437c8be50fa612162795ff0839479546ce907ffa8d6e386',
+      args: '/quiet',
+      successCodes: [0, 3010, 1638]
+    },
+    {
+      name: 'Visual C++ 2013 Redistributable (x86)',
+      filename: 'vcredist_2013_x86.exe',
+      url: 'https://download.visualstudio.microsoft.com/download/pr/10912113/5da66ddebb0ad32ebd4b922fd82e8e25/vcredist_x86.exe',
+      sha256: '53b605d1100ab0a88b867447bbf9274b5938125024ba01f5105a9e178a3dcdbd',
+      args: '/quiet',
+      successCodes: [0, 3010, 1638]
+    },
+    {
+      name: 'Visual C++ 2015-2022 Redistributable (x86)',
+      filename: 'vcredist_2015_2022_x86.exe',
+      url: 'https://download.visualstudio.microsoft.com/download/pr/57eef8ae-a341-46c3-b0bc-c041027b54cd/F0BAB33A302B3CDB2E11113760D016F54FD3D2632C65BA7834FAC4F0ABD7F1A3/VC_redist.x86.exe',
+      sha256: 'f0bab33a302b3cdb2e11113760d016f54fd3d2632c65ba7834fac4f0abd7f1a3',
+      args: '/install /quiet /norestart',
+      successCodes: [0, 3010, 1638]
+    },
+    {
+      name: '.NET Framework 4.5.2',
+      filename: 'ndp452_x86_x64.exe',
+      url: 'https://download.microsoft.com/download/e/2/1/e21644b5-2df2-47c2-91bd-63c560427900/NDP452-KB2901907-x86-x64-AllOS-ENU.exe',
+      sha256: '6c2c589132e830a185c5f40f82042bee3022e721a216680bd9b3995ba86f3781',
+      args: '/q /norestart',
+      successCodes: [0, 3010]
+    }
+  ];
+
+  // Compute the lowercase hex SHA256 of a file on disk.
+  function sha256File(filePath) {
+    return new Promise((resolve, reject) => {
+      const hash = crypto.createHash('sha256');
+      const rs = fs.createReadStream(filePath);
+      rs.on('error', reject);
+      rs.on('data', (chunk) => hash.update(chunk));
+      rs.on('end', () => resolve(hash.digest('hex')));
+    });
+  }
 
   // Watch for game process to exit, then notify renderer (per-profile watchers for multi-box)
   const gameExitWatchers = new Map();
