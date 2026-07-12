@@ -2123,7 +2123,14 @@ function registerIPC() {
       // responsive, and poll progressLog concurrently to drive per-component
       // progress — the -Wait call itself gives no visibility into what's running.
       sendProgress(55, 'Requesting administrator permission...');
-      const outerScript = `Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','${escapePSString(innerScriptPath)}' -Verb RunAs -Wait -WindowStyle Hidden`;
+      // $ErrorActionPreference = 'Stop' is required here: Start-Process -Verb RunAs
+      // raises a non-terminating error when the user declines the UAC prompt, so
+      // without it this outer script (and therefore the wrapping powershell.exe
+      // process runPowerShellFile spawns) would exit 0 even on a decline — losing
+      // the failure signal and falling through to Phase 4 with no result file,
+      // which misreports every component as failed instead of surfacing the real
+      // "administrator permission" error via friendlyError() below.
+      const outerScript = `$ErrorActionPreference = 'Stop'\nStart-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','${escapePSString(innerScriptPath)}' -Verb RunAs -Wait -WindowStyle Hidden`;
 
       let lastLineCount = 0;
       const totalMarkers = downloaded.length * 2; // STARTED + DONE per component
