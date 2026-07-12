@@ -2083,17 +2083,22 @@ function registerIPC() {
         const spanP = Math.round(50 / PREREQUISITES.length);
 
         sendProgress(baseP, `Downloading ${item.name}...`);
-        await downloadFile(item.url, destPath, {
-          label: item.name,
-          onProgress: (received, total) => {
-            if (total > 0) {
-              const pct = baseP + Math.round((received / total) * spanP);
-              const mb = (received / 1048576).toFixed(1);
-              const totalMb = (total / 1048576).toFixed(1);
-              sendProgress(pct, `Downloading ${item.name}... ${mb} / ${totalMb} MB`);
+        try {
+          await downloadFile(item.url, destPath, {
+            label: item.name,
+            onProgress: (received, total) => {
+              if (total > 0) {
+                const pct = baseP + Math.round((received / total) * spanP);
+                const mb = (received / 1048576).toFixed(1);
+                const totalMb = (total / 1048576).toFixed(1);
+                sendProgress(pct, `Downloading ${item.name}... ${mb} / ${totalMb} MB`);
+              }
             }
-          }
-        });
+          });
+        } catch (e) {
+          cleanup();
+          return { success: false, error: `Download failed for ${item.name}: ${e.message}. Nothing was installed.` };
+        }
 
         sendProgress(baseP + spanP, `Verifying ${item.name}...`);
         const actualHash = await sha256File(destPath);
@@ -2124,7 +2129,16 @@ function registerIPC() {
       const totalMarkers = downloaded.length * 2; // STARTED + DONE per component
       const pollTimer = setInterval(() => {
         try {
-          const lines = fs.readFileSync(progressLog, 'utf-8').split('\n').filter(Boolean);
+          const content = fs.readFileSync(progressLog, 'utf-8');
+          // Add-Content writes aren't atomic against a concurrent readFileSync, so a
+          // poll tick can land mid-write and see a truncated final line (e.g.
+          // "STARTED|Visual C+"). If the raw content doesn't end in a newline, the
+          // last split element is a possibly-partial fragment — drop it and don't
+          // advance lastLineCount past it, so the complete line is re-read (and
+          // processed) on a later tick instead of being silently consumed.
+          const endsWithNewline = content.endsWith('\n');
+          let lines = content.split('\n').filter(Boolean);
+          if (!endsWithNewline && lines.length > 0) lines = lines.slice(0, -1);
           for (let i = lastLineCount; i < lines.length; i++) {
             const parts = lines[i].split('|');
             const stageMarker = parts[0];
@@ -2142,11 +2156,7 @@ function registerIPC() {
       } catch (e) {
         clearInterval(pollTimer);
         cleanup();
-        const msg = e.message || '';
-        if (msg.includes('elevation') || msg.includes('denied') || msg.includes('UAC')) {
-          return { success: false, error: 'Administrator permission is required to install these components. Installation was cancelled.' };
-        }
-        return { success: false, error: `Installation failed: ${msg}` };
+        return { success: false, error: friendlyError(e, 'Prerequisite installation') };
       }
       clearInterval(pollTimer);
 
