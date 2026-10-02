@@ -9,7 +9,8 @@
     "start": "concurrently \"npm run react-start\" \"wait-on http://localhost:3000 && electron .\"",
     "react-start": "react-scripts start",
     "build": "react-scripts build",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder",
+    "test:electron": "node --test electron/*.test.js"
   },
   "dependencies": {
     "electron-store": "^8.1.0",
