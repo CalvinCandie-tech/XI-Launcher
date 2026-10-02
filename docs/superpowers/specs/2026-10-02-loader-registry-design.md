@@ -79,9 +79,21 @@ profile setting (explicit loader id, or custom exe path)
 
 - Profile setting `loader` values: `'auto'` (default — follow server), a registry id, or
   `'custom'` + `loaderExePath`.
-- Server matching is a case-insensitive exact match of the active `serverHost` against the
-  `host` of `SERVER_ADDRESSES` entries. A host with no entry (e.g. Demetrie's test server at his
-  house) falls through to default — the user picks ldloader on that profile explicitly.
+- Server matching is a case-insensitive exact match of the **host actually being connected to**
+  against the `host` of `SERVER_ADDRESSES` entries. A host with no entry (e.g. Demetrie's test
+  server at his house) falls through to default — the user picks ldloader on that profile
+  explicitly.
+- **Which host is "actually being connected to" depends on launch mode** (verified in code):
+  - *Via Ashita* — the host is the `--server` value in the profile ini's `command =` line. This
+    is **not** kept in sync with `config.serverHost`: the ini is only written at profile creation
+    and by ProfileTab's manual "apply to profile"; the Home-tab favourites picker only changes
+    `config.serverHost`. So the resolver must parse `--server` out of the ini, never read
+    `config.serverHost`, or it could pick ldloader while the game connects to Eden.
+  - *Direct (`useXiloader`)* — the host is `profileSettings.serverHost || config.serverHost`,
+    exactly what `launch-game` already passes as `--server` (multi-box uses the same per-profile
+    rule).
+  - (The Home picker not updating the ini is a pre-existing bug, out of scope here — noted so it
+    isn't mistaken for a loader-resolution bug.)
 
 ### 3. Server binding
 
@@ -94,8 +106,11 @@ profile setting (explicit loader id, or custom exe path)
 `LevelDown 75` is **not** bound — no evidence it uses the remapped ports.
 
 **Rollout gate:** Demetrie said the remapped ports are currently only on his *test* server, not
-live. Binding the live `leveldownffxi.com` entry before live switches ports would break live
-logins (ldloader would hit profile port 51221 on a server listening on 51220). The binding line
+live. Binding the live `leveldownffxi.com` entry before live switches ports would point
+ldloader's profile-server and IRC relays at 51221/51241 on a server listening on 51220/51240.
+(Verified in source: `polrelay::start` only fails on *local* listen/TLS setup, so login likely
+proceeds and the upstream relay connections fail afterwards — friend list / PlayOnline-side
+features. Exact in-game symptom is NOT verified.) The binding line
 ships only once Demetrie confirms live has moved; until then, test-server users set
 `loader = ldloader` on their profile. Everything else in this design ships regardless.
 
@@ -118,15 +133,23 @@ Generalise the existing xiloader download/update handlers to take a loader id:
 - IPC: `download-loader(id)`, `check-loader-update(id)`; the existing `download-xiloader` /
   `check-xiloader-update` channels become thin wrappers calling them with `'xiloader'` so existing
   renderer calls keep working during the transition.
-- `isAllowedPath` adds `runtime/loaders/` and any profile custom loader dir.
+- `isAllowedPath` adds `runtime/loaders/` only. Custom loader folders are **not** added: launching
+  a custom exe only needs an existence check, and adding arbitrary user-picked folders would widen
+  the filesystem trust boundary for every file handler (the same reason `store-set` validates
+  `xiloaderPath`). `loaderExePath` gets the same validation on save: string, absolute, ends in
+  `.exe`, no quotes/newlines.
 
 ### 5. Launch
 
 Both launch paths use `resolveLoader`:
 
-- **Direct (`useXiloader`)** — `launch-game` receives the resolved `exePath` instead of
-  `xiloaderPath`; working directory = its folder. Error messages name the loader
-  (`ldloader.exe not found …`).
+- **Resolution happens in the main process.** `launch-game` no longer accepts a loader path from
+  the renderer; it resolves from stored profile settings + the host rules in §2. Today the
+  renderer passes a folder and main appends the fixed name `xiloader.exe`; accepting a free exe
+  path from the renderer and running it with `-Verb RunAs` would let any renderer bug elevate an
+  arbitrary exe.
+- **Direct (`useXiloader`)** — runs the resolved exe; working directory = its folder. Error
+  messages name the loader (`ldloader.exe not found …`).
 - **Via Ashita** — the loader path is baked into the profile ini (`file = …`) at profile-creation
   time. Add `syncProfileLoader(profileIni, exePath)` next to `stripRemovedXiloaderArgs`: before
   each launch, rewrite the `[ashita.boot] file =` line to the resolved exe if it differs. This is
@@ -151,7 +174,8 @@ Build-from-source (`clone/build/copy-xiloader`) stays xiloader-only and untouche
 
 - Global `xiloaderPath` → unchanged; it remains the `xiloader` install dir.
 - Each profile settings file with a non-empty `xiloaderPath` (today's "custom xiloader folder")
-  → `loader = 'custom'`, `loaderExePath = <folder>\xiloader.exe`; old key removed. If the exe
+  → `loader = 'custom'`, `loaderExePath = <folder>\xiloader.exe`; old key **kept** (ignored by
+  the new code) so rolling back to v1.6.x still finds it. If the exe
   isn't there, still migrate (the UI then shows the existing "not found" warning).
 - Profiles without an override → `loader = 'auto'`.
 - Write a `loaderMigrationVersion = 1` flag to the store so it runs once.
@@ -183,6 +207,8 @@ No change to the Home tab beyond the launch-log line.
 - **Unit (`node --test electron/loaders.test.js`)** — no new dependencies:
   - resolution order: profile id > custom path > server binding > default
   - server host matching: case-insensitive, unmatched host → default, unbound server → default
+  - host source: Ashita mode reads `--server` from the ini `command =` line (and ignores a
+    different `config.serverHost`); direct mode uses the per-profile → global host
   - `loaderExeNames()` contents
   - migration transform on sample profile-settings objects (with/without override, idempotent
     on second run)
