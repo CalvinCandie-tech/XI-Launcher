@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const loaders = require('./loaders');
 const { SERVER_ADDRESSES } = require('./serverAddresses');
 const ffxiMirror = require('./ffxiMirror');
+const addonInstall = require('./addonInstall');
 
 /**
  * Extract a zip file using yauzl (streaming, handles large files, reports progress).
@@ -4552,16 +4553,8 @@ function registerIPC() {
         }
 
         if (releaseInfo && Array.isArray(releaseInfo.assets) && releaseInfo.assets.length > 0) {
-          // Pick the best .zip asset. Skip horizon-specific builds. When multiple
-          // zips target different Ashita interface versions (e.g. "FindAll.1.18.-.Interface.4.30.zip"),
-          // prefer the highest interface number so we match modern Ashita.
-          const zips = releaseInfo.assets.filter(a => a.name.endsWith('.zip') && !/horizon/i.test(a.name));
-          const pool = zips.length ? zips : releaseInfo.assets.filter(a => a.name.endsWith('.zip'));
-          const score = (n) => {
-            const m = n.match(/Interface[._-]?(\d+)[._-](\d+)/i);
-            return m ? parseInt(m[1], 10) * 1000 + parseInt(m[2], 10) : -1;
-          };
-          const asset = pool.slice().sort((a, b) => score(b.name) - score(a.name))[0];
+          // Best .zip asset: non-Horizon, highest Ashita interface (see addonInstall.js).
+          const asset = addonInstall.pickReleaseZip(releaseInfo.assets);
           if (asset) {
             zipUrl = asset.browser_download_url;
             if (releaseInfo.tag_name) baseline = { tag: releaseInfo.tag_name };
@@ -4684,12 +4677,33 @@ function registerIPC() {
           store.set('addonManifests', manifests);
         }
         fileCount = manifest.length;
+      } else if (isPlugin) {
+        // Ashita only loads plugins/<name>.dll, so the DLL(s) go straight into plugins/ —
+        // never a plugins/<name>/ subfolder. Tracked in the manifest like ashitaRoot installs.
+        sendProgress(78, 'Installing to plugins folder...');
+        const pluginsDir = path.join(ashitaPath, 'plugins');
+        if (!isAllowedPath(pluginsDir)) return { success: false, error: 'Invalid plugins destination path' };
+        const dlls = fs.readdirSync(innerDir, { withFileTypes: true })
+          .filter(ent => ent.isFile() && /\.dll$/i.test(ent.name));
+        if (dlls.length === 0) {
+          return { success: false, error: `No plugin .dll found in the ${addonName} download.` };
+        }
+        fs.mkdirSync(pluginsDir, { recursive: true });
+        const manifest = dlls.map(ent => {
+          const destPath = path.join(pluginsDir, ent.name);
+          fs.copyFileSync(path.join(innerDir, ent.name), destPath);
+          return destPath;
+        });
+        if (store) {
+          const manifests = store.get('addonManifests', {});
+          manifests[addonName] = manifest;
+          store.set('addonManifests', manifests);
+        }
+        fileCount = manifest.length;
       } else {
-        sendProgress(78, `Installing to ${isPlugin ? 'plugins' : 'addons'} folder...`);
+        sendProgress(78, 'Installing to addons folder...');
 
-        // Determine destination: plugins/ for plugins, addons/ for addons
-        const destBase = isPlugin ? 'plugins' : 'addons';
-        const destDir = path.join(ashitaPath, destBase, addonName);
+        const destDir = path.join(ashitaPath, 'addons', addonName);
         if (!isAllowedPath(destDir)) return { success: false, error: 'Invalid addon destination path' };
 
         // Back up user config files before overwriting
@@ -4779,9 +4793,9 @@ function registerIPC() {
   // Uninstall an addon/plugin
   ipcMain.handle('uninstall-addon', async (_, ashitaPath, addonName, isPlugin, ashitaRoot) => {
     try {
-      if (ashitaRoot) {
-        // Ashita-root install: read the manifest written at install time and delete
-        // each tracked file. Never blindly rm a shared dir (plugins/, resources/, …).
+      if (ashitaRoot || isPlugin) {
+        // Ashita-root and plugin installs: read the manifest written at install time and
+        // delete each tracked file. Never blindly rm a shared dir (plugins/, resources/, …).
         if (!store) return { success: false, error: 'Manifest storage unavailable.' };
         const manifests = store.get('addonManifests', {});
         const manifest = manifests[addonName];
@@ -4835,8 +4849,7 @@ function registerIPC() {
         return { success: true, message: `${addonName} uninstalled — ${removed} files removed.` };
       }
 
-      const base = isPlugin ? 'plugins' : 'addons';
-      const addonDir = path.join(ashitaPath, base, addonName);
+      const addonDir = path.join(ashitaPath, 'addons', addonName);
       if (!isAllowedPath(addonDir)) return { success: false, error: 'Invalid addon path' };
       if (!fs.existsSync(addonDir)) {
         return { success: false, error: 'Addon folder not found.' };

@@ -24,6 +24,14 @@ export const ADDON_CATALOGUE = [
   { name: 'stepdialog', description: 'Manually invoke the key press to continue the current chat dialog', category: 'QoL / General' },
   { name: 'nomad', description: 'Enables mog house functionality in any zone', category: 'QoL / General' },
   { name: 'castdelay', description: 'Blocks spells, ranged attacks, and item use until you stop moving — prevents wasted casts from input lag.', category: 'QoL / General', repo: 'ThornyFFXI/castdelay' },
+  { name: 'hush', description: 'Hides yells, teleport requests, and other spammy messages from the chat log. Configurable filters.', category: 'QoL / General', repo: 'clanofartisans/ashita-hush', useRelease: true, installAs: 'hush' },
+  { name: 'mountmaster', description: 'Mount and dismount with a single command. Set a favourite mount or let it pick one at random.', category: 'QoL / General', repo: 'onimitch/ffxi-mountmaster', useRelease: true, installAs: 'mountmaster' },
+  { name: 'cudgel', description: 'Equips the best warp cudgel you have available.', category: 'QoL / General', repo: 'ThornyFFXI/MiscAshita4', subdir: 'addons/cudgel', installAs: 'cudgel' },
+  { name: 'fishaid', description: 'Makes fishing messages much more visible so you know when to reel.', category: 'QoL / General', repo: 'ThornyFFXI/MiscAshita4', subdir: 'addons/fishaid', installAs: 'fishaid' },
+  { name: 'nomount', description: 'Blocks the default mount (chocobo) music.', category: 'QoL / General', repo: 'ThornyFFXI/MiscAshita4', subdir: 'addons/NoMount', installAs: 'nomount' },
+  { name: 'nocombat', description: 'Changes a zone\'s combat music to match the zone\'s normal music.', category: 'QoL / General', repo: 'ThornyFFXI/MiscAshita4', subdir: 'addons/nocombat', installAs: 'nocombat' },
+  { name: 'weatherchecker', description: 'Shows the upcoming weather for a zone. Built for LSB-based private servers — predictions follow LSB\'s weather data.', category: 'QoL / General', repo: 'montijin/weatherchecker', useRelease: true, installAs: 'weatherchecker' },
+  { name: 'questlist', description: 'Quest and mission list window with walkthrough links. Tested on retail.', category: 'QoL / General', repo: 'stefanmielke/FFXIQuestList', installAs: 'questlist' },
   // --- Combat & Targeting ---
   { name: 'debuff', description: 'Enables cancelling status effects via a command', category: 'Combat & Targeting' },
   { name: 'distance', description: 'Displays the distance between you and your target', category: 'Combat & Targeting' },
@@ -39,6 +47,12 @@ export const ADDON_CATALOGUE = [
   { name: 'HitPoints', description: 'Shows HP percentage on your current target and engaged enemies. Useful for knowing exactly when to weaponskill or use abilities.', category: 'Combat & Targeting', repo: 'ThornyFFXI/HitPoints', subdir: 'HitPoints', installAs: 'HitPoints', deps: ['gdifonts'], localDeps: { gdifonts: 'libs/gdifonts' } },
   { name: 'statustimers', description: 'Replaces the default tiny status icons with a fully customizable timer overlay. Shows buff/debuff durations for you and your party members with free placement.', category: 'Combat & Targeting', repo: 'HealsCodes/statustimers', useRelease: true, releaseFolder: 'statustimers', installAs: 'statustimers' },
   { name: 'tTimers', description: 'Displays time remaining on buffs and debuffs you\'ve cast, plus recast timers for your spells and abilities. Clean, movable overlay.', category: 'Combat & Targeting', repo: 'ThornyFFXI/tTimers', useRelease: true, releaseFolder: 'tTimers', installAs: 'tTimers' },
+  { name: 'simplelog', description: 'Combat and message log parser — condenses battle messages into short, readable lines (port of Windower\'s SimpleLog).', category: 'Combat & Targeting', repo: 'Spike2D/SimpleLog', useRelease: true, installAs: 'simplelog' },
+  { name: 'metrics', description: 'Damage parser — DPS, total damage, accuracy, healing and more, with three view modes from compact to detailed.', category: 'Combat & Targeting', repo: 'RaraProjects/metrics', useRelease: true, installAs: 'metrics' },
+  { name: 'deeps', description: 'Damage meter showing party damage as bars, with a per-action breakdown. This is the Lua addon version (v2+) — don\'t also load the old Deeps plugin.', category: 'Combat & Targeting', repo: 'relliko/Deeps', useRelease: true, installAs: 'deeps' },
+  { name: 'timers', description: 'Visual recast, buff and debuff timers in movable panels (an alternative to tTimers).', category: 'Combat & Targeting', repo: 'lenonk/Timers', useRelease: true, installAs: 'timers' },
+  { name: 'upcast', description: 'Automatically picks the best tier of a spell (and Dancer abilities) for your level and job, skipping tiers on cooldown — one macro can cast Thunder VI down to Thunder.', category: 'Combat & Targeting', repo: 'dewiniaid/ffxi-ashita-upcast', useRelease: true, installAs: 'upcast' },
+  { name: 'SpellSelect', description: 'Cast spells by picking tier and element instead of typing names.', category: 'Combat & Targeting', repo: 'ThornyFFXI/MiscAshita4', subdir: 'addons/SpellSelect', installAs: 'spellselect' },
   // --- UI / HUD ---
   { name: 'equipmon', description: 'Displays currently equipped items on screen at all times', category: 'UI / HUD' },
   { name: 'invmon', description: 'Displays current inventory container space information', category: 'UI / HUD' },
@@ -56,9 +70,13 @@ export const ADDON_CATALOGUE = [
   { name: 'Emotes', description: 'Displays all available emotes in a browsable list so you don\'t need to remember the commands.', category: 'UI / HUD', repo: 'tirem/Emotes', subdir: 'Emotes', installAs: 'Emotes' },
   { name: 'XICamera', description: 'Unlocks extended camera distance and zoom controls beyond the default limits. Bundled and ready to enable.', category: 'UI / HUD', repo: 'Hokuten85/XICamera', subdir: 'Ashita4/addons/xicamera', installAs: 'xicamera' },
   { name: 'mobdb', description: 'On-screen monster info bar in the style of ibar — shows aggro type, links, sound/sight, weaknesses, immunities, and drop hints for your target. Bundled with default LSB data; importable from your own server SQL.', category: 'UI / HUD', repo: 'ThornyFFXI/mobdb', useRelease: true, installAs: 'mobdb' },
+  { name: 'Points', description: 'Tracks EXP/LP, merits, and Capacity/Job points with per-hour estimates and chain counts in a compact bar. Made for retail.', category: 'UI / HUD', repo: 'Shinzaku/Points', subdir: 'points', installAs: 'points' },
+  { name: 'zonename', description: 'Shows the zone and region name on screen for a few seconds whenever you change zone.', category: 'UI / HUD', repo: 'onimitch/ffxi-zonename', useRelease: true, installAs: 'zonename' },
+  { name: 'partybuffs', description: 'Shows party members\' buffs next to the normal party list.', category: 'UI / HUD', repo: 'ThornyFFXI/MiscAshita4', subdir: 'addons/partybuffs', installAs: 'partybuffs' },
   // --- Hotbars & Controls ---
   { name: 'tHotBar', description: 'Adds a visual hotbar to your screen for binding macros and abilities to keyboard shortcuts. Drag-and-drop setup with customizable size and layout.', category: 'Hotbars & Controls', repo: 'ThornyFFXI/tHotBar', useRelease: true, releaseFolder: 'thotbar', installAs: 'thotbar' },
   { name: 'tCrossBar', description: 'Controller-friendly crossbar UI inspired by FFXIV. Maps abilities to a gamepad with a clean on-screen display. Requires Ashita 4.15+.', category: 'Hotbars & Controls', repo: 'ThornyFFXI/tCrossBar', useRelease: true, releaseFolder: 'tCrossBar', installAs: 'tCrossBar' },
+  { name: 'trigger', description: 'Binds commands to your controller\'s shoulder buttons.', category: 'Hotbars & Controls', repo: 'ThornyFFXI/MiscAshita4', subdir: 'addons/trigger', installAs: 'trigger' },
   // --- Chat & Social ---
   { name: 'chatmon', description: 'Plays sounds as a reaction to certain chat and other helpful events', category: 'Chat & Social' },
   { name: 'chatfix', description: 'Fixes private server chat issues related to a client update', category: 'Chat & Social' },
@@ -75,6 +93,7 @@ export const ADDON_CATALOGUE = [
   { name: 'cfhblock', description: 'Blocks call for help from working to prevent accidents', category: 'Chat & Social' },
   { name: 'Audible', description: 'Plays custom audio alerts triggered by in-game events like spell casts, ability readies, and battle actions.', category: 'Chat & Social', repo: 'ThornyFFXI/Audible' },
   { name: 'FancyChat', description: 'Full chat replacement — 7 sortable tabs (All/Combat/LS/Party/Tell/Shout/Custom), compact icon-based combat log, timestamps, clickable URLs, hover previews for items/abilities/spells, BigMode full-screen view, gamepad navigation, bundled zone maps via Ctrl+click any chat line, per-tab log export, /tell sounds, and word alerts. Load it LAST in your default script — not compatible with other chat-rewriting addons.', category: 'Chat & Social', repo: 'ariel-logos/FancyChat', useRelease: true, installAs: 'fancychat' },
+  { name: 'cleanup', description: 'Chat blacklist replacement and log filter — hide players and message types you don\'t want to see.', category: 'Chat & Social', repo: 'ThornyFFXI/MiscAshita4', subdir: 'addons/cleanup', installAs: 'cleanup' },
   // --- Maps & Navigation ---
   { name: 'allmaps', description: 'See every map via /map without needing the key items, including waypoints', category: 'Maps & Navigation' },
   { name: 'cartographer', description: 'See every map in the map menus when viewing non-current zone maps', category: 'Maps & Navigation' },
@@ -83,6 +102,7 @@ export const ADDON_CATALOGUE = [
   { name: 'drawdistance', description: 'Slash commands to alter the game scene rendering distances', category: 'Maps & Navigation' },
   { name: 'mipmap', description: 'Removes the recent SE patch that altered mipmap configuration', category: 'Maps & Navigation' },
   { name: 'boussole', description: 'In-game map replacement with pan, zoom, real-time party/alliance position tracking, custom map points, and custom PNG map support. Integrates with XIPivot.', category: 'Maps & Navigation', repo: 'loonsies/boussole' },
+  { name: 'zonelines', description: 'Draws the zone lines (exits between areas) in the world so you can see exactly where they are.', category: 'Maps & Navigation', repo: 'SQLCommit/ZoneLines', useRelease: true, installAs: 'zonelines' },
   // --- Blue Mage ---
   { name: 'blusets', description: 'UI for managing Blue Mage spell sets', category: 'Blue Mage' },
   { name: 'blucheck', description: 'Helper addon to track learned BLU spells with an in-game UI', category: 'Blue Mage' },
@@ -92,12 +112,18 @@ export const ADDON_CATALOGUE = [
   { name: 'ahcolors', description: 'Changes the auction house listing colors to be easier to see', category: 'Crafting & Economy' },
   { name: 'ahgo', description: 'Enables opening the AH from anywhere and moving with it open', category: 'Crafting & Economy' },
   { name: 'itemwatch', description: 'Track and monitor items and key items on-screen', category: 'Crafting & Economy' },
+  { name: 'Auctioneer', description: 'Auction house made easy — search, buy and sell from a window, with price info from FFXIAH (retail).', category: 'Crafting & Economy', repo: 'loonsies/Auctioneer', installAs: 'auctioneer' },
+  { name: 'Porter', description: 'Stores items into storage slips at the porter moogle (and pulls them back out) automatically, optionally driven by your gear profile.', category: 'Crafting & Economy', repo: 'ThornyFFXI/Porter', useRelease: true, installAs: 'porter' },
+  { name: 'sellit', description: 'Quick-sell items to NPC vendors (a lightweight bellhop alternative).', category: 'Crafting & Economy', repo: 'ThornyFFXI/MiscAshita4', subdir: 'addons/sellit', installAs: 'sellit' },
   // --- Search & Scan ---
   { name: 'filterscan', description: 'Allows filtering widescan results for specific entities', category: 'Search & Scan' },
   { name: 'watchdog', description: 'Enables widescan tracking of nearly anything with a command', category: 'Search & Scan' },
+  { name: 'ScentHound', description: 'Tracks monster spawns with on-screen indicators. Needs the watchdog addon loaded for widescan. Its packet-search features are off by default — they count as cheating.', category: 'Search & Scan', repo: 'ThornyFFXI/ScentHound', useRelease: true, installAs: 'scenthound' },
   // --- Trusts & Pets ---
   { name: 'petinfo', description: 'Displays information about the player pet', category: 'Trusts & Pets' },
   { name: 'FancyTrusts', description: 'Fancy trust management UI — browse, summon, and organize your trusts without memorizing names or writing macros.', category: 'Trusts & Pets', repo: 'ThornyFFXI/FancyTrusts', subdir: 'FancyTrusts', installAs: 'FancyTrusts' },
+  { name: 'PetMe', description: 'Pet information window — name, distance, HP/MP/TP and target, plus job-specific details for BST (jug/charm), SMN, DRG and more.', category: 'Trusts & Pets', repo: 'm4thmatic/PetMe', useRelease: true, installAs: 'petme' },
+  { name: 'trustme', description: 'Trust management window — search your trusts and save profiles that summon a whole set of trusts with one click or command.', category: 'Trusts & Pets', repo: 'loonsies/trustme', installAs: 'trustme' },
   // --- Cosmetic & Fun ---
   { name: 'Cosplay', description: 'Copy the appearance of your current target — great for screenshots or just fun. Changes are client-side only.', category: 'Cosmetic & Fun', repo: 'tirem/Cosplay', subdir: 'Cosplay', installAs: 'Cosplay' },
   { name: 'chamcham', description: 'Enables coloring models based on their entity type', category: 'Cosmetic & Fun' },
