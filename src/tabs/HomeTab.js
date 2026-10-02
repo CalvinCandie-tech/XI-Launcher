@@ -124,17 +124,19 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
   useEffect(() => {
     if (!api) return;
     const check = async () => {
-      const [ashita, ffxi, xiloader, profiles] = await Promise.all([
+      const [ashita, ffxi, loader, profiles] = await Promise.all([
         api.pathExists(config.ashitaPath + '\\Ashita-cli.exe'),
         api.pathExists(config.ffxiPath),
-        api.pathExists((config.xiloaderPath || '') + '\\xiloader.exe'),
+        api.resolveLoader(config.activeProfile, { useXiloader: !!config.useXiloader, host: config.serverHost }),
         api.listProfiles(config.ashitaPath)
       ]);
-      setStatus({ ashita, ffxi, xiloader, profileCount: profiles.length });
+      // A retail profile doesn't use a loader, so never flag one as missing for it.
+      const loaderOk = !loader || loader.isRetail || loader.exists;
+      setStatus({ ashita, ffxi, xiloader: loaderOk, loaderName: loader?.name || 'xiloader', profileCount: profiles.length });
       setProfiles(profiles);
     };
     check();
-  }, [config.ashitaPath, config.ffxiPath, config.xiloaderPath, config.activeProfile]);
+  }, [config.ashitaPath, config.ffxiPath, config.xiloaderPath, config.activeProfile, config.useXiloader, config.serverHost]);
 
   const createAndActivate = async () => {
     const name = newName.trim();
@@ -170,7 +172,6 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
         ashitaPath: config.ashitaPath,
         profileName,
         useXiloader: !!config.useXiloader,
-        xiloaderPath: profileSettings.xiloaderPath || config.xiloaderPath,
         serverName: profileSettings.serverHost || config.serverHost,
         serverPort: profileSettings.serverPort || config.serverPort,
         loginUser: profileSettings.loginUser || config.loginUser,
@@ -385,8 +386,8 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
               )}
               {!status.xiloader && (
                 <div className="home-status-row">
-                  <span>xiloader</span>
-                  <span className="pill pill-red">Not Found</span>
+                  <span>{status.loaderName || 'xiloader'}</span>
+                  <span className="pill pill-red">Not Installed</span>
                 </div>
               )}
             </div>
