@@ -136,27 +136,6 @@
   margin-bottom: 18px;
 }
 
-/* Advanced per-profile xiloader override (collapsible) */
-.profile-xiloader-summary {
-  cursor: pointer;
-}
-
-.profile-xiloader-body {
-  margin-top: 10px;
-}
-
-.profile-xiloader-warn {
-  color: var(--gold);
-  margin-bottom: 8px;
-}
-
-.profile-xiloader-ok {
-  color: var(--green);
-}
-
-.profile-xiloader-err {
-  color: var(--red);
-}
 
 
 .server-summary {

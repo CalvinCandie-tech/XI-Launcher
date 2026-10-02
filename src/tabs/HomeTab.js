@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './HomeTab.css';
 import { DEFAULT_PROFILE_INI } from '../utils/profileTemplates';
+import LoaderPicker from '../components/LoaderPicker';
 
 const api = window.xiAPI;
 
@@ -25,6 +26,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
   const [updateDlStatus, setUpdateDlStatus] = useState(''); // '' | 'downloading' | 'installing' | 'error'
   const [updateDlProgress, setUpdateDlProgress] = useState({ percent: 0, detail: '' });
   const [updateDlError, setUpdateDlError] = useState('');
+  const [loaderChangeCount, setLoaderChangeCount] = useState(0); // re-runs the readiness check
 
   // ── 📥 FFXI Files Updater (Vana-Time mirror or custom URL) ──
   const [ffxiDlPercent, setFfxiDlPercent] = useState(0);
@@ -136,7 +138,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
       setProfiles(profiles);
     };
     check();
-  }, [config.ashitaPath, config.ffxiPath, config.xiloaderPath, config.activeProfile, config.useXiloader, config.serverHost]);
+  }, [config.ashitaPath, config.ffxiPath, config.xiloaderPath, config.activeProfile, config.useXiloader, config.serverHost, loaderChangeCount]);
 
   const createAndActivate = async () => {
     const name = newName.trim();
@@ -466,6 +468,13 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
                 <option value="xiloader">xiloader (private server)</option>
               </select>
             </div>
+            <LoaderPicker
+              compact
+              profileName={config.activeProfile}
+              useXiloader={config.useXiloader}
+              serverHost={config.serverHost}
+              onChange={() => setLoaderChangeCount(n => n + 1)}
+            />
             {config.serverHost && (
               <div className="home-conn-section">
                 <div className="home-server-picker-wrap" ref={serverPickerRef}>

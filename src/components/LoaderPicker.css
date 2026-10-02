@@ -1,0 +1,91 @@
+/* Loader choice — shared by the Profiles-tab Loader popup and the Home tab */
+.loader-picker-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.loader-picker-resolved {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+.loader-picker-resolved.ok {
+  color: var(--green);
+}
+
+.loader-picker-resolved.err {
+  color: var(--red);
+}
+
+.loader-picker-path {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.loader-picker-status {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.loader-picker-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.loader-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.loader-picker-row-name {
+  flex: 1;
+  font-size: 13px;
+}
+
+.loader-picker-compact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Profiles-tab popup */
+.loader-modal {
+  width: min(560px, 92vw);
+  padding: 0;
+  overflow: hidden;
+}
+
+.loader-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.loader-modal-title {
+  margin: 0;
+  color: var(--gold);
+  font-size: 18px;
+}
+
+.loader-modal-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.loader-modal-body {
+  padding: 16px 20px 20px;
+}

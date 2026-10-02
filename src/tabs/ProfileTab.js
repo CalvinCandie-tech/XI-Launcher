@@ -4,6 +4,7 @@ import { DEFAULT_PROFILE_INI } from '../utils/profileTemplates';
 import ScriptEditorTab from './ScriptEditorTab';
 import Modal from '../components/Modal';
 import RegistryEditor from '../components/RegistryEditor';
+import LoaderPicker from '../components/LoaderPicker';
 
 const api = window.xiAPI;
 
@@ -28,73 +29,13 @@ function ProfileTab({ config, updateConfig }) {
   const [showScriptEditor, setShowScriptEditor] = useState(false);
   const [profileOverlays, setProfileOverlays] = useState({});
   const [modPopover, setModPopover] = useState(null); // profile name or null
-  const [loaderList, setLoaderList] = useState([]);
-  const [profileLoader, setProfileLoader] = useState({ loader: 'auto', loaderExePath: '' });
-  const [resolvedLoader, setResolvedLoader] = useState(null);
-  const [loaderStatus, setLoaderStatus] = useState('');
-  const [loaderBusy, setLoaderBusy] = useState(null); // id of the loader being installed/checked
-
-  // Profile we're choosing the loader for.
-  const targetProfile = config.activeProfile || selectedProfile;
+  const [showLoader, setShowLoader] = useState(false);
 
   useEffect(() => {
     if (!api) return;
     api.storeGet('profileOverlays').then(data => setProfileOverlays(data || {}));
   }, [config.activeProfile]);
 
-  // Installed loaders, this profile's loader choice, and what that resolves to right now.
-  const refreshLoaders = useCallback(async () => {
-    if (!api?.listLoaders) return;
-    try {
-      setLoaderList(await api.listLoaders());
-      if (!targetProfile) { setResolvedLoader(null); return; }
-      const ps = (await api.loadProfileSettings(targetProfile)) || {};
-      setProfileLoader({ loader: ps.loader || 'auto', loaderExePath: ps.loaderExePath || '' });
-      setResolvedLoader(await api.resolveLoader(targetProfile, { useXiloader: !!config.useXiloader, host: config.serverHost }));
-    } catch (e) {
-      console.error('Failed to load loader settings', e);
-    }
-  }, [targetProfile, config.useXiloader, config.serverHost]);
-
-  useEffect(() => { refreshLoaders(); }, [refreshLoaders]);
-
-  const saveProfileLoader = async (loader, loaderExePath = '') => {
-    if (!api || !targetProfile) return;
-    try {
-      const existing = (await api.loadProfileSettings(targetProfile)) || {};
-      const next = { ...existing, loader };
-      if (loader === 'custom') next.loaderExePath = loaderExePath;
-      else delete next.loaderExePath;
-      await api.saveProfileSettings(targetProfile, next);
-      await refreshLoaders();
-      setLoaderStatus(`Saved. "${targetProfile}" takes the new loader on its next launch.`);
-      setTimeout(() => setLoaderStatus(''), 8000);
-    } catch (e) {
-      setLoaderStatus(`Error: ${e.message || e}`);
-    }
-  };
-
-  const browseCustomLoader = async () => {
-    if (!api?.browseLoaderExe) return;
-    const picked = await api.browseLoaderExe(profileLoader.loaderExePath || config.xiloaderPath);
-    if (picked) await saveProfileLoader('custom', picked);
-  };
-
-  const runLoaderAction = async (id, action) => {
-    setLoaderBusy(id);
-    setDownloadProgress({ percent: 0, detail: 'Starting...' });
-    try {
-      const result = action === 'install' ? await api.downloadLoader(id) : await api.checkLoaderUpdate(id);
-      setLoaderStatus(result.success
-        ? (result.upToDate ? `Already up to date (v${result.currentVersion}).` : result.message)
-        : result.error);
-    } catch (e) {
-      setLoaderStatus(`Failed: ${e.message || e}`);
-    } finally {
-      setLoaderBusy(null);
-      refreshLoaders();
-    }
-  };
 
   useEffect(() => {
     if (!api?.onXiloaderDownloadProgress) return;
@@ -546,6 +487,7 @@ function ProfileTab({ config, updateConfig }) {
                   <button className="btn btn-ghost btn-sm" onClick={() => exportProfile(selectedProfile)} title="Export as .xiprofile">↑ Export</button>
                   <button className="btn btn-ghost btn-sm" onClick={openProfileFolder}>Open Folder</button>
                   <button className="btn btn-ghost btn-sm" onClick={() => setShowRegistry(true)} title="Edit FFXI graphics & client settings with a friendly form">⚙ Graphics</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setShowLoader(true)} title="Choose which loader (xiloader, ldloader, custom) this profile launches with">⇄ Loader</button>
                   {isEditing ? (
                     <>
                       <button className="btn btn-primary btn-sm" onClick={saveEdit}>Save</button>
@@ -577,6 +519,24 @@ function ProfileTab({ config, updateConfig }) {
                     setShowRegistry(false);
                   }}
                 />
+              )}
+              {showLoader && (
+                <Modal onClose={() => setShowLoader(false)} ariaLabel="Loader for this profile" zIndex={1100}>
+                  <div className="loader-modal panel">
+                    <div className="loader-modal-header">
+                      <div>
+                        <h3 className="cinzel loader-modal-title">Loader — {selectedProfile}</h3>
+                        <p className="loader-modal-subtitle">
+                          <strong>Auto</strong> picks the loader the server needs (e.g. ldloader for LevelDown) and stock xiloader for everything else. Changes apply on the next launch.
+                        </p>
+                      </div>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setShowLoader(false)}>✕</button>
+                    </div>
+                    <div className="loader-modal-body">
+                      <LoaderPicker profileName={selectedProfile} useXiloader={config.useXiloader} serverHost={config.serverHost} />
+                    </div>
+                  </div>
+                </Modal>
               )}
             </>
           ) : (
@@ -666,68 +626,6 @@ function ProfileTab({ config, updateConfig }) {
           </div>
         </div>
 
-        <details className="server-group profile-xiloader-override" open={profileLoader.loader !== 'auto'}>
-          <summary className="group-title profile-xiloader-summary">
-            Loader for this profile
-          </summary>
-          <div className="profile-xiloader-body">
-            <p className="profile-hint">
-              <strong>Auto</strong> picks the loader the server needs (e.g. ldloader for LevelDown) and stock xiloader for everything else. Pick one explicitly to force it for <strong>{targetProfile || 'this profile'}</strong>. Changes apply on the next launch.
-            </p>
-            {!targetProfile && (
-              <p className="form-field-desc profile-xiloader-warn">
-                Select or activate a profile above to choose its loader.
-              </p>
-            )}
-            <div className="form-grid">
-              <div className="form-field form-field-wide">
-                <div className="form-field-label"><span className="form-field-name">Loader</span></div>
-                <div className="form-control-row">
-                  <select
-                    className="form-input"
-                    value={profileLoader.loader}
-                    disabled={!targetProfile}
-                    onChange={e => {
-                      const v = e.target.value;
-                      if (v === 'custom') browseCustomLoader();
-                      else saveProfileLoader(v);
-                    }}
-                  >
-                    <option value="auto">Auto (from server)</option>
-                    {loaderList.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                    <option value="custom">Custom exe…</option>
-                  </select>
-                  {profileLoader.loader === 'custom' && (
-                    <button className="btn btn-sm btn-ghost" onClick={browseCustomLoader} disabled={!targetProfile}>Browse</button>
-                  )}
-                </div>
-                {profileLoader.loader === 'custom' && profileLoader.loaderExePath && (
-                  <p className="form-field-desc mono">{profileLoader.loaderExePath}</p>
-                )}
-                {resolvedLoader && (
-                  <p className={`form-field-desc ${resolvedLoader.exists ? 'profile-xiloader-ok' : 'profile-xiloader-err'}`}>
-                    {resolvedLoader.exists ? '✓ ' : '⚠ '}{resolvedLoader.label}{resolvedLoader.exists ? '' : ' — not installed'}
-                  </p>
-                )}
-              </div>
-              {loaderList.map(l => (
-                <div className="form-field form-field-wide" key={l.id}>
-                  <div className="form-control-row">
-                    <span className="form-field-name">{l.name}</span>
-                    <span className={`pill ${l.installed ? 'pill-green' : 'pill-red'}`}>
-                      {l.installed ? `Installed${l.tag ? ` ${l.tag}` : ''}` : 'Not installed'}
-                    </span>
-                    <button className="btn btn-sm btn-ghost" disabled={!!loaderBusy} onClick={() => runLoaderAction(l.id, l.installed ? 'update' : 'install')}>
-                      {loaderBusy === l.id ? `${downloadProgress.percent}%` : (l.installed ? 'Check for update' : 'Install')}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {loaderStatus && <p className="form-field-desc">{loaderStatus}</p>}
-          </div>
-        </details>
-
         {config.serverHost && (
           <div className="server-summary">
             <span className="server-summary-label">Ready to connect to</span>
@@ -784,7 +682,6 @@ function ProfileTab({ config, updateConfig }) {
                 ? `Profile "${targetProfile}" updated, but: ${sync.error}`
                 : `Profile "${targetProfile}" updated with server settings${sync?.resolved ? ` — ${sync.resolved.label}` : ''}`);
               setTimeout(() => setBuildLog(''), 8000);
-              refreshLoaders();
             }}
           >
             Apply to {config.activeProfile ? `Active Profile: ${config.activeProfile}` : `Profile: ${selectedProfile}`}
