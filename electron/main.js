@@ -588,17 +588,15 @@ function profileIniPath(ashitaPath, profileName) {
   return path.join(ashitaPath, 'config', 'boot', `${profileName}.ini`);
 }
 
-// Which loader a launch will use: the one picked for the profile. In Ashita mode the profile
-// ini also tells us whether it's a retail profile (no loader). Resolved here in main so the
-// renderer never hands us an exe to elevate.
-function resolveLoaderFor(profileName, { mode, ashitaPath }) {
+// Which loader a launch will use: the one picked for the profile. The profile ini also tells
+// us whether it's a retail profile (no loader). Resolved here in main so the renderer never
+// hands us an exe to elevate.
+function resolveLoaderFor(profileName, { ashitaPath }) {
   const settings = (store.get('profileSettings') || {})[profileName] || {};
   let isRetail = false;
-  if (mode === 'ashita') {
-    try {
-      isRetail = loaders.parseIniBoot(fs.readFileSync(profileIniPath(ashitaPath, profileName), 'utf-8')).isRetail;
-    } catch {}
-  }
+  try {
+    isRetail = loaders.parseIniBoot(fs.readFileSync(profileIniPath(ashitaPath, profileName), 'utf-8')).isRetail;
+  } catch {}
   const resolved = loaders.resolveLoader({
     profileSettings: settings,
     xiloaderDir: loaderInstallDir('xiloader'),
@@ -613,7 +611,7 @@ function syncProfileLoader(ashitaPath, profileName) {
   const iniPath = profileIniPath(ashitaPath, profileName);
   const content = fs.readFileSync(iniPath, 'utf-8');
   if (loaders.parseIniBoot(content).isRetail) return { retail: true };
-  const resolved = resolveLoaderFor(profileName, { mode: 'ashita', ashitaPath });
+  const resolved = resolveLoaderFor(profileName, { ashitaPath });
   if (!resolved.exists) return { error: loaders.missingLoaderMessage(resolved), resolved };
   const plan = loaders.planProfileLoaderSync(content, resolved.exePath);
   if (plan.newContent !== null && plan.newContent !== undefined) fs.writeFileSync(iniPath, plan.newContent, 'utf-8');
@@ -1206,12 +1204,9 @@ function registerIPC() {
     return all[profileName] || null;
   });
 
-  ipcMain.handle('resolve-loader', (_, profileName, { useXiloader } = {}) => {
+  ipcMain.handle('resolve-loader', (_, profileName) => {
     if (profileName && !sanitizeName(profileName)) return null;
-    return resolveLoaderFor(profileName, {
-      mode: useXiloader ? 'direct' : 'ashita',
-      ashitaPath: store.get('ashitaPath') || defaultAshitaPath,
-    });
+    return resolveLoaderFor(profileName, { ashitaPath: store.get('ashitaPath') || defaultAshitaPath });
   });
 
   ipcMain.handle('sync-profile-loader', (_, profileName) => {
@@ -2430,49 +2425,25 @@ function registerIPC() {
         return { error: 'Profile name contains invalid characters. Rename the profile and try again.' };
       }
 
-      if (opts.useXiloader) {
-        if (!opts.serverName) return { error: 'No server address set. Go to Profiles → Private Server Connection and enter your server hostname.' };
-        const resolved = resolveLoaderFor(opts.profileName, { mode: 'direct' });
-        if (!resolved.exists) return { error: loaders.missingLoaderMessage(resolved) };
-        const exe = resolved.exePath;
-        const args = [];
-        if (opts.serverName) args.push('--server', String(opts.serverName));
-        if (opts.loginUser) args.push('--user', String(opts.loginUser));
-        if (opts.loginPass) args.push('--pass', String(opts.loginPass));
-        if (opts.hairpin) args.push('--hairpin');
-        const argList = args.map(a => `'${escapePSString(a)}'`).join(', ');
-        // Run from a temp .ps1 (not -Command) so the password never lands on
-        // powershell.exe's command line. Args go through a PS array literal so
-        // spaces/special chars can't break out of the single-quoted values.
-        const script = `$ErrorActionPreference = 'Stop'\n`
-          + `Start-Process -FilePath '${escapePSString(exe)}'`
-          + `${argList ? ` -ArgumentList @(${argList})` : ''}`
-          + ` -WorkingDirectory '${escapePSString(path.dirname(exe))}' -Verb RunAs\n`;
-        await runPowerShellFile(script, 15000);
-        // Watch for game exit and notify renderer
-        watchForGameExit('pol.exe', profileKey);
-        return { success: true, message: `${resolved.label} — launched` };
-      } else {
-        if (!opts.ashitaPath) return { error: 'Ashita path is not set. Go to Profiles → Installation Paths and set the Ashita v4 path.' };
-        const exe = path.join(opts.ashitaPath, 'Ashita-cli.exe');
-        if (!fs.existsSync(exe)) return { error: `Ashita-cli.exe not found at ${opts.ashitaPath}. Install Ashita v4 from the Home tab or set the correct path in Profiles → Installation Paths.` };
-        if (!opts.profileName) return { error: 'No profile selected. Create or select a profile from the Profiles tab before launching.' };
-        const profileIni = path.join(opts.ashitaPath, 'config', 'boot', `${opts.profileName}.ini`);
-        if (!fs.existsSync(profileIni)) return { error: `Profile "${opts.profileName}" INI file not found. The profile may have been deleted. Select a different profile or create a new one.` };
-        stripRemovedXiloaderArgs(profileIni);
-        const sync = syncProfileLoader(opts.ashitaPath, opts.profileName);
-        if (sync.error) return { error: sync.error };
-        const iniName = `${opts.profileName}.ini`;
-        // Array literal handles a profile name with spaces — PowerShell quotes the
-        // element itself, so no manual double-quote wrapping is needed.
-        const script = `$ErrorActionPreference = 'Stop'\n`
-          + `Start-Process -FilePath '${escapePSString(exe)}' -ArgumentList @('${escapePSString(iniName)}')`
-          + ` -WorkingDirectory '${escapePSString(opts.ashitaPath)}' -Verb RunAs\n`;
-        await runPowerShellFile(script, 15000);
-        // Watch for game exit and notify renderer
-        watchForGameExit('pol.exe', profileKey);
-        return { success: true, message: `Ashita launched with profile: ${opts.profileName}${sync.resolved ? ` — ${sync.resolved.label}` : ''}` };
-      }
+      if (!opts.ashitaPath) return { error: 'Ashita path is not set. Go to Profiles → Installation Paths and set the Ashita v4 path.' };
+      const exe = path.join(opts.ashitaPath, 'Ashita-cli.exe');
+      if (!fs.existsSync(exe)) return { error: `Ashita-cli.exe not found at ${opts.ashitaPath}. Install Ashita v4 from the Home tab or set the correct path in Profiles → Installation Paths.` };
+      if (!opts.profileName) return { error: 'No profile selected. Create or select a profile from the Profiles tab before launching.' };
+      const profileIni = path.join(opts.ashitaPath, 'config', 'boot', `${opts.profileName}.ini`);
+      if (!fs.existsSync(profileIni)) return { error: `Profile "${opts.profileName}" INI file not found. The profile may have been deleted. Select a different profile or create a new one.` };
+      stripRemovedXiloaderArgs(profileIni);
+      const sync = syncProfileLoader(opts.ashitaPath, opts.profileName);
+      if (sync.error) return { error: sync.error };
+      const iniName = `${opts.profileName}.ini`;
+      // Array literal handles a profile name with spaces — PowerShell quotes the
+      // element itself, so no manual double-quote wrapping is needed.
+      const script = `$ErrorActionPreference = 'Stop'\n`
+        + `Start-Process -FilePath '${escapePSString(exe)}' -ArgumentList @('${escapePSString(iniName)}')`
+        + ` -WorkingDirectory '${escapePSString(opts.ashitaPath)}' -Verb RunAs\n`;
+      await runPowerShellFile(script, 15000);
+      // Watch for game exit and notify renderer
+      watchForGameExit('pol.exe', profileKey);
+      return { success: true, message: `Ashita launched with profile: ${opts.profileName}${sync.resolved ? ` — ${sync.resolved.label}` : ''}` };
     } catch (e) {
       const msg = e.message || '';
       if (msg.includes('elevation') || msg.includes('denied') || msg.includes('UAC')) {

@@ -38,7 +38,7 @@ contextBridge.exposeInMainWorld('xiAPI', {
   listLoaders: () => ipcRenderer.invoke('list-loaders'),
   downloadLoader: (id) => ipcRenderer.invoke('download-loader', id),
   checkLoaderUpdate: (id) => ipcRenderer.invoke('check-loader-update', id),
-  resolveLoader: (profileName, opts) => ipcRenderer.invoke('resolve-loader', profileName, opts),
+  resolveLoader: (profileName) => ipcRenderer.invoke('resolve-loader', profileName),
   syncProfileLoader: (profileName) => ipcRenderer.invoke('sync-profile-loader', profileName),
   browseLoaderExe: (defaultPath) => ipcRenderer.invoke('browse-loader-exe', defaultPath),
   onXiloaderDownloadProgress: (callback) => {

@@ -173,7 +173,6 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
       const result = await api.launchGame({
         ashitaPath: config.ashitaPath,
         profileName,
-        useXiloader: false,
         serverName: profileSettings.serverHost || config.serverHost,
         serverPort: profileSettings.serverPort || config.serverPort,
         loginUser: profileSettings.loginUser || config.loginUser,
