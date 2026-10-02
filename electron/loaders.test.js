@@ -155,3 +155,80 @@ test('planProfileLoaderSync returns rewritten content when the exe differs', () 
   const plan = L.planProfileLoaderSync(PRIVATE_INI, 'D:\\l.exe');
   assert.match(plan.newContent, /^file {9}= D:\\l\.exe$/m);
 });
+
+test('isValidExePath', () => {
+  assert.equal(L.isValidExePath('C:\\Loaders\\ld.exe'), true);
+  assert.equal(L.isValidExePath('d:/x/LD.EXE'), true);
+  assert.equal(L.isValidExePath('relative\\ld.exe'), false);
+  assert.equal(L.isValidExePath('\\\\server\\share\\ld.exe'), false);
+  assert.equal(L.isValidExePath('C:\\x\\ld.bat'), false);
+  assert.equal(L.isValidExePath('C:\\x\\"ld.exe'), false);
+  assert.equal(L.isValidExePath('C:\\x\\ld.exe\n'), false);
+  assert.equal(L.isValidExePath(42), false);
+});
+
+test('sanitizeLoaderSettings keeps valid values and other keys', () => {
+  const s = { serverHost: 'x', loader: 'custom', loaderExePath: 'C:\\l\\ld.exe' };
+  assert.deepEqual(L.sanitizeLoaderSettings(s), s);
+  assert.deepEqual(L.sanitizeLoaderSettings({ loader: 'ldloader' }), { loader: 'ldloader' });
+  assert.deepEqual(L.sanitizeLoaderSettings({ loader: 'auto' }), { loader: 'auto' });
+});
+
+test('sanitizeLoaderSettings drops junk', () => {
+  assert.deepEqual(L.sanitizeLoaderSettings({ loader: '__proto__', a: 1 }), { a: 1 });
+  assert.deepEqual(L.sanitizeLoaderSettings({ loader: 'custom', loaderExePath: 'rel.exe' }), { loader: 'auto' });
+  assert.deepEqual(L.sanitizeLoaderSettings({ loader: 'custom' }), { loader: 'auto' });
+  assert.equal(L.sanitizeLoaderSettings(null), null);
+});
+
+test('migrateProfileSettings converts legacy xiloaderPath and keeps the old key', () => {
+  const { changed, result } = L.migrateProfileSettings({
+    A: { xiloaderPath: 'C:/Old/xi' },
+    B: { serverHost: 'h' },
+    C: { loader: 'ldloader', xiloaderPath: 'C:\\ignored' },
+  });
+  assert.equal(changed, true);
+  assert.deepEqual(result.A, { xiloaderPath: 'C:/Old/xi', loader: 'custom', loaderExePath: 'C:\\Old\\xi\\xiloader.exe' });
+  assert.deepEqual(result.B, { serverHost: 'h', loader: 'auto' });
+  assert.deepEqual(result.C, { loader: 'ldloader', xiloaderPath: 'C:\\ignored' });
+});
+
+test('migrateProfileSettings: unusable legacy path becomes auto', () => {
+  const { result } = L.migrateProfileSettings({ A: { xiloaderPath: 'relative\\dir' } });
+  assert.equal(result.A.loader, 'auto');
+});
+
+test('migrateProfileSettings is idempotent', () => {
+  const first = L.migrateProfileSettings({ A: { xiloaderPath: 'C:\\Old' }, B: {} }).result;
+  const second = L.migrateProfileSettings(first);
+  assert.equal(second.changed, false);
+  assert.deepEqual(second.result, first);
+});
+
+const RELEASE = {
+  tag_name: 'v2.2.0',
+  assets: [
+    { id: 1, name: 'xiloader-src.zip', browser_download_url: 'https://x/src.zip', updated_at: 't0' },
+    { id: 606443986, name: 'LDLoader.exe', browser_download_url: 'https://x/ldloader.exe', updated_at: '2026-10-02T20:37:18Z' },
+  ],
+};
+
+test('pickReleaseAsset matches the exact asset name case-insensitively', () => {
+  assert.deepEqual(L.pickReleaseAsset(RELEASE, 'ldloader.exe'), {
+    tag: 'v2.2.0', downloadUrl: 'https://x/ldloader.exe', assetId: 606443986, assetUpdatedAt: '2026-10-02T20:37:18Z',
+  });
+  assert.equal(L.pickReleaseAsset(RELEASE, 'xiloader.exe'), null);
+  assert.equal(L.pickReleaseAsset({}, 'xiloader.exe'), null);
+});
+
+test('needsLoaderUpdate', () => {
+  const latest = { tag: 'v2.2.0', assetId: 5 };
+  assert.equal(L.needsLoaderUpdate({ installed: false, latest }), true);
+  assert.equal(L.needsLoaderUpdate({ installed: true, record: { assetId: 5 }, latest }), false);
+  assert.equal(L.needsLoaderUpdate({ installed: true, record: { assetId: 4 }, latest }), true);
+  // No record: FileVersion fallback (only ever passed for stock xiloader)
+  assert.equal(L.needsLoaderUpdate({ installed: true, localVersion: '2.2.0.0', latest }), false);
+  assert.equal(L.needsLoaderUpdate({ installed: true, localVersion: '2.1.2.0', latest }), true);
+  // No record and no version: can't tell what it is, so replace it
+  assert.equal(L.needsLoaderUpdate({ installed: true, latest }), true);
+});

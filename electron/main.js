@@ -6,6 +6,7 @@ const https = require('https');
 const { execSync, spawn, exec, execFile } = require('child_process');
 const yauzl = require('yauzl');
 const crypto = require('crypto');
+const { isOlderVersion } = require('./loaders');
 
 /**
  * Extract a zip file using yauzl (streaming, handles large files, reports progress).
@@ -545,17 +546,6 @@ function getLocalXiloaderVersion(exePath) {
     ).trim();
     return /^\d+(\.\d+){1,3}$/.test(out) ? out : null;
   } catch { return null; }
-}
-
-// True if dotted version string `a` is numerically older than `b` (e.g. "2.1.2.0" < "2.1.2" is false — equal).
-function isOlderVersion(a, b) {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const na = pa[i] || 0, nb = pb[i] || 0;
-    if (na !== nb) return na < nb;
-  }
-  return false;
 }
 
 // Parse a URL to determine mod download type

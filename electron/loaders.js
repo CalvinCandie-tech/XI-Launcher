@@ -131,6 +131,74 @@ function planProfileLoaderSync(content, exePath) {
   return { newContent: setIniBootFile(content, exePath) };
 }
 
+// Same shape rules store-set applies to install paths: a drive-letter absolute .exe,
+// no quotes or newlines (they'd break the PowerShell launch script), no UNC shares.
+function isValidExePath(p) {
+  return typeof p === 'string'
+    && /^[a-zA-Z]:[\\/]/.test(p)
+    && /\.exe$/i.test(p)
+    && !/["\r\n]/.test(p);
+}
+
+function sanitizeLoaderSettings(settings) {
+  if (!settings || typeof settings !== 'object') return settings;
+  const out = { ...settings };
+  if (out.loader !== undefined && out.loader !== 'auto' && out.loader !== 'custom' && !isLoaderId(out.loader)) {
+    delete out.loader;
+  }
+  if (out.loaderExePath !== undefined && !isValidExePath(out.loaderExePath)) delete out.loaderExePath;
+  if (out.loader === 'custom' && !out.loaderExePath) out.loader = 'auto';
+  return out;
+}
+
+// Pre-registry profiles stored a folder in xiloaderPath. Convert it to a custom loader
+// pointing at <folder>\xiloader.exe. The old key stays so a rollback to v1.6.x still works.
+function migrateProfileSettings(all) {
+  const result = {};
+  let changed = false;
+  for (const [name, ps] of Object.entries(all || {})) {
+    if (!ps || typeof ps !== 'object' || ps.loader !== undefined) {
+      result[name] = ps;
+      continue;
+    }
+    const legacyDir = typeof ps.xiloaderPath === 'string' ? ps.xiloaderPath.trim() : '';
+    const legacyExe = legacyDir ? path.win32.join(legacyDir.replace(/\//g, '\\'), 'xiloader.exe') : '';
+    result[name] = isValidExePath(legacyExe)
+      ? { ...ps, loader: 'custom', loaderExePath: legacyExe }
+      : { ...ps, loader: 'auto' };
+    changed = true;
+  }
+  return { changed, result };
+}
+
+function pickReleaseAsset(release, assetName) {
+  const wanted = assetName.toLowerCase();
+  const asset = (release?.assets || []).find(a => String(a.name).toLowerCase() === wanted);
+  if (!asset) return null;
+  return { tag: release.tag_name, downloadUrl: asset.browser_download_url, assetId: asset.id, assetUpdatedAt: asset.updated_at };
+}
+
+// True if dotted version string `a` is numerically older than `b` (e.g. "2.1.2.0" < "2.1.2" is false — equal).
+function isOlderVersion(a, b) {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = pa[i] || 0, nb = pb[i] || 0;
+    if (na !== nb) return na < nb;
+  }
+  return false;
+}
+
+// ldloader reports the same FileVersion as stock xiloader, so versions can't tell builds
+// apart — compare the GitHub asset id we recorded at install time. Installs from before
+// the registry have no record; stock xiloader falls back to its FileVersion.
+function needsLoaderUpdate({ installed, record, latest, localVersion }) {
+  if (!installed) return true;
+  if (record && record.assetId != null) return record.assetId !== latest.assetId;
+  if (localVersion) return isOlderVersion(localVersion, String(latest.tag || '').replace(/^v/i, ''));
+  return true;
+}
+
 module.exports = {
   LOADERS,
   DEFAULT_LOADER,
@@ -144,4 +212,10 @@ module.exports = {
   describeLoader,
   missingLoaderMessage,
   planProfileLoaderSync,
+  isValidExePath,
+  sanitizeLoaderSettings,
+  migrateProfileSettings,
+  pickReleaseAsset,
+  isOlderVersion,
+  needsLoaderUpdate,
 };
