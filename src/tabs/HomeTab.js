@@ -324,51 +324,6 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
           </div>
         )}
 
-        {/* Profile quick-switch */}
-        <div className="home-panel-section">
-          <div className="home-panel-label">Game Profile</div>
-          {profiles.length > 0 ? (
-            <div className="home-profile-switcher" ref={dropdownRef}>
-              <div
-                className="home-profile-display"
-                role="button"
-                tabIndex={0}
-                aria-expanded={profileDropdownOpen}
-                onClick={() => setProfileDropdownOpen(prev => !prev)}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setProfileDropdownOpen(prev => !prev); } }}
-              >
-                <span className="home-profile-name mono">{config.activeProfile || 'Select profile'}</span>
-                <span className="home-profile-change">{profileDropdownOpen ? '▲' : '▼'}</span>
-              </div>
-              {profileDropdownOpen && (
-                <div className="home-profile-dropdown" role="listbox">
-                  {profiles.map(name => (
-                    <div
-                      key={name}
-                      role="option"
-                      aria-selected={config.activeProfile === name}
-                      className={`home-profile-option ${config.activeProfile === name ? 'active' : ''}`}
-                      onClick={() => { updateConfig('activeProfile', name); setProfileDropdownOpen(false); }}
-                    >
-                      {config.activeProfile === name && <span className="home-profile-active-dot">✦</span>}
-                      <span>{name}</span>
-                    </div>
-                  ))}
-                  <div role="option" className="home-profile-option home-profile-manage" onClick={() => { setProfileDropdownOpen(false); onNavigate('profiles'); }}>
-                    ⚙ Manage Profiles...
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="home-profile-none" onClick={() => onNavigate('profiles')}>
-              <span>No profiles yet</span>
-              <span className="home-step-action">Go to Profiles →</span>
-            </div>
-          )}
-        </div>
-
-
         {/* Status section — only show when something needs attention */}
         {(!status.ashita || !status.ffxi || !status.xiloader) && (
           <div className="home-panel-section">
@@ -454,82 +409,124 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
           </div>
         )}
 
-        {/* Start Game */}
-        {setupComplete && (
-          <div className="home-panel-section home-panel-launch">
-            <div className="form-field">
-              <div className="form-field-label"><span className="form-field-name">Launch method</span></div>
-              <select
-                className="form-select"
-                value={config.useXiloader ? 'xiloader' : 'ashita'}
-                onChange={e => updateConfig('useXiloader', e.target.value === 'xiloader')}
+        {/* Profile + Start Game */}
+        <div className="home-panel-section">
+          <div className="home-panel-label">Game Profile</div>
+          {profiles.length > 0 ? (
+            <div className="home-profile-switcher" ref={dropdownRef}>
+              <div
+                className="home-profile-display"
+                role="button"
+                tabIndex={0}
+                aria-expanded={profileDropdownOpen}
+                onClick={() => setProfileDropdownOpen(prev => !prev)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setProfileDropdownOpen(prev => !prev); } }}
               >
-                <option value="ashita">Ashita (boot file from profile)</option>
-                <option value="xiloader">xiloader (private server)</option>
-              </select>
-            </div>
-            <LoaderPicker
-              compact
-              profileName={config.activeProfile}
-              useXiloader={config.useXiloader}
-              serverHost={config.serverHost}
-              onChange={() => setLoaderChangeCount(n => n + 1)}
-            />
-            {config.serverHost && (
-              <div className="home-conn-section">
-                <div className="home-server-picker-wrap" ref={serverPickerRef}>
-                  <div className="home-conn-host mono" onClick={() => setServerPickerOpen(o => !o)}>
-                    <span>{config.serverHost}</span>
-                    <span className="home-conn-host-caret">{serverPickerOpen ? '▴' : '▾'}</span>
-                  </div>
-                  {serverPickerOpen && (
-                    <div className="home-server-picker">
-                      {(config.favoriteServers || []).length === 0 ? (
-                        <div className="home-server-picker-empty">
-                          No favorites yet — star a server in the Servers tab
-                        </div>
-                      ) : (config.favoriteServers || []).map((s, i) => (
-                        <div
-                          key={i}
-                          className={`home-server-picker-item${s.host === config.serverHost ? ' active' : ''}`}
-                          onClick={() => {
-                            updateConfig('serverHost', s.host);
-                            if (s.port) updateConfig('serverPort', s.port);
-                            setServerStatus(null);
-                            setServerPickerOpen(false);
-                          }}
-                        >
-                          <span className="home-server-picker-name">{s.name}</span>
-                          <span className="home-server-picker-host mono">{s.host}{s.port ? ':' + s.port : ''}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="home-conn-check-row">
-                  <button className="btn btn-ghost home-conn-btn" onClick={checkServer} disabled={checkingServer}>
-                    {checkingServer ? 'Checking...' : 'Check connection'}
-                  </button>
-                  <div className={`home-conn-status-box${!serverStatus ? '' : serverStatus.online ? ' online' : ' offline'}`}>
-                    {!serverStatus ? '—' : serverStatus.online ? `Online (${serverStatus.latency}ms)` : 'Offline'}
-                  </div>
-                </div>
+                <span className="home-profile-name mono">{config.activeProfile || 'Select profile'}</span>
+                <span className="home-profile-change">{profileDropdownOpen ? '▲' : '▼'}</span>
               </div>
-            )}
-            <button
-              className="btn btn-primary home-start-btn"
-              disabled={isLaunching || !config.activeProfile}
-              onClick={() => onLaunch(!!config.useXiloader)}
-            >
-              {isLaunching ? '◌ Launching...' : '✦ Start Game'}
-            </button>
-            {launchLog && (
-              <span className={`home-launch-msg ${launchLog.startsWith('Error') ? 'home-launch-error' : 'home-launch-ok'}`}>
-                {launchLog}
-              </span>
-            )}
-          </div>
-        )}
+              {profileDropdownOpen && (
+                <div className="home-profile-dropdown" role="listbox">
+                  {profiles.map(name => (
+                    <div
+                      key={name}
+                      role="option"
+                      aria-selected={config.activeProfile === name}
+                      className={`home-profile-option ${config.activeProfile === name ? 'active' : ''}`}
+                      onClick={() => { updateConfig('activeProfile', name); setProfileDropdownOpen(false); }}
+                    >
+                      {config.activeProfile === name && <span className="home-profile-active-dot">✦</span>}
+                      <span>{name}</span>
+                    </div>
+                  ))}
+                  <div role="option" className="home-profile-option home-profile-manage" onClick={() => { setProfileDropdownOpen(false); onNavigate('profiles'); }}>
+                    ⚙ Manage Profiles...
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="home-profile-none" onClick={() => onNavigate('profiles')}>
+              <span>No profiles yet</span>
+              <span className="home-step-action">Go to Profiles →</span>
+            </div>
+          )}
+          {setupComplete && (
+            <div className="home-panel-launch home-launch-merged">
+              <div className="form-field">
+                <div className="form-field-label"><span className="form-field-name">Launch method</span></div>
+                <select
+                  className="form-select"
+                  value={config.useXiloader ? 'xiloader' : 'ashita'}
+                  onChange={e => updateConfig('useXiloader', e.target.value === 'xiloader')}
+                >
+                  <option value="ashita">Ashita (boot file from profile)</option>
+                  <option value="xiloader">xiloader (private server)</option>
+                </select>
+              </div>
+              <LoaderPicker
+                compact
+                profileName={config.activeProfile}
+                useXiloader={config.useXiloader}
+                serverHost={config.serverHost}
+                onChange={() => setLoaderChangeCount(n => n + 1)}
+              />
+              {config.serverHost && (
+                <div className="home-conn-section">
+                  <div className="home-server-picker-wrap" ref={serverPickerRef}>
+                    <div className="home-conn-host mono" onClick={() => setServerPickerOpen(o => !o)}>
+                      <span>{config.serverHost}</span>
+                      <span className="home-conn-host-caret">{serverPickerOpen ? '▴' : '▾'}</span>
+                    </div>
+                    {serverPickerOpen && (
+                      <div className="home-server-picker">
+                        {(config.favoriteServers || []).length === 0 ? (
+                          <div className="home-server-picker-empty">
+                            No favorites yet — star a server in the Servers tab
+                          </div>
+                        ) : (config.favoriteServers || []).map((s, i) => (
+                          <div
+                            key={i}
+                            className={`home-server-picker-item${s.host === config.serverHost ? ' active' : ''}`}
+                            onClick={() => {
+                              updateConfig('serverHost', s.host);
+                              if (s.port) updateConfig('serverPort', s.port);
+                              setServerStatus(null);
+                              setServerPickerOpen(false);
+                            }}
+                          >
+                            <span className="home-server-picker-name">{s.name}</span>
+                            <span className="home-server-picker-host mono">{s.host}{s.port ? ':' + s.port : ''}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="home-conn-check-row">
+                    <button className="btn btn-ghost home-conn-btn" onClick={checkServer} disabled={checkingServer}>
+                      {checkingServer ? 'Checking...' : 'Check connection'}
+                    </button>
+                    <div className={`home-conn-status-box${!serverStatus ? '' : serverStatus.online ? ' online' : ' offline'}`}>
+                      {!serverStatus ? '—' : serverStatus.online ? `Online (${serverStatus.latency}ms)` : 'Offline'}
+                    </div>
+                  </div>
+                </div>
+              )}
+              <button
+                className="btn btn-primary home-start-btn"
+                disabled={isLaunching || !config.activeProfile}
+                onClick={() => onLaunch(!!config.useXiloader)}
+              >
+                {isLaunching ? '◌ Launching...' : '✦ Start Game'}
+              </button>
+              {launchLog && (
+                <span className={`home-launch-msg ${launchLog.startsWith('Error') ? 'home-launch-error' : 'home-launch-ok'}`}>
+                  {launchLog}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Multi-Box Launch */}
         {setupComplete && profiles.length > 1 && (

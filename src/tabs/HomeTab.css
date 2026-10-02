@@ -290,6 +290,13 @@
   gap: 8px;
 }
 
+/* Launch controls sharing the Game Profile box */
+.home-launch-merged {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
 /* FFXI Files Updater */
 .home-ffxiupd-field {
   margin: 6px 0 8px;
