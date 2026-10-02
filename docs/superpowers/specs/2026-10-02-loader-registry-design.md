@@ -1,7 +1,14 @@
 # Loader Registry — Design
 
 **Date:** 2026-10-02
-**Status:** Draft — awaiting review
+**Status:** Implemented on `feature/loader-registry`
+
+> **Revision (2026-10-02, after in-launcher review):** "Auto (from server)" and the server →
+> loader binding were removed at the user's request — each profile simply uses the loader picked
+> for it, and stock xiloader until one is picked. Sections below that describe server binding,
+> the `loader` field on `SERVER_ADDRESSES`, the server-card tag, and the gated LevelDown binding
+> (plan Task 7) are superseded. A stored `loader: 'auto'` is migrated to `'xiloader'`.
+> The loader picker lives in a "Loader" popup on the profile toolbar and on the Home tab.
 
 ## Problem
 

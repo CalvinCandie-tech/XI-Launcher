@@ -129,7 +129,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
       const [ashita, ffxi, loader, profiles] = await Promise.all([
         api.pathExists(config.ashitaPath + '\\Ashita-cli.exe'),
         api.pathExists(config.ffxiPath),
-        api.resolveLoader(config.activeProfile, { useXiloader: !!config.useXiloader, host: config.serverHost }),
+        api.resolveLoader(config.activeProfile, { useXiloader: !!config.useXiloader }),
         api.listProfiles(config.ashitaPath)
       ]);
       // A retail profile doesn't use a loader, so never flag one as missing for it.
@@ -138,7 +138,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
       setProfiles(profiles);
     };
     check();
-  }, [config.ashitaPath, config.ffxiPath, config.xiloaderPath, config.activeProfile, config.useXiloader, config.serverHost, loaderChangeCount]);
+  }, [config.ashitaPath, config.ffxiPath, config.xiloaderPath, config.activeProfile, config.useXiloader, loaderChangeCount]);
 
   const createAndActivate = async () => {
     const name = newName.trim();
@@ -468,7 +468,6 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
                 compact
                 profileName={config.activeProfile}
                 useXiloader={config.useXiloader}
-                serverHost={config.serverHost}
                 onChange={() => setLoaderChangeCount(n => n + 1)}
               />
               {config.serverHost && (

@@ -588,29 +588,23 @@ function profileIniPath(ashitaPath, profileName) {
   return path.join(ashitaPath, 'config', 'boot', `${profileName}.ini`);
 }
 
-// Which loader a launch will use. In Ashita mode the host comes from the profile ini's
-// --server (that's what the game connects to); in direct mode it's the host being passed
-// to the loader. Resolved here in main so the renderer never hands us an exe to elevate.
-function resolveLoaderFor(profileName, { mode, host, ashitaPath }) {
+// Which loader a launch will use: the one picked for the profile. In Ashita mode the profile
+// ini also tells us whether it's a retail profile (no loader). Resolved here in main so the
+// renderer never hands us an exe to elevate.
+function resolveLoaderFor(profileName, { mode, ashitaPath }) {
   const settings = (store.get('profileSettings') || {})[profileName] || {};
-  let effectiveHost = host || null;
   let isRetail = false;
   if (mode === 'ashita') {
-    effectiveHost = null;
     try {
-      const boot = loaders.parseIniBoot(fs.readFileSync(profileIniPath(ashitaPath, profileName), 'utf-8'));
-      effectiveHost = boot.host;
-      isRetail = boot.isRetail;
+      isRetail = loaders.parseIniBoot(fs.readFileSync(profileIniPath(ashitaPath, profileName), 'utf-8')).isRetail;
     } catch {}
   }
   const resolved = loaders.resolveLoader({
     profileSettings: settings,
-    host: effectiveHost,
-    serverTable: SERVER_ADDRESSES,
     xiloaderDir: loaderInstallDir('xiloader'),
     loadersDir,
   });
-  return { ...resolved, host: effectiveHost, exists: fs.existsSync(resolved.exePath), isRetail, label: loaders.describeLoader(resolved) };
+  return { ...resolved, exists: fs.existsSync(resolved.exePath), isRetail, label: loaders.describeLoader(resolved) };
 }
 
 // Point the profile's [ashita.boot] file= at the resolved loader before Ashita reads it.
@@ -1212,11 +1206,10 @@ function registerIPC() {
     return all[profileName] || null;
   });
 
-  ipcMain.handle('resolve-loader', (_, profileName, { useXiloader, host } = {}) => {
+  ipcMain.handle('resolve-loader', (_, profileName, { useXiloader } = {}) => {
     if (profileName && !sanitizeName(profileName)) return null;
     return resolveLoaderFor(profileName, {
       mode: useXiloader ? 'direct' : 'ashita',
-      host,
       ashitaPath: store.get('ashitaPath') || defaultAshitaPath,
     });
   });
@@ -2439,7 +2432,7 @@ function registerIPC() {
 
       if (opts.useXiloader) {
         if (!opts.serverName) return { error: 'No server address set. Go to Profiles → Private Server Connection and enter your server hostname.' };
-        const resolved = resolveLoaderFor(opts.profileName, { mode: 'direct', host: String(opts.serverName) });
+        const resolved = resolveLoaderFor(opts.profileName, { mode: 'direct' });
         if (!resolved.exists) return { error: loaders.missingLoaderMessage(resolved) };
         const exe = resolved.exePath;
         const args = [];
@@ -5083,8 +5076,7 @@ function registerIPC() {
           dualBox: cells[7].replace(/<br\s*\/?>/gi, ' ').replace(/[_()]/g, '').replace(/:heavy_check_mark:/g, 'Yes').replace(/:x:/g, 'No').replace(/:question:/g, '?').trim(),
           address: known.host || '',
           port: known.port || '',
-          note: known.note || '',
-          loader: known.loader || ''
+          note: known.note || ''
         });
       }
       // Merge extra servers not on XiPrivateServers list
@@ -5110,8 +5102,7 @@ function registerIPC() {
           dualBox: extra.features.includes('Multi') ? 'Yes' : '',
           address: known.host || '',
           port: known.port || '',
-          note: known.note || '',
-          loader: known.loader || ''
+          note: known.note || ''
         });
       }
 

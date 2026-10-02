@@ -108,7 +108,6 @@ function ServerBrowserTab({ config, updateConfig }) {
                   {server.moveSpeed && server.moveSpeed !== 'Retail' && <span className="server-tag">{server.moveSpeed}</span>}
                   {server.levelSync && <span className="server-tag server-tag-feature">Level Sync</span>}
                   {server.trusts && <span className="server-tag server-tag-feature">Trusts</span>}
-                  {server.loader && <span className="server-tag server-tag-feature" title={`Launches with ${server.loader}`}>{server.loader}</span>}
                   {server.dualBox && server.dualBox !== 'No' && server.dualBox !== '?' && (
                     <span className="server-tag server-tag-feature">Multi-Box</span>
                   )}

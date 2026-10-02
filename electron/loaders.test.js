@@ -3,11 +3,6 @@ const assert = require('node:assert/strict');
 const L = require('./loaders');
 
 const DIRS = { xiloaderDir: 'C:\\XI\\runtime\\xiloader', loadersDir: 'C:\\XI\\runtime\\loaders' };
-const TABLE = {
-  Eden: { host: 'play.edenxi.com' },
-  LevelDown: { host: 'leveldownffxi.com', loader: 'ldloader' },
-  Broken: { host: 'broken.example', loader: 'notaloader' },
-};
 
 const PRIVATE_INI = [
   '[ashita.launcher]',
@@ -88,54 +83,30 @@ test('setIniBootFile inserts a file line when the boot section has none', () => 
   assert.equal(out, '[ashita.boot]\nfile         = D:\\l.exe\ncommand = --server x\n');
 });
 
-test('serverLoaderFor matches host case-insensitively and trims', () => {
-  assert.deepEqual(L.serverLoaderFor('  LevelDownFFXI.com ', TABLE), { loaderId: 'ldloader', serverName: 'LevelDown' });
-});
-
-test('serverLoaderFor returns null for unbound, unknown, empty and bad-loader hosts', () => {
-  assert.equal(L.serverLoaderFor('play.edenxi.com', TABLE), null);
-  assert.equal(L.serverLoaderFor('192.168.0.5', TABLE), null);
-  assert.equal(L.serverLoaderFor(null, TABLE), null);
-  assert.equal(L.serverLoaderFor('broken.example', TABLE), null);
-});
-
-test('resolveLoader: explicit profile loader wins over server binding', () => {
-  const r = L.resolveLoader({ profileSettings: { loader: 'xiloader' }, host: 'leveldownffxi.com', serverTable: TABLE, ...DIRS });
-  assert.equal(r.id, 'xiloader');
-  assert.equal(r.source, 'profile');
+test('resolveLoader: the profile picks a registry loader', () => {
+  const r = L.resolveLoader({ profileSettings: { loader: 'ldloader' }, ...DIRS });
+  assert.deepEqual(r, { id: 'ldloader', name: 'ldloader (LevelDown)', exePath: 'C:\\XI\\runtime\\loaders\\ldloader\\ldloader.exe' });
 });
 
 test('resolveLoader: custom exe path', () => {
-  const r = L.resolveLoader({ profileSettings: { loader: 'custom', loaderExePath: 'D:\\Loaders\\my.exe' }, host: 'play.edenxi.com', serverTable: TABLE, ...DIRS });
-  assert.deepEqual(r, { id: 'custom', name: 'my.exe', exePath: 'D:\\Loaders\\my.exe', source: 'profile', serverName: null });
+  const r = L.resolveLoader({ profileSettings: { loader: 'custom', loaderExePath: 'D:\\Loaders\\my.exe' }, ...DIRS });
+  assert.deepEqual(r, { id: 'custom', name: 'my.exe', exePath: 'D:\\Loaders\\my.exe' });
 });
 
-test('resolveLoader: auto follows server binding', () => {
-  const r = L.resolveLoader({ profileSettings: { loader: 'auto' }, host: 'leveldownffxi.com', serverTable: TABLE, ...DIRS });
-  assert.equal(r.id, 'ldloader');
-  assert.equal(r.source, 'server');
-  assert.equal(r.serverName, 'LevelDown');
-  assert.equal(r.exePath, 'C:\\XI\\runtime\\loaders\\ldloader\\ldloader.exe');
+test('resolveLoader: a profile with no loader chosen uses stock xiloader', () => {
+  const r = L.resolveLoader({ profileSettings: undefined, ...DIRS });
+  assert.deepEqual(r, { id: 'xiloader', name: 'xiloader (LandSandBoat)', exePath: 'C:\\XI\\runtime\\xiloader\\xiloader.exe' });
 });
 
-test('resolveLoader: no settings / unbound host → default xiloader', () => {
-  const r = L.resolveLoader({ profileSettings: undefined, host: 'play.edenxi.com', serverTable: TABLE, ...DIRS });
-  assert.equal(r.id, 'xiloader');
-  assert.equal(r.source, 'default');
-});
-
-test('resolveLoader: junk loader ids and custom-without-path behave as auto', () => {
-  for (const loader of ['constructor', '__proto__', 'LDLOADER', 'custom']) {
-    const r = L.resolveLoader({ profileSettings: { loader }, host: 'leveldownffxi.com', serverTable: TABLE, ...DIRS });
-    assert.equal(r.id, 'ldloader', `loader=${loader}`);
-    assert.equal(r.source, 'server');
+test('resolveLoader: old auto, junk ids and custom-without-path fall back to stock xiloader', () => {
+  for (const loader of ['auto', 'constructor', '__proto__', 'LDLOADER', 'custom']) {
+    const r = L.resolveLoader({ profileSettings: { loader }, ...DIRS });
+    assert.equal(r.id, 'xiloader', `loader=${loader}`);
   }
 });
 
-test('describeLoader names the source', () => {
-  assert.equal(L.describeLoader({ name: 'ldloader (LevelDown)', source: 'server', serverName: 'LevelDown' }), 'Using ldloader (LevelDown) — from server LevelDown');
-  assert.equal(L.describeLoader({ name: 'my.exe', source: 'profile', serverName: null }), 'Using my.exe — set on profile');
-  assert.equal(L.describeLoader({ name: 'xiloader (LandSandBoat)', source: 'default', serverName: null }), 'Using xiloader (LandSandBoat) — default');
+test('describeLoader names the loader', () => {
+  assert.equal(L.describeLoader({ name: 'ldloader (LevelDown)' }), 'Using ldloader (LevelDown)');
 });
 
 test('missingLoaderMessage points at Profiles → Loader', () => {
@@ -171,13 +142,13 @@ test('sanitizeLoaderSettings keeps valid values and other keys', () => {
   const s = { serverHost: 'x', loader: 'custom', loaderExePath: 'C:\\l\\ld.exe' };
   assert.deepEqual(L.sanitizeLoaderSettings(s), s);
   assert.deepEqual(L.sanitizeLoaderSettings({ loader: 'ldloader' }), { loader: 'ldloader' });
-  assert.deepEqual(L.sanitizeLoaderSettings({ loader: 'auto' }), { loader: 'auto' });
 });
 
-test('sanitizeLoaderSettings drops junk', () => {
+test('sanitizeLoaderSettings drops junk, the retired auto, and custom without a usable path', () => {
   assert.deepEqual(L.sanitizeLoaderSettings({ loader: '__proto__', a: 1 }), { a: 1 });
-  assert.deepEqual(L.sanitizeLoaderSettings({ loader: 'custom', loaderExePath: 'rel.exe' }), { loader: 'auto' });
-  assert.deepEqual(L.sanitizeLoaderSettings({ loader: 'custom' }), { loader: 'auto' });
+  assert.deepEqual(L.sanitizeLoaderSettings({ loader: 'auto', a: 1 }), { a: 1 });
+  assert.deepEqual(L.sanitizeLoaderSettings({ loader: 'custom', loaderExePath: 'rel.exe' }), {});
+  assert.deepEqual(L.sanitizeLoaderSettings({ loader: 'custom' }), {});
   assert.equal(L.sanitizeLoaderSettings(null), null);
 });
 
@@ -189,13 +160,19 @@ test('migrateProfileSettings converts legacy xiloaderPath and keeps the old key'
   });
   assert.equal(changed, true);
   assert.deepEqual(result.A, { xiloaderPath: 'C:/Old/xi', loader: 'custom', loaderExePath: 'C:\\Old\\xi\\xiloader.exe' });
-  assert.deepEqual(result.B, { serverHost: 'h', loader: 'auto' });
+  assert.deepEqual(result.B, { serverHost: 'h', loader: 'xiloader' });
   assert.deepEqual(result.C, { loader: 'ldloader', xiloaderPath: 'C:\\ignored' });
 });
 
-test('migrateProfileSettings: unusable legacy path becomes auto', () => {
+test('migrateProfileSettings: unusable legacy path becomes stock xiloader', () => {
   const { result } = L.migrateProfileSettings({ A: { xiloaderPath: 'relative\\dir' } });
-  assert.equal(result.A.loader, 'auto');
+  assert.equal(result.A.loader, 'xiloader');
+});
+
+test('migrateProfileSettings turns a stored auto into stock xiloader', () => {
+  const { changed, result } = L.migrateProfileSettings({ A: { loader: 'auto', serverHost: 'h' } });
+  assert.equal(changed, true);
+  assert.deepEqual(result.A, { loader: 'xiloader', serverHost: 'h' });
 });
 
 test('migrateProfileSettings is idempotent', () => {
@@ -253,9 +230,8 @@ test('mergeProfileSettings with no existing entry returns the incoming settings'
 
 test('resolveLoader ignores unsafe stored custom paths instead of using or throwing on them', () => {
   for (const loaderExePath of ['C:\\a.exe\ncommand = --server evil', 42, '\\\\nas\\x.exe', 'rel.exe']) {
-    const r = L.resolveLoader({ profileSettings: { loader: 'custom', loaderExePath }, host: 'play.edenxi.com', serverTable: TABLE, ...DIRS });
+    const r = L.resolveLoader({ profileSettings: { loader: 'custom', loaderExePath }, ...DIRS });
     assert.equal(r.id, 'xiloader', `loaderExePath=${JSON.stringify(loaderExePath)}`);
-    assert.equal(r.source, 'default');
   }
 });
 

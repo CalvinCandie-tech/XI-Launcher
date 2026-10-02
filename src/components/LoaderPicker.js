@@ -6,9 +6,9 @@ const api = window.xiAPI;
 // Loader choice for one profile: the dropdown plus what it resolves to right now. The full
 // layout (Profiles-tab popup) also lists every loader with Install / Check for update; the
 // compact layout (Home tab) only offers Install when the chosen loader is missing.
-function LoaderPicker({ profileName, useXiloader, serverHost, compact = false, onChange }) {
+function LoaderPicker({ profileName, useXiloader, compact = false, onChange }) {
   const [loaderList, setLoaderList] = useState([]);
-  const [setting, setSetting] = useState({ loader: 'auto', loaderExePath: '' });
+  const [setting, setSetting] = useState({ loader: 'xiloader', loaderExePath: '' });
   const [resolved, setResolved] = useState(null);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(null); // id of the loader being installed/checked
@@ -20,12 +20,12 @@ function LoaderPicker({ profileName, useXiloader, serverHost, compact = false, o
       setLoaderList(await api.listLoaders());
       if (!profileName) { setResolved(null); return; }
       const ps = (await api.loadProfileSettings(profileName)) || {};
-      setSetting({ loader: ps.loader || 'auto', loaderExePath: ps.loaderExePath || '' });
-      setResolved(await api.resolveLoader(profileName, { useXiloader: !!useXiloader, host: serverHost }));
+      setSetting({ loader: ps.loader || 'xiloader', loaderExePath: ps.loaderExePath || '' });
+      setResolved(await api.resolveLoader(profileName, { useXiloader: !!useXiloader }));
     } catch (e) {
       console.error('Failed to load loader settings', e);
     }
-  }, [profileName, useXiloader, serverHost]);
+  }, [profileName, useXiloader]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -96,7 +96,6 @@ function LoaderPicker({ profileName, useXiloader, serverHost, compact = false, o
         else save(v);
       }}
     >
-      <option value="auto">Auto (from server)</option>
       {loaderList.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
       <option value="custom">Custom exe…</option>
     </select>

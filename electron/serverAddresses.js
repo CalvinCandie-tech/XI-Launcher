@@ -1,6 +1,4 @@
-// Known xiloader connection addresses for private servers. An entry's optional `loader`
-// names the loader registry id (electron/loaders.js) that server needs; launches to that
-// host use it automatically unless the profile picks a loader explicitly.
+// Known xiloader connection addresses for private servers.
 const SERVER_ADDRESSES = {
   'Eden': { host: 'play.edenxi.com' },
   'Omega': { host: 'lobby.ffxi.party', port: '54230' },

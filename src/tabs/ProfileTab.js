@@ -527,13 +527,13 @@ function ProfileTab({ config, updateConfig }) {
                       <div>
                         <h3 className="cinzel loader-modal-title">Loader — {selectedProfile}</h3>
                         <p className="loader-modal-subtitle">
-                          <strong>Auto</strong> picks the loader the server needs (e.g. ldloader for LevelDown) and stock xiloader for everything else. Changes apply on the next launch.
+                          Pick the loader this profile launches with — e.g. ldloader for LevelDown. Changes apply on the next launch.
                         </p>
                       </div>
                       <button className="btn btn-ghost btn-sm" onClick={() => setShowLoader(false)}>✕</button>
                     </div>
                     <div className="loader-modal-body">
-                      <LoaderPicker profileName={selectedProfile} useXiloader={config.useXiloader} serverHost={config.serverHost} />
+                      <LoaderPicker profileName={selectedProfile} useXiloader={config.useXiloader} />
                     </div>
                   </div>
                 </Modal>

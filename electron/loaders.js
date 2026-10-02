@@ -40,8 +40,8 @@ function forEachIniLine(text, onLine) {
   }
 }
 
-// Read [ashita.boot] file/command. The --server value is the host the game will really
-// connect to in Ashita mode (config.serverHost is not kept in sync with the ini).
+// Read [ashita.boot] file/command, and the --server host (used to tell private-server
+// profiles from retail ones).
 function parseIniBoot(text) {
   let file = null;
   let command = null;
@@ -81,45 +81,22 @@ function setIniBootFile(text, exePath) {
   return out.join(eol);
 }
 
-function serverLoaderFor(host, serverTable) {
-  if (!host) return null;
-  const wanted = String(host).trim().toLowerCase();
-  for (const [serverName, entry] of Object.entries(serverTable || {})) {
-    if (entry?.host && isLoaderId(entry.loader) && entry.host.toLowerCase() === wanted) {
-      return { loaderId: entry.loader, serverName };
-    }
-  }
-  return null;
-}
-
-// Profile setting > server binding > stock xiloader.
-function resolveLoader({ profileSettings, host, serverTable, xiloaderDir, loadersDir }) {
+// The loader the profile's owner picked; stock xiloader until they pick one.
+function resolveLoader({ profileSettings, xiloaderDir, loadersDir }) {
   // Sanitise on read too: profileSettings can also arrive via profile import or store-set,
   // and a bad custom path would otherwise be launched elevated or injected into the ini.
   const settings = sanitizeLoaderSettings(profileSettings);
   const choice = settings?.loader;
-  const fromRegistry = (id, source, serverName) => ({
-    id,
-    name: LOADERS[id].name,
-    exePath: loaderExePath(id, { xiloaderDir, loadersDir }),
-    source,
-    serverName,
-  });
-  if (choice === 'custom' && settings.loaderExePath) {
+  if (choice === 'custom') {
     const exePath = settings.loaderExePath;
-    return { id: 'custom', name: path.win32.basename(exePath), exePath, source: 'profile', serverName: null };
+    return { id: 'custom', name: path.win32.basename(exePath), exePath };
   }
-  if (isLoaderId(choice)) return fromRegistry(choice, 'profile', null);
-  const bound = serverLoaderFor(host, serverTable);
-  if (bound) return fromRegistry(bound.loaderId, 'server', bound.serverName);
-  return fromRegistry(DEFAULT_LOADER, 'default', null);
+  const id = isLoaderId(choice) ? choice : DEFAULT_LOADER;
+  return { id, name: LOADERS[id].name, exePath: loaderExePath(id, { xiloaderDir, loadersDir }) };
 }
 
 function describeLoader(resolved) {
-  const why = resolved.source === 'server' ? `from server ${resolved.serverName}`
-    : resolved.source === 'profile' ? 'set on profile'
-    : 'default';
-  return `Using ${resolved.name} — ${why}`;
+  return `Using ${resolved.name}`;
 }
 
 function missingLoaderMessage(resolved) {
@@ -147,11 +124,9 @@ function isValidExePath(p) {
 function sanitizeLoaderSettings(settings) {
   if (!settings || typeof settings !== 'object') return settings;
   const out = { ...settings };
-  if (out.loader !== undefined && out.loader !== 'auto' && out.loader !== 'custom' && !isLoaderId(out.loader)) {
-    delete out.loader;
-  }
+  if (out.loader !== undefined && out.loader !== 'custom' && !isLoaderId(out.loader)) delete out.loader;
   if (out.loaderExePath !== undefined && !isValidExePath(out.loaderExePath)) delete out.loaderExePath;
-  if (out.loader === 'custom' && !out.loaderExePath) out.loader = 'auto';
+  if (out.loader === 'custom' && !out.loaderExePath) delete out.loader;
   return out;
 }
 
@@ -172,6 +147,12 @@ function migrateProfileSettings(all) {
   const result = {};
   let changed = false;
   for (const [name, ps] of Object.entries(all || {})) {
+    // 'auto' (follow the server) was retired — those profiles were on stock xiloader anyway.
+    if (ps && typeof ps === 'object' && ps.loader === 'auto') {
+      result[name] = { ...ps, loader: DEFAULT_LOADER };
+      changed = true;
+      continue;
+    }
     if (!ps || typeof ps !== 'object' || ps.loader !== undefined) {
       result[name] = ps;
       continue;
@@ -180,7 +161,7 @@ function migrateProfileSettings(all) {
     const legacyExe = legacyDir ? path.win32.join(legacyDir.replace(/\//g, '\\'), 'xiloader.exe') : '';
     result[name] = isValidExePath(legacyExe)
       ? { ...ps, loader: 'custom', loaderExePath: legacyExe }
-      : { ...ps, loader: 'auto' };
+      : { ...ps, loader: DEFAULT_LOADER };
     changed = true;
   }
   return { changed, result };
@@ -225,7 +206,6 @@ module.exports = {
   loaderExePath,
   parseIniBoot,
   setIniBootFile,
-  serverLoaderFor,
   resolveLoader,
   describeLoader,
   missingLoaderMessage,
