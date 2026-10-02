@@ -13,7 +13,6 @@ args         =`;
   }
   const xiloaderExe = xiloaderPath ? xiloaderPath.replace(/\//g, '\\') + '\\xiloader.exe' : '.\\xiloader\\xiloader.exe';
   const args = ['--server', serverHost || '127.0.0.1'];
-  if (serverPort) args.push('--serverport', serverPort);
   if (loginUser) args.push('--user', loginUser);
   if (loginPass) args.push('--pass', loginPass);
   if (hairpin) args.push('--hairpin');

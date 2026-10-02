@@ -445,14 +445,94 @@ function downloadFile(url, destPath, { headers = {}, stallMs = 60000, onProgress
   }), { label });
 }
 
-// Download a xiloader.exe build to destExe, reporting progress via sendProgress(percent, detail).
-async function downloadXiloaderExe(downloadUrl, destExe, sendProgress) {
-  await downloadFile(downloadUrl, destExe, {
-    label: 'xiloader download',
-    onProgress: (received, total) => {
-      if (total > 0) sendProgress(10 + Math.round((received / total) * 85), `Downloading... ${(received / 1024).toFixed(0)} KB`);
+// Error shown when xiloader.exe can't be swapped out even by renaming — usually
+// antivirus holding the file without delete-sharing.
+const XILOADER_IN_USE_ERROR = 'xiloader.exe is locked by another program (often antivirus scanning it). '
+  + 'Close FINAL FANTASY XI and Ashita, wait a moment, then try again.';
+const XILOADER_RESTART_NOTE = ' — the game is still running the old version; the update takes effect next time you launch.';
+
+// Delete xiloader.exe.old-* files left by an update that replaced a running xiloader.
+// Any that are still locked (game still open) are left for the next attempt.
+function removeStaleXiloaderBackups(dir) {
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      if (/^xiloader\.exe\.old-\d+$/i.test(name)) {
+        try { fs.rmSync(path.join(dir, name), { force: true }); } catch {}
+      }
     }
-  });
+  } catch {}
+}
+
+// Download a xiloader.exe build to destExe, reporting progress via sendProgress(percent, detail).
+// xiloader hosts the FFXI client process, so while the game is open Windows refuses to
+// overwrite or delete its exe (EBUSY) — but it does allow renaming it. So: download to a
+// temp file, rename the current exe aside, then move the new one into place. The running
+// game is unaffected and picks up the new version on its next launch.
+// Returns { pendingRestart } — true when the old exe was still in use.
+async function downloadXiloaderExe(downloadUrl, destExe, sendProgress) {
+  const tmpExe = `${destExe}.download`;
+  removeStaleXiloaderBackups(path.dirname(destExe));
+  try {
+    await downloadFile(downloadUrl, tmpExe, {
+      label: 'xiloader download',
+      onProgress: (received, total) => {
+        if (total > 0) sendProgress(10 + Math.round((received / total) * 85), `Downloading... ${(received / 1024).toFixed(0)} KB`);
+      }
+    });
+    try {
+      return await swapInXiloaderExe(tmpExe, destExe);
+    } catch (e) {
+      if (e.code === 'EBUSY' || e.code === 'EPERM') throw new Error(XILOADER_IN_USE_ERROR);
+      throw e;
+    }
+  } finally {
+    try { fs.rmSync(tmpExe, { force: true }); } catch {}
+  }
+}
+
+async function swapInXiloaderExe(tmpExe, destExe) {
+  const oldExe = `${destExe}.old-${Date.now()}`;
+  const movedAside = fs.existsSync(destExe);
+  if (movedAside) await renameWithRetry(destExe, oldExe);
+  try {
+    await renameWithRetry(tmpExe, destExe);
+  } catch (e) {
+    // Put the original back so the install is never left without an exe.
+    if (movedAside) { try { fs.renameSync(oldExe, destExe); } catch {} }
+    throw e;
+  }
+  if (!movedAside) return { pendingRestart: false };
+  try {
+    fs.rmSync(oldExe);
+    return { pendingRestart: false };
+  } catch {
+    return { pendingRestart: true }; // still running — cleaned up next time
+  }
+}
+
+// Antivirus often holds a freshly written exe open for a moment while scanning it
+// (Defender flags xiloader as potentially unwanted), so retry briefly on a lock.
+async function renameWithRetry(from, to, attempts = 5) {
+  for (let i = 1; ; i++) {
+    try {
+      return fs.renameSync(from, to);
+    } catch (e) {
+      if (i >= attempts || (e.code !== 'EBUSY' && e.code !== 'EPERM')) throw e;
+      await new Promise(r => setTimeout(r, 400));
+    }
+  }
+}
+
+// xiloader 2.2.0 removed --serverport and exits on unknown arguments. Profiles the
+// launcher generated before then may still pass it, so strip it from the boot command.
+function stripRemovedXiloaderArgs(profileIni) {
+  try {
+    const content = fs.readFileSync(profileIni, 'utf-8');
+    const fixed = content.replace(/^([ \t]*command[ \t]*=.*?)[ \t]+--serverport[ \t]+[^ \t\r\n]+/im, '$1');
+    if (fixed !== content) fs.writeFileSync(profileIni, fixed, 'utf-8');
+  } catch (e) {
+    console.error('Failed to strip --serverport from profile:', e);
+  }
 }
 
 // Read the embedded FileVersion (e.g. "2.1.2.0") from an installed xiloader.exe via its
@@ -820,6 +900,8 @@ async function deployBundledXiloader() {
     // Deploy to runtime folder inside the launcher
     const deployDir = defaultXiloaderPath;
     const deployExe = path.join(deployDir, 'xiloader.exe');
+
+    removeStaleXiloaderBackups(deployDir);
 
     // Only deploy if not already there
     if (!fs.existsSync(deployExe)) {
@@ -2236,7 +2318,6 @@ function registerIPC() {
         if (!opts.serverName) return { error: 'No server address set. Go to Profiles → Private Server Connection and enter your server hostname.' };
         const args = [];
         if (opts.serverName) args.push('--server', String(opts.serverName));
-        if (opts.serverPort) args.push('--serverport', String(opts.serverPort));
         if (opts.loginUser) args.push('--user', String(opts.loginUser));
         if (opts.loginPass) args.push('--pass', String(opts.loginPass));
         if (opts.hairpin) args.push('--hairpin');
@@ -2259,6 +2340,7 @@ function registerIPC() {
         if (!opts.profileName) return { error: 'No profile selected. Create or select a profile from the Profiles tab before launching.' };
         const profileIni = path.join(opts.ashitaPath, 'config', 'boot', `${opts.profileName}.ini`);
         if (!fs.existsSync(profileIni)) return { error: `Profile "${opts.profileName}" INI file not found. The profile may have been deleted. Select a different profile or create a new one.` };
+        stripRemovedXiloaderArgs(profileIni);
         const iniName = `${opts.profileName}.ini`;
         // Array literal handles a profile name with spaces — PowerShell quotes the
         // element itself, so no manual double-quote wrapping is needed.
@@ -2305,15 +2387,19 @@ function registerIPC() {
       }
 
       sendProgress(10, 'Downloading xiloader.exe...');
-      await downloadXiloaderExe(release.downloadUrl, destExe, sendProgress);
+      const { pendingRestart } = await downloadXiloaderExe(release.downloadUrl, destExe, sendProgress);
 
       sendProgress(100, 'xiloader.exe downloaded successfully');
       store.set('xiloaderPath', targetDir);
-      return { success: true, message: `xiloader.exe downloaded to ${targetDir}` };
+      return {
+        success: true,
+        message: `xiloader.exe downloaded to ${targetDir}${pendingRestart ? XILOADER_RESTART_NOTE : ''}`
+      };
     } catch (e) {
       if (e.message.includes('ENOTFOUND') || e.message.includes('getaddrinfo')) {
         return { success: false, error: 'Network error: Could not reach GitHub. Check your internet connection.' };
       }
+      if (e.message === XILOADER_IN_USE_ERROR) return { success: false, error: e.message };
       return { success: false, error: `Download failed: ${e.message}` };
     }
   });
@@ -2347,7 +2433,7 @@ function registerIPC() {
 
       if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
       sendProgress(10, installed ? 'Downloading update...' : 'Downloading xiloader.exe...');
-      await downloadXiloaderExe(release.downloadUrl, destExe, sendProgress);
+      const { pendingRestart } = await downloadXiloaderExe(release.downloadUrl, destExe, sendProgress);
       sendProgress(100, 'xiloader.exe updated successfully');
       store.set('xiloaderPath', targetDir);
 
@@ -2356,14 +2442,16 @@ function registerIPC() {
         updated: true,
         previousVersion: localVersion,
         newVersion: latestVersion,
-        message: installed
+        message: (installed
           ? `xiloader updated${localVersion ? ` from v${localVersion} ` : ' '}to v${latestVersion}`
-          : `xiloader.exe (v${latestVersion}) downloaded to ${targetDir}`
+          : `xiloader.exe (v${latestVersion}) downloaded to ${targetDir}`)
+          + (pendingRestart ? XILOADER_RESTART_NOTE : '')
       };
     } catch (e) {
       if (e.message.includes('ENOTFOUND') || e.message.includes('getaddrinfo')) {
         return { success: false, error: 'Network error: Could not reach GitHub. Check your internet connection.' };
       }
+      if (e.message === XILOADER_IN_USE_ERROR) return { success: false, error: e.message };
       return { success: false, error: `Update check failed: ${e.message}` };
     }
   });

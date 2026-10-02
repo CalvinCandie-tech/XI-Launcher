@@ -759,7 +759,6 @@ function ProfileTab({ config, updateConfig }) {
                 }
                 if (trimmed.startsWith('command=') && config.serverHost) {
                   const args = ['--server', config.serverHost];
-                  if (config.serverPort) args.push('--serverport', config.serverPort);
                   if (config.loginUser) args.push('--user', config.loginUser);
                   if (config.loginPass) args.push('--pass', config.loginPass);
                   if (config.hairpin) args.push('--hairpin');
