@@ -6,7 +6,9 @@ const https = require('https');
 const { execSync, spawn, exec, execFile } = require('child_process');
 const yauzl = require('yauzl');
 const crypto = require('crypto');
-const { isOlderVersion } = require('./loaders');
+const loaders = require('./loaders');
+const { isOlderVersion } = loaders;
+const { SERVER_ADDRESSES } = require('./serverAddresses');
 
 /**
  * Extract a zip file using yauzl (streaming, handles large files, reports progress).
@@ -4924,23 +4926,7 @@ function registerIPC() {
   });
 
   // Fetch community server list from XiPrivateServers GitHub
-  // Known xiloader connection addresses for private servers
-  const SERVER_ADDRESSES = {
-    'Eden': { host: 'play.edenxi.com' },
-    'Omega': { host: 'lobby.ffxi.party', port: '54230' },
-    'Gaia XI': { host: 'login.gaiaxi.com' },
-    'HorizonXI': { host: '', note: 'Uses custom HorizonXI launcher — not compatible with xiloader' },
-    'LevelDown': { host: 'leveldownffxi.com' },
-    'LevelDown 75': { host: 'ffxileveldown75.ddns.net' },
-    'Nasomi': { host: 'na.nasomi.com' },
-    'Supernova': { host: 'login.supernovaffxi.com' },
-    'Tabula Rasa': { host: 'login.tabularasaxi.com' },
-    'Valhalla': { host: 'logon.valhalla.group' },
-    'Omicron': { host: 'omicronffxi.com' },
-    'ff11sf': { host: 'update.ff11sf.com' },
-    'CatsEyeXI': { host: 'server.catseyexi.com' },
-    'Phoenix XI': { host: '', note: 'Launching September 24, 2026 — connection details not yet published. Check phoenix-xi.com closer to launch.' },
-  };
+  // (known connection addresses live in serverAddresses.js)
 
   // Extra servers not listed on XiPrivateServers SERVERS.md
   const EXTRA_SERVERS = [
@@ -5004,7 +4990,8 @@ function registerIPC() {
           dualBox: cells[7].replace(/<br\s*\/?>/gi, ' ').replace(/[_()]/g, '').replace(/:heavy_check_mark:/g, 'Yes').replace(/:x:/g, 'No').replace(/:question:/g, '?').trim(),
           address: known.host || '',
           port: known.port || '',
-          note: known.note || ''
+          note: known.note || '',
+          loader: known.loader || ''
         });
       }
       // Merge extra servers not on XiPrivateServers list
@@ -5030,7 +5017,8 @@ function registerIPC() {
           dualBox: extra.features.includes('Multi') ? 'Yes' : '',
           address: known.host || '',
           port: known.port || '',
-          note: known.note || ''
+          note: known.note || '',
+          loader: known.loader || ''
         });
       }
 
