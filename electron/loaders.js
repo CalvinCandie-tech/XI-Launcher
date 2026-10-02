@@ -136,35 +136,74 @@ function mergeProfileSettings(existing, incoming) {
   if (!existing || typeof existing !== 'object' || !incoming || typeof incoming !== 'object') return incoming;
   if (incoming.loader !== undefined) return incoming;
   const kept = {};
-  if (existing.loader !== undefined) kept.loader = existing.loader;
-  if (existing.loaderExePath !== undefined) kept.loaderExePath = existing.loaderExePath;
+  for (const key of ['loader', 'loaderExePath', 'xiloaderPath']) {
+    if (existing[key] !== undefined && incoming[key] === undefined) kept[key] = existing[key];
+  }
   return { ...incoming, ...kept };
 }
 
-// Pre-registry profiles stored a folder in xiloaderPath. Convert it to a custom loader
-// pointing at <folder>\xiloader.exe. The old key stays so a rollback to v1.6.x still works.
-function migrateProfileSettings(all) {
+// Before the registry, an Ashita launch booted whatever the profile ini's file= named, and
+// people hand-edited it (e.g. to point at ldloader). Keep that exe as a custom loader rather
+// than letting the first launch rewrite it to stock xiloader. Relative paths are relative to
+// the Ashita folder; a missing exe or the stock path means stock xiloader.
+function seedLoaderFromBoot(boot, { ashitaPath, stockExePath, exists }) {
+  const file = String(boot?.file || '').trim().replace(/\//g, '\\');
+  if (!file || boot?.isRetail) return { loader: DEFAULT_LOADER };
+  const abs = path.win32.isAbsolute(file) ? path.win32.normalize(file) : path.win32.resolve(ashitaPath || '', file);
+  if (stockExePath && abs.toLowerCase() === path.win32.normalize(stockExePath).toLowerCase()) return { loader: DEFAULT_LOADER };
+  if (!isValidExePath(abs) || !exists(abs)) return { loader: DEFAULT_LOADER };
+  return { loader: 'custom', loaderExePath: abs };
+}
+
+// Give every profile a loader setting on upgrade. Order of evidence: an explicit pick stays;
+// a pre-registry per-profile xiloaderPath folder becomes custom <folder>\xiloader.exe (the old
+// key stays so a rollback to v1.6.x still works); otherwise whatever the profile ini boots.
+// `boots` maps profile name -> parseIniBoot() result; profiles that only exist as an ini get
+// an entry too. A stored 'auto' (retired "follow the server" mode) is re-seeded from the ini.
+function migrateProfileSettings(all, { boots = {}, ashitaPath = '', stockExePath = '', exists = () => false } = {}) {
   const result = {};
   let changed = false;
-  for (const [name, ps] of Object.entries(all || {})) {
-    // 'auto' (follow the server) was retired — those profiles were on stock xiloader anyway.
-    if (ps && typeof ps === 'object' && ps.loader === 'auto') {
-      result[name] = { ...ps, loader: DEFAULT_LOADER };
-      changed = true;
-      continue;
-    }
-    if (!ps || typeof ps !== 'object' || ps.loader !== undefined) {
+  const names = new Set([...Object.keys(all || {}), ...Object.keys(boots)]);
+  for (const name of names) {
+    const ps = (all || {})[name];
+    if (ps !== undefined && (!ps || typeof ps !== 'object')) {
       result[name] = ps;
       continue;
     }
-    const legacyDir = typeof ps.xiloaderPath === 'string' ? ps.xiloaderPath.trim() : '';
+    const current = ps || {};
+    if (current.loader !== undefined && current.loader !== 'auto') {
+      result[name] = ps;
+      continue;
+    }
+    const legacyDir = typeof current.xiloaderPath === 'string' ? current.xiloaderPath.trim() : '';
     const legacyExe = legacyDir ? path.win32.join(legacyDir.replace(/\//g, '\\'), 'xiloader.exe') : '';
+    const { loader: _retired, ...rest } = current;
     result[name] = isValidExePath(legacyExe)
-      ? { ...ps, loader: 'custom', loaderExePath: legacyExe }
-      : { ...ps, loader: DEFAULT_LOADER };
+      ? { ...rest, loader: 'custom', loaderExePath: legacyExe }
+      : { ...rest, ...seedLoaderFromBoot(boots[name], { ashitaPath, stockExePath, exists }) };
     changed = true;
   }
   return { changed, result };
+}
+
+// Point the [ashita.boot] command's --server at host (adding it if missing). Retail profiles
+// are returned unchanged.
+function setIniServer(text, host) {
+  if (parseIniBoot(text).isRetail) return text;
+  let section = '';
+  return String(text).replace(/^([^\r\n]*)$/gm, (line) => {
+    const trimmed = line.trim();
+    const sec = trimmed.match(/^\[(.+)\]$/);
+    if (sec) { section = sec[1].trim().toLowerCase(); return line; }
+    if (section !== 'ashita.boot') return line;
+    const m = line.match(/^(\s*command\s*=\s*)(.*)$/i);
+    if (!m) return line;
+    const args = m[2];
+    const replaced = /(^|\s)--server\s+\S+/.test(args)
+      ? args.replace(/(^|\s)--server\s+\S+/, `$1--server ${host}`)
+      : `--server ${host}${args.trim() ? ' ' + args.trim() : ''}`;
+    return m[1] + replaced;
+  });
 }
 
 function pickReleaseAsset(release, assetName) {
@@ -213,7 +252,9 @@ module.exports = {
   isValidExePath,
   sanitizeLoaderSettings,
   mergeProfileSettings,
+  seedLoaderFromBoot,
   migrateProfileSettings,
+  setIniServer,
   pickReleaseAsset,
   isOlderVersion,
   needsLoaderUpdate,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './HomeTab.css';
 import { DEFAULT_PROFILE_INI } from '../utils/profileTemplates';
-import LoaderPicker from '../components/LoaderPicker';
+import LoaderPicker, { LOADER_CHANGED_EVENT } from '../components/LoaderPicker';
 
 const api = window.xiAPI;
 
@@ -28,7 +28,13 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
   const [updateDlError, setUpdateDlError] = useState('');
   const [loaderChangeCount, setLoaderChangeCount] = useState(0); // re-runs the readiness check
 
-  // ── 📥 FFXI Files Updater (Vana-Time mirror or custom URL) ──
+  useEffect(() => {
+    const bump = () => setLoaderChangeCount(n => n + 1);
+    window.addEventListener(LOADER_CHANGED_EVENT, bump);
+    return () => window.removeEventListener(LOADER_CHANGED_EVENT, bump);
+  }, []);
+
+  // ── 📥 FFXI Files Updater (Vana Portal mirror or custom URL) ──
   const [ffxiDlPercent, setFfxiDlPercent] = useState(0);
   const [ffxiDlDetail, setFfxiDlDetail] = useState('');
   const [ffxiUpdating, setFfxiUpdating] = useState(false);
@@ -455,7 +461,6 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
               <LoaderPicker
                 compact
                 profileName={config.activeProfile}
-                onChange={() => setLoaderChangeCount(n => n + 1)}
               />
               {config.serverHost && (
                 <div className="home-conn-section">
@@ -474,11 +479,16 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
                           <div
                             key={i}
                             className={`home-server-picker-item${s.host === config.serverHost ? ' active' : ''}`}
-                            onClick={() => {
+                            onClick={async () => {
                               updateConfig('serverHost', s.host);
                               if (s.port) updateConfig('serverPort', s.port);
                               setServerStatus(null);
                               setServerPickerOpen(false);
+                              // Launches connect to the profile ini's --server, so change it there too.
+                              if (config.activeProfile && api?.setProfileServer) {
+                                const res = await api.setProfileServer(config.activeProfile, s.host);
+                                if (res?.error) console.error('Failed to update profile server:', res.error);
+                              }
                             }}
                           >
                             <span className="home-server-picker-name">{s.name}</span>

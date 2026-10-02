@@ -80,7 +80,7 @@ catalogue** (only `libs`, `.vscode`, `sdk` are missing — not addons). Nothing 
 Added **25 addons** and **8 plugins** (PacketFlow and ScentHound later removed at the user's request); every one was installed through the launcher's real
 `install-addon` IPC into a throwaway Ashita folder and checked on disk (addon folder +
 `<name>.lua`; plugin DLL directly in `plugins/`). Plugin DLLs were checked for the embedded
-interface constant: all 9 new plugins are **4.30** builds.
+interface constant: all 8 new plugins are **4.30** builds.
 
 - Addons: hush, mountmaster, cudgel, fishaid, nomount, nocombat, weatherchecker, questlist,
   simplelog, metrics, deeps (v2 is a Lua addon), timers, upcast, SpellSelect, Points, zonename,
@@ -99,3 +99,5 @@ Installer fixes made along the way:
 
 Found during testing, not fixed: the existing **EquipViewer** entry (`ProjectTako/EquipViewer`)
 ships a **4.16** DLL — it won't load on Ashita 4.3.x.
+
+**Update:** the EquipViewer entry was removed from the catalogue (4.16 DLL, can't load on 4.3.x).

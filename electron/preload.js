@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('xiAPI', {
   checkLoaderUpdate: (id) => ipcRenderer.invoke('check-loader-update', id),
   resolveLoader: (profileName) => ipcRenderer.invoke('resolve-loader', profileName),
   syncProfileLoader: (profileName) => ipcRenderer.invoke('sync-profile-loader', profileName),
+  setProfileServer: (profileName, host) => ipcRenderer.invoke('set-profile-server', profileName, host),
   browseLoaderExe: (defaultPath) => ipcRenderer.invoke('browse-loader-exe', defaultPath),
   onXiloaderDownloadProgress: (callback) => {
     const handler = (_, percent, detail) => callback(percent, detail);

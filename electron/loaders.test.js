@@ -245,3 +245,68 @@ test('needsLoaderUpdate only trusts a record made for the same exe path', () => 
   // Record without an exePath can't be matched to an install
   assert.equal(L.needsLoaderUpdate({ installed: true, record: { assetId: 5 }, latest, exePath: 'C:\\A\\xiloader.exe' }), true);
 });
+
+// Review #1: on upgrade, keep whatever exe a profile's ini already boots instead of silently
+// switching it to stock xiloader.
+const SEED = {
+  ashitaPath: 'C:\\XI\\runtime\\ashita',
+  stockExePath: 'C:\\XI\\runtime\\xiloader\\xiloader.exe',
+  exists: (p) => ['c:\\leveldown\\ldloader.exe', 'c:\\xi\\runtime\\ashita\\bootloader\\pol.exe'].includes(p.toLowerCase()),
+};
+const boot = (file, isRetail = false) => ({ file, isRetail });
+
+test('migrateProfileSettings keeps a hand-set loader from the ini as a custom loader', () => {
+  const { changed, result } = L.migrateProfileSettings({}, { ...SEED, boots: { LD: boot('C:\\LevelDown\\ldloader.exe') } });
+  assert.equal(changed, true);
+  assert.deepEqual(result.LD, { loader: 'custom', loaderExePath: 'C:\\LevelDown\\ldloader.exe' });
+});
+
+test('migrateProfileSettings resolves a relative ini file= against the Ashita folder', () => {
+  const { result } = L.migrateProfileSettings({}, { ...SEED, boots: { Ex: boot('.\\bootloader\\pol.exe') } });
+  assert.deepEqual(result.Ex, { loader: 'custom', loaderExePath: 'C:\\XI\\runtime\\ashita\\bootloader\\pol.exe' });
+});
+
+test('migrateProfileSettings maps the stock path, a missing exe, and retail profiles to stock xiloader', () => {
+  const { result } = L.migrateProfileSettings({}, { ...SEED, boots: {
+    Stock: boot('c:/xi/runtime/xiloader/XILOADER.exe'),
+    Gone: boot('D:\\nowhere\\old.exe'),
+    Retail: boot('', true),
+  } });
+  assert.deepEqual(result.Stock, { loader: 'xiloader' });
+  assert.deepEqual(result.Gone, { loader: 'xiloader' });
+  assert.deepEqual(result.Retail, { loader: 'xiloader' });
+});
+
+test('migrateProfileSettings re-seeds a stored auto from the ini, and keeps other settings', () => {
+  const { result } = L.migrateProfileSettings({ LD: { loader: 'auto', serverHost: 'h' } }, { ...SEED, boots: { LD: boot('C:\\LevelDown\\ldloader.exe') } });
+  assert.deepEqual(result.LD, { serverHost: 'h', loader: 'custom', loaderExePath: 'C:\\LevelDown\\ldloader.exe' });
+});
+
+test('migrateProfileSettings never overrides an explicit pick or a legacy override with the ini', () => {
+  const { result } = L.migrateProfileSettings(
+    { Picked: { loader: 'ldloader' }, Legacy: { xiloaderPath: 'C:\\Old' } },
+    { ...SEED, boots: { Picked: boot('C:\\LevelDown\\ldloader.exe'), Legacy: boot('C:\\LevelDown\\ldloader.exe') } }
+  );
+  assert.deepEqual(result.Picked, { loader: 'ldloader' });
+  assert.equal(result.Legacy.loaderExePath, 'C:\\Old\\xiloader.exe');
+});
+
+// Review #2: the Home server picker must change where the profile actually connects.
+test('setIniServer replaces only the --server value in [ashita.boot] command', () => {
+  const ini = '[ashita.boot]\r\nfile = x.exe\r\ncommand      = --server old.host --user bob --hairpin\r\n';
+  assert.equal(L.setIniServer(ini, 'play.edenxi.com'), '[ashita.boot]\r\nfile = x.exe\r\ncommand      = --server play.edenxi.com --user bob --hairpin\r\n');
+});
+
+test('setIniServer adds --server when the command has none, and leaves retail profiles alone', () => {
+  assert.equal(L.setIniServer('[ashita.boot]\nfile = x.exe\ncommand = --user bob\n', 'h.example'), '[ashita.boot]\nfile = x.exe\ncommand = --server h.example --user bob\n');
+  const retail = '[ashita.boot]\nfile =\ncommand = /game eAZcFcB\n';
+  assert.equal(L.setIniServer(retail, 'h.example'), retail);
+});
+
+// Review #7: partial saves must not drop the rollback key either.
+test('mergeProfileSettings keeps the legacy xiloaderPath when a save omits it', () => {
+  assert.deepEqual(
+    L.mergeProfileSettings({ loader: 'custom', loaderExePath: 'C:\\Old\\xiloader.exe', xiloaderPath: 'C:\\Old' }, { serverHost: 'h' }),
+    { serverHost: 'h', loader: 'custom', loaderExePath: 'C:\\Old\\xiloader.exe', xiloaderPath: 'C:\\Old' }
+  );
+});

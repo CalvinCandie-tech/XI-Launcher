@@ -210,6 +210,9 @@ function ProfileTab({ config, updateConfig }) {
       `$1${cloneName}`
     );
     await api.saveProfile(config.ashitaPath, cloneName, content);
+    // Copy per-profile settings (server, login, loader choice) so the clone launches the same way
+    const settings = await api.loadProfileSettings(name);
+    if (settings) await api.saveProfileSettings(cloneName, { ...settings });
     // Copy overlay list to cloned profile
     const allOverlays = await api.storeGet('profileOverlays') || {};
     if (allOverlays[name]) {
@@ -672,7 +675,7 @@ function ProfileTab({ config, updateConfig }) {
                 return line;
               });
               await api.saveProfile(config.ashitaPath, targetProfile, updated.join('\n'));
-              // The command line may now name a different server, so re-resolve the loader.
+              // Keep file= pointing at the profile's chosen loader.
               const sync = await api.syncProfileLoader(targetProfile);
               if (selectedProfile === targetProfile) {
                 const refreshed = await api.readProfile(config.ashitaPath, targetProfile);

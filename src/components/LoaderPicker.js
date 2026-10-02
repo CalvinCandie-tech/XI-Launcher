@@ -3,6 +3,11 @@ import './LoaderPicker.css';
 
 const api = window.xiAPI;
 
+// Fired after a loader choice or install changes, so every mounted picker and the Home
+// status check refresh (tabs stay mounted, so a change in one doesn't re-render the other).
+export const LOADER_CHANGED_EVENT = 'xi-loader-changed';
+const announceChange = () => window.dispatchEvent(new Event(LOADER_CHANGED_EVENT));
+
 // Loader choice for one profile: the dropdown plus what it resolves to right now. The full
 // layout (Profiles-tab popup) also lists every loader with Install / Check for update; the
 // compact layout (Home tab) only offers Install when the chosen loader is missing.
@@ -30,6 +35,11 @@ function LoaderPicker({ profileName, compact = false, onChange }) {
   useEffect(() => { refresh(); }, [refresh]);
 
   useEffect(() => {
+    window.addEventListener(LOADER_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(LOADER_CHANGED_EVENT, refresh);
+  }, [refresh]);
+
+  useEffect(() => {
     if (!api?.onXiloaderDownloadProgress) return;
     return api.onXiloaderDownloadProgress((percent) => setProgress(percent));
   }, []);
@@ -49,6 +59,7 @@ function LoaderPicker({ profileName, compact = false, onChange }) {
       await api.saveProfileSettings(profileName, next);
       await refresh();
       if (onChange) onChange();
+      announceChange();
       flashStatus(`Saved. "${profileName}" takes the new loader on its next launch.`);
     } catch (e) {
       setStatus(`Error: ${e.message || e}`);
@@ -75,6 +86,7 @@ function LoaderPicker({ profileName, compact = false, onChange }) {
       setBusy(null);
       await refresh();
       if (onChange) onChange();
+      announceChange();
     }
   };
 
