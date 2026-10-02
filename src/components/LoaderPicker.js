@@ -6,7 +6,7 @@ const api = window.xiAPI;
 // Loader choice for one profile: the dropdown plus what it resolves to right now. The full
 // layout (Profiles-tab popup) also lists every loader with Install / Check for update; the
 // compact layout (Home tab) only offers Install when the chosen loader is missing.
-function LoaderPicker({ profileName, useXiloader, compact = false, onChange }) {
+function LoaderPicker({ profileName, compact = false, onChange }) {
   const [loaderList, setLoaderList] = useState([]);
   const [setting, setSetting] = useState({ loader: 'xiloader', loaderExePath: '' });
   const [resolved, setResolved] = useState(null);
@@ -21,11 +21,11 @@ function LoaderPicker({ profileName, useXiloader, compact = false, onChange }) {
       if (!profileName) { setResolved(null); return; }
       const ps = (await api.loadProfileSettings(profileName)) || {};
       setSetting({ loader: ps.loader || 'xiloader', loaderExePath: ps.loaderExePath || '' });
-      setResolved(await api.resolveLoader(profileName, { useXiloader: !!useXiloader }));
+      setResolved(await api.resolveLoader(profileName));
     } catch (e) {
       console.error('Failed to load loader settings', e);
     }
-  }, [profileName, useXiloader]);
+  }, [profileName]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

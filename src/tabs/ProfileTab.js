@@ -533,7 +533,7 @@ function ProfileTab({ config, updateConfig }) {
                       <button className="btn btn-ghost btn-sm" onClick={() => setShowLoader(false)}>✕</button>
                     </div>
                     <div className="loader-modal-body">
-                      <LoaderPicker profileName={selectedProfile} useXiloader={config.useXiloader} />
+                      <LoaderPicker profileName={selectedProfile} />
                     </div>
                   </div>
                 </Modal>

@@ -129,7 +129,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
       const [ashita, ffxi, loader, profiles] = await Promise.all([
         api.pathExists(config.ashitaPath + '\\Ashita-cli.exe'),
         api.pathExists(config.ffxiPath),
-        api.resolveLoader(config.activeProfile, { useXiloader: !!config.useXiloader }),
+        api.resolveLoader(config.activeProfile),
         api.listProfiles(config.ashitaPath)
       ]);
       // A retail profile doesn't use a loader, so never flag one as missing for it.
@@ -138,7 +138,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
       setProfiles(profiles);
     };
     check();
-  }, [config.ashitaPath, config.ffxiPath, config.xiloaderPath, config.activeProfile, config.useXiloader, loaderChangeCount]);
+  }, [config.ashitaPath, config.ffxiPath, config.xiloaderPath, config.activeProfile, loaderChangeCount]);
 
   const createAndActivate = async () => {
     const name = newName.trim();
@@ -173,7 +173,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
       const result = await api.launchGame({
         ashitaPath: config.ashitaPath,
         profileName,
-        useXiloader: !!config.useXiloader,
+        useXiloader: false,
         serverName: profileSettings.serverHost || config.serverHost,
         serverPort: profileSettings.serverPort || config.serverPort,
         loginUser: profileSettings.loginUser || config.loginUser,
@@ -453,21 +453,9 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
           )}
           {setupComplete && (
             <div className="home-panel-launch home-launch-merged">
-              <div className="form-field">
-                <div className="form-field-label"><span className="form-field-name">Launch method</span></div>
-                <select
-                  className="form-select"
-                  value={config.useXiloader ? 'xiloader' : 'ashita'}
-                  onChange={e => updateConfig('useXiloader', e.target.value === 'xiloader')}
-                >
-                  <option value="ashita">Ashita (boot file from profile)</option>
-                  <option value="xiloader">xiloader (private server)</option>
-                </select>
-              </div>
               <LoaderPicker
                 compact
                 profileName={config.activeProfile}
-                useXiloader={config.useXiloader}
                 onChange={() => setLoaderChangeCount(n => n + 1)}
               />
               {config.serverHost && (
@@ -514,7 +502,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
               <button
                 className="btn btn-primary home-start-btn"
                 disabled={isLaunching || !config.activeProfile}
-                onClick={() => onLaunch(!!config.useXiloader)}
+                onClick={() => onLaunch(false)}
               >
                 {isLaunching ? '◌ Launching...' : '✦ Start Game'}
               </button>
