@@ -35,6 +35,9 @@ contextBridge.exposeInMainWorld('xiAPI', {
   // xiloader download
   downloadXiloader: (destPath) => ipcRenderer.invoke('download-xiloader', destPath),
   checkXiloaderUpdate: (destPath) => ipcRenderer.invoke('check-xiloader-update', destPath),
+  listLoaders: () => ipcRenderer.invoke('list-loaders'),
+  downloadLoader: (id) => ipcRenderer.invoke('download-loader', id),
+  checkLoaderUpdate: (id) => ipcRenderer.invoke('check-loader-update', id),
   onXiloaderDownloadProgress: (callback) => {
     const handler = (_, percent, detail) => callback(percent, detail);
     ipcRenderer.on('xiloader-download-progress', handler);

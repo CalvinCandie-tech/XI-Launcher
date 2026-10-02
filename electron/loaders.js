@@ -4,10 +4,11 @@
 const path = require('path');
 
 // ldloader is LevelDown's fork of xiloader 2.2.0 with the profile-server and IRC relay
-// ports remapped (51221 / 51241) — jeffnavy14/xiloader commit 060a809b.
+// ports remapped (51221 / 51241) — jeffnavy14/xiloader commit 060a809b. Its release
+// asset is named xiloader.exe; it's saved locally as ldloader.exe so the two never collide.
 const LOADERS = {
   xiloader: { name: 'xiloader (LandSandBoat)', repo: 'LandSandBoat/xiloader', asset: 'xiloader.exe', exe: 'xiloader.exe' },
-  ldloader: { name: 'ldloader (LevelDown)', repo: 'jeffnavy14/xiloader', asset: 'ldloader.exe', exe: 'ldloader.exe' },
+  ldloader: { name: 'ldloader (LevelDown)', repo: 'jeffnavy14/xiloader', asset: 'xiloader.exe', exe: 'ldloader.exe' },
 };
 
 const DEFAULT_LOADER = 'xiloader';

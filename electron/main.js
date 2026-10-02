@@ -7,7 +7,6 @@ const { execSync, spawn, exec, execFile } = require('child_process');
 const yauzl = require('yauzl');
 const crypto = require('crypto');
 const loaders = require('./loaders');
-const { isOlderVersion } = loaders;
 const { SERVER_ADDRESSES } = require('./serverAddresses');
 
 /**
@@ -392,12 +391,13 @@ function checkDiskSpace(targetPath) {
   } catch { return Infinity; } // If check fails, don't block the operation
 }
 
-// Fetch the latest xiloader release metadata (tag + exe download URL) from GitHub.
-async function fetchLatestXiloaderRelease() {
-  const release = await githubGet('/repos/LandSandBoat/xiloader/releases/latest');
-  const asset = release.assets?.find(a => a.name.toLowerCase().includes('xiloader') && a.name.endsWith('.exe'));
-  if (!asset) throw new Error('No pre-built xiloader release found on GitHub.');
-  return { tag: release.tag_name, downloadUrl: asset.browser_download_url };
+// Latest GitHub release of a registry loader, narrowed to its exe asset.
+async function fetchLatestLoaderRelease(id) {
+  const loader = loaders.LOADERS[id];
+  const release = await githubGet(`/repos/${loader.repo}/releases/latest`);
+  const picked = loaders.pickReleaseAsset(release, loader.asset);
+  if (!picked) throw new Error(`No ${loader.asset} found in the latest ${loader.repo} release.`);
+  return picked;
 }
 
 // One download routine for every file download in the app. Follows redirects
@@ -448,36 +448,40 @@ function downloadFile(url, destPath, { headers = {}, stallMs = 60000, onProgress
   }), { label });
 }
 
-// Error shown when xiloader.exe can't be swapped out even by renaming — usually
+// Error for when a loader exe can't be swapped out even by renaming — usually
 // antivirus holding the file without delete-sharing.
-const XILOADER_IN_USE_ERROR = 'xiloader.exe is locked by another program (often antivirus scanning it). '
-  + 'Close FINAL FANTASY XI and Ashita, wait a moment, then try again.';
-const XILOADER_RESTART_NOTE = ' — the game is still running the old version; the update takes effect next time you launch.';
+function loaderInUseError(exeName) {
+  const err = new Error(`${exeName} is locked by another program (often antivirus scanning it). `
+    + 'Close FINAL FANTASY XI and Ashita, wait a moment, then try again.');
+  err.code = 'LOADER_IN_USE';
+  return err;
+}
+const LOADER_RESTART_NOTE = ' — the game is still running the old version; the update takes effect next time you launch.';
 
-// Delete xiloader.exe.old-* files left by an update that replaced a running xiloader.
+// Delete <loader>.exe.old-* files left by an update that replaced a running loader.
 // Any that are still locked (game still open) are left for the next attempt.
-function removeStaleXiloaderBackups(dir) {
+function removeStaleLoaderBackups(dir) {
   try {
     for (const name of fs.readdirSync(dir)) {
-      if (/^xiloader\.exe\.old-\d+$/i.test(name)) {
+      if (/^[^\\/]+\.exe\.old-\d+$/i.test(name)) {
         try { fs.rmSync(path.join(dir, name), { force: true }); } catch {}
       }
     }
   } catch {}
 }
 
-// Download a xiloader.exe build to destExe, reporting progress via sendProgress(percent, detail).
-// xiloader hosts the FFXI client process, so while the game is open Windows refuses to
+// Download a loader exe build to destExe, reporting progress via sendProgress(percent, detail).
+// The loader hosts the FFXI client process, so while the game is open Windows refuses to
 // overwrite or delete its exe (EBUSY) — but it does allow renaming it. So: download to a
 // temp file, rename the current exe aside, then move the new one into place. The running
 // game is unaffected and picks up the new version on its next launch.
 // Returns { pendingRestart } — true when the old exe was still in use.
-async function downloadXiloaderExe(downloadUrl, destExe, sendProgress) {
+async function downloadLoaderExe(downloadUrl, destExe, sendProgress) {
   const tmpExe = `${destExe}.download`;
-  removeStaleXiloaderBackups(path.dirname(destExe));
+  removeStaleLoaderBackups(path.dirname(destExe));
   try {
     await downloadFile(downloadUrl, tmpExe, {
-      label: 'xiloader download',
+      label: `${path.basename(destExe)} download`,
       onProgress: (received, total) => {
         if (total > 0) sendProgress(10 + Math.round((received / total) * 85), `Downloading... ${(received / 1024).toFixed(0)} KB`);
       }
@@ -485,7 +489,7 @@ async function downloadXiloaderExe(downloadUrl, destExe, sendProgress) {
     try {
       return await swapInXiloaderExe(tmpExe, destExe);
     } catch (e) {
-      if (e.code === 'EBUSY' || e.code === 'EPERM') throw new Error(XILOADER_IN_USE_ERROR);
+      if (e.code === 'EBUSY' || e.code === 'EPERM') throw loaderInUseError(path.basename(destExe));
       throw e;
     }
   } finally {
@@ -524,6 +528,60 @@ async function renameWithRetry(from, to, attempts = 5) {
       await new Promise(r => setTimeout(r, 400));
     }
   }
+}
+
+const loadersDir = path.join(runtimeDir, 'loaders');
+
+// Stock xiloader keeps the user's existing install; other loaders live in runtime/loaders/<id>/.
+function loaderInstallDir(id) {
+  if (id === 'xiloader') return store?.get('xiloaderPath') || defaultXiloaderPath;
+  return path.join(loadersDir, id);
+}
+
+function sendLoaderProgress(percent, detail) {
+  try { mainWindow?.webContents?.send('xiloader-download-progress', percent, detail); } catch {}
+}
+
+// Download a registry loader into targetDir. force=true always downloads (explicit
+// Install); otherwise only when the latest release asset differs from what we installed.
+async function installLoader(id, { targetDir = loaderInstallDir(id), force = false } = {}) {
+  const loader = loaders.LOADERS[id];
+  const destExe = path.join(targetDir, loader.exe);
+  const installed = fs.existsSync(destExe);
+  const records = store.get('loaders') || {};
+  // FileVersion fallback only makes sense for stock xiloader — ldloader reports the same version.
+  const localVersion = id === 'xiloader' && installed ? getLocalXiloaderVersion(destExe) : null;
+
+  sendLoaderProgress(5, `Checking for latest ${loader.exe} release...`);
+  const release = await fetchLatestLoaderRelease(id);
+  const latestVersion = String(release.tag || '').replace(/^v/i, '');
+
+  if (!force && !loaders.needsLoaderUpdate({ installed, record: records[id], latest: release, localVersion })) {
+    return { success: true, updated: false, upToDate: true, currentVersion: localVersion || latestVersion };
+  }
+
+  fs.mkdirSync(targetDir, { recursive: true });
+  sendLoaderProgress(10, `Downloading ${loader.exe}...`);
+  const { pendingRestart } = await downloadLoaderExe(release.downloadUrl, destExe, sendLoaderProgress);
+  store.set('loaders', { ...records, [id]: { assetId: release.assetId, assetUpdatedAt: release.assetUpdatedAt, tag: release.tag } });
+  sendLoaderProgress(100, `${loader.exe} ${installed ? 'updated' : 'downloaded'} successfully`);
+
+  return {
+    success: true,
+    updated: true,
+    previousVersion: localVersion,
+    newVersion: latestVersion,
+    message: `${loader.exe} (${release.tag}) ${installed ? 'updated' : 'downloaded'} to ${targetDir}`
+      + (pendingRestart ? LOADER_RESTART_NOTE : '')
+  };
+}
+
+function loaderErrorResult(e, context) {
+  if (e.code === 'LOADER_IN_USE') return { success: false, error: e.message };
+  if (/ENOTFOUND|getaddrinfo/.test(e.message || '')) {
+    return { success: false, error: 'Network error: Could not reach GitHub. Check your internet connection.' };
+  }
+  return { success: false, error: `${context} failed: ${e.message}` };
 }
 
 // xiloader 2.2.0 removed --serverport and exits on unknown arguments. Profiles the
@@ -893,7 +951,7 @@ async function deployBundledXiloader() {
     const deployDir = defaultXiloaderPath;
     const deployExe = path.join(deployDir, 'xiloader.exe');
 
-    removeStaleXiloaderBackups(deployDir);
+    removeStaleLoaderBackups(deployDir);
 
     // Only deploy if not already there
     if (!fs.existsSync(deployExe)) {
@@ -2356,96 +2414,47 @@ function registerIPC() {
     }
   });
 
-  // Download pre-built xiloader from GitHub
+  // Stock xiloader into a renderer-chosen folder (Profiles → Get xiloader). Kept for the
+  // existing UI; the work is done by installLoader.
   ipcMain.handle('download-xiloader', async (_, destDir) => {
-
     try {
       const targetDir = destDir || defaultXiloaderPath;
-      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
-      const destExe = path.join(targetDir, 'xiloader.exe');
-
-      const sendProgress = (percent, detail) => {
-        try { mainWindow?.webContents?.send('xiloader-download-progress', percent, detail); } catch {}
-      };
-
-      sendProgress(5, 'Checking for latest xiloader release...');
-
-      let release = null;
-      try { release = await fetchLatestXiloaderRelease(); } catch {}
-
-      if (!release) {
-        // Fallback: build from source advice
-        return { success: false, error: 'No pre-built xiloader release found on GitHub. Use the "Download & Build" option instead (requires Git + CMake + Visual Studio).' };
-      }
-
-      sendProgress(10, 'Downloading xiloader.exe...');
-      const { pendingRestart } = await downloadXiloaderExe(release.downloadUrl, destExe, sendProgress);
-
-      sendProgress(100, 'xiloader.exe downloaded successfully');
+      const result = await installLoader('xiloader', { targetDir, force: true });
       store.set('xiloaderPath', targetDir);
-      return {
-        success: true,
-        message: `xiloader.exe downloaded to ${targetDir}${pendingRestart ? XILOADER_RESTART_NOTE : ''}`
-      };
+      return result;
     } catch (e) {
-      if (e.message.includes('ENOTFOUND') || e.message.includes('getaddrinfo')) {
-        return { success: false, error: 'Network error: Could not reach GitHub. Check your internet connection.' };
-      }
-      if (e.message === XILOADER_IN_USE_ERROR) return { success: false, error: e.message };
-      return { success: false, error: `Download failed: ${e.message}` };
+      return loaderErrorResult(e, 'Download');
     }
   });
 
-  // Check the installed xiloader against the latest GitHub release, downloading/overwriting
-  // automatically if it's outdated or missing. Only ever targets the launcher's default
-  // install (destDir), never a profile's pinned custom xiloader path.
+  // Update stock xiloader in its install folder if the latest release differs.
   ipcMain.handle('check-xiloader-update', async (_, destDir) => {
     try {
       const targetDir = destDir || defaultXiloaderPath;
-      const destExe = path.join(targetDir, 'xiloader.exe');
-      const installed = fs.existsSync(destExe);
-      const localVersion = installed ? getLocalXiloaderVersion(destExe) : null;
-
-      const sendProgress = (percent, detail) => {
-        try { mainWindow?.webContents?.send('xiloader-download-progress', percent, detail); } catch {}
-      };
-      sendProgress(5, 'Checking for latest xiloader release...');
-
-      let release;
-      try {
-        release = await fetchLatestXiloaderRelease();
-      } catch (e) {
-        return { success: false, error: friendlyError(e, 'Checking for xiloader updates') };
-      }
-      const latestVersion = (release.tag || '').replace(/^v/i, '');
-
-      if (installed && localVersion && !isOlderVersion(localVersion, latestVersion)) {
-        return { success: true, updated: false, upToDate: true, currentVersion: localVersion };
-      }
-
-      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
-      sendProgress(10, installed ? 'Downloading update...' : 'Downloading xiloader.exe...');
-      const { pendingRestart } = await downloadXiloaderExe(release.downloadUrl, destExe, sendProgress);
-      sendProgress(100, 'xiloader.exe updated successfully');
-      store.set('xiloaderPath', targetDir);
-
-      return {
-        success: true,
-        updated: true,
-        previousVersion: localVersion,
-        newVersion: latestVersion,
-        message: (installed
-          ? `xiloader updated${localVersion ? ` from v${localVersion} ` : ' '}to v${latestVersion}`
-          : `xiloader.exe (v${latestVersion}) downloaded to ${targetDir}`)
-          + (pendingRestart ? XILOADER_RESTART_NOTE : '')
-      };
+      const result = await installLoader('xiloader', { targetDir });
+      if (result.updated) store.set('xiloaderPath', targetDir);
+      return result;
     } catch (e) {
-      if (e.message.includes('ENOTFOUND') || e.message.includes('getaddrinfo')) {
-        return { success: false, error: 'Network error: Could not reach GitHub. Check your internet connection.' };
-      }
-      if (e.message === XILOADER_IN_USE_ERROR) return { success: false, error: e.message };
-      return { success: false, error: `Update check failed: ${e.message}` };
+      return loaderErrorResult(e, 'Update check');
     }
+  });
+
+  ipcMain.handle('list-loaders', () => {
+    const records = store.get('loaders') || {};
+    return Object.entries(loaders.LOADERS).map(([id, l]) => {
+      const exePath = path.join(loaderInstallDir(id), l.exe);
+      return { id, name: l.name, exe: l.exe, repo: l.repo, installed: fs.existsSync(exePath), exePath, tag: records[id]?.tag || null };
+    });
+  });
+
+  ipcMain.handle('download-loader', async (_, id) => {
+    if (!loaders.isLoaderId(id)) return { success: false, error: 'Unknown loader.' };
+    try { return await installLoader(id, { force: true }); } catch (e) { return loaderErrorResult(e, 'Download'); }
+  });
+
+  ipcMain.handle('check-loader-update', async (_, id) => {
+    if (!loaders.isLoaderId(id)) return { success: false, error: 'Unknown loader.' };
+    try { return await installLoader(id); } catch (e) { return loaderErrorResult(e, 'Update check'); }
   });
 
   // xiloader download & build
