@@ -8,6 +8,7 @@ const yauzl = require('yauzl');
 const crypto = require('crypto');
 const loaders = require('./loaders');
 const { SERVER_ADDRESSES } = require('./serverAddresses');
+const ffxiMirror = require('./ffxiMirror');
 
 /**
  * Extract a zip file using yauzl (streaming, handles large files, reports progress).
@@ -1674,7 +1675,7 @@ function registerIPC() {
     }
   });
 
-  // ── 📥 FFXI FILES UPDATER (Vana-Time mirror or custom URL) ──
+  // ── 📥 FFXI FILES UPDATER (Vana Portal mirror or custom URL) ──
   ipcMain.handle('download-full-client', async (_, customUrl) => {
     if (fullClientUpdateInProgress) {
       return { success: false, error: 'An FFXI files update is already in progress.' };
@@ -1689,15 +1690,17 @@ function registerIPC() {
     const tmpZipFile = path.join(tmpDir, 'ffxi_full_client.zip');
 
     try {
-      const clientUrl = (customUrl || '').trim()
-        || 'https://vana-time.com/api/v1/downloads/ffxiFullClient-2026-07.zip';
+      // Blank = look up the current full client on the default mirror (below).
+      let clientUrl = (customUrl || '').trim();
 
       // https only — a checksum is worthless if the transport can be tampered with
-      if (!clientUrl.startsWith('https://')) {
+      if (clientUrl && !clientUrl.startsWith('https://')) {
         return { success: false, error: 'Invalid link. Address must begin with https:// (plain http is not allowed for game file downloads).' };
       }
-      try { new URL(clientUrl); } catch {
-        return { success: false, error: 'Invalid link. Could not parse the download address.' };
+      if (clientUrl) {
+        try { new URL(clientUrl); } catch {
+          return { success: false, error: 'Invalid link. Could not parse the download address.' };
+        }
       }
 
       // The target must already exist — extracting into a freshly created empty
@@ -1730,14 +1733,14 @@ function registerIPC() {
 
       const { net } = require('electron');
 
-      const fetchText = (url) => new Promise((resolve, reject) => {
+      const fetchText = (url, maxBytes = 4096) => new Promise((resolve, reject) => {
         const request = net.request({ method: 'GET', url, redirect: 'follow' });
         request.on('response', (response) => {
           if (response.statusCode && response.statusCode >= 400) {
             return reject(new Error(`HTTP ${response.statusCode}`));
           }
           let body = '';
-          response.on('data', (chunk) => { body += chunk.toString('utf8'); if (body.length > 4096) request.abort(); });
+          response.on('data', (chunk) => { body += chunk.toString('utf8'); if (body.length > maxBytes) request.abort(); });
           response.on('end', () => resolve(body));
           response.on('error', reject);
         });
@@ -1805,9 +1808,19 @@ function registerIPC() {
         request.end();
       });
 
+      if (!clientUrl) {
+        sendProgress(3, 'Finding the latest FFXI full client...');
+        let listing = null;
+        try { listing = JSON.parse(await fetchText(ffxiMirror.MIRROR_LISTING_URL, 256 * 1024)); } catch {}
+        clientUrl = ffxiMirror.pickFullClientUrl(listing);
+        if (!clientUrl) {
+          return { success: false, error: 'Could not find the FFXI full client on Vana Portal (vana-portal.com). Try again later, or paste a mirror link above.' };
+        }
+      }
+
       await downloadFileStream(clientUrl);
 
-      // Vana-Time publishes a SHA256 for every archive at <file>.zip/checksum.
+      // Vana Portal publishes a SHA256 for every archive at <file>.zip/checksum.
       // Verify when available; a custom mirror without the endpoint proceeds
       // unverified but the user is told so.
       sendProgress(72, 'Verifying download checksum...');

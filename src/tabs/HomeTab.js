@@ -574,7 +574,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
               />
               <p className="form-field-desc">
                 Downloads pre-patched FFXI files into your game folder. Leave blank for the default{' '}
-                <a href="#vana-time" className="home-ffxiupd-link" onClick={e => { e.preventDefault(); api?.openExternal?.('https://vana-time.com/downloads'); }}>Vana-Time</a>{' '}
+                <a href="#vana-portal" className="home-ffxiupd-link" onClick={e => { e.preventDefault(); api?.openExternal?.('https://vana-portal.com/downloads/updates'); }}>Vana Portal</a>{' '}
                 mirror. Close FFXI before running.
               </p>
             </div>
