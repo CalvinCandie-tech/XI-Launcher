@@ -77,15 +77,15 @@ catalogue** (only `libs`, `.vscode`, `sdk` are missing — not addons). Nothing 
 
 ## Outcome (added to the launcher, 2026-10-02)
 
-Added **26 addons** and **9 plugins**; every one was installed through the launcher's real
+Added **25 addons** and **8 plugins** (PacketFlow and ScentHound later removed at the user's request); every one was installed through the launcher's real
 `install-addon` IPC into a throwaway Ashita folder and checked on disk (addon folder +
 `<name>.lua`; plugin DLL directly in `plugins/`). Plugin DLLs were checked for the embedded
 interface constant: all 9 new plugins are **4.30** builds.
 
 - Addons: hush, mountmaster, cudgel, fishaid, nomount, nocombat, weatherchecker, questlist,
   simplelog, metrics, deeps (v2 is a Lua addon), timers, upcast, SpellSelect, Points, zonename,
-  partybuffs, trigger, cleanup, zonelines, Auctioneer, Porter, sellit, ScentHound, PetMe, trustme.
-- Plugins: Lootwhore, Stylist, Packer, PacketFlow, SpectralFix, TrueFPS, ChatHistoryPlus,
+  partybuffs, trigger, cleanup, zonelines, Auctioneer, Porter, sellit, PetMe, trustme.
+- Plugins: Lootwhore, Stylist, Packer, SpectralFix, TrueFPS, ChatHistoryPlus,
   ChatLogFix, TrueFont.
 - **Not added:** GMTools (user's call), xitools (HorizonXI-only installer, overwrites Ashita's
   `addons/libs/imgui.lua`), Nameplate (release notes: requires interface 416), FrameFix (DLL

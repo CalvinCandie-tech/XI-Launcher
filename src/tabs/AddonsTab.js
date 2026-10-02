@@ -118,7 +118,6 @@ export const ADDON_CATALOGUE = [
   // --- Search & Scan ---
   { name: 'filterscan', description: 'Allows filtering widescan results for specific entities', category: 'Search & Scan' },
   { name: 'watchdog', description: 'Enables widescan tracking of nearly anything with a command', category: 'Search & Scan' },
-  { name: 'ScentHound', description: 'Tracks monster spawns with on-screen indicators. Needs the watchdog addon loaded for widescan. Its packet-search features are off by default — they count as cheating.', category: 'Search & Scan', repo: 'ThornyFFXI/ScentHound', useRelease: true, installAs: 'scenthound' },
   // --- Trusts & Pets ---
   { name: 'petinfo', description: 'Displays information about the player pet', category: 'Trusts & Pets' },
   { name: 'FancyTrusts', description: 'Fancy trust management UI — browse, summon, and organize your trusts without memorizing names or writing macros.', category: 'Trusts & Pets', repo: 'ThornyFFXI/FancyTrusts', subdir: 'FancyTrusts', installAs: 'FancyTrusts' },
