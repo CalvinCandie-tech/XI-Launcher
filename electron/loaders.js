@@ -94,7 +94,10 @@ function serverLoaderFor(host, serverTable) {
 
 // Profile setting > server binding > stock xiloader.
 function resolveLoader({ profileSettings, host, serverTable, xiloaderDir, loadersDir }) {
-  const choice = profileSettings?.loader;
+  // Sanitise on read too: profileSettings can also arrive via profile import or store-set,
+  // and a bad custom path would otherwise be launched elevated or injected into the ini.
+  const settings = sanitizeLoaderSettings(profileSettings);
+  const choice = settings?.loader;
   const fromRegistry = (id, source, serverName) => ({
     id,
     name: LOADERS[id].name,
@@ -102,8 +105,8 @@ function resolveLoader({ profileSettings, host, serverTable, xiloaderDir, loader
     source,
     serverName,
   });
-  if (choice === 'custom' && profileSettings.loaderExePath) {
-    const exePath = profileSettings.loaderExePath;
+  if (choice === 'custom' && settings.loaderExePath) {
+    const exePath = settings.loaderExePath;
     return { id: 'custom', name: path.win32.basename(exePath), exePath, source: 'profile', serverName: null };
   }
   if (isLoaderId(choice)) return fromRegistry(choice, 'profile', null);
@@ -152,6 +155,17 @@ function sanitizeLoaderSettings(settings) {
   return out;
 }
 
+// Several screens save a partial snapshot (server, login, XIPivot) for the active profile.
+// Keep the stored loader choice unless the save sets one itself.
+function mergeProfileSettings(existing, incoming) {
+  if (!existing || typeof existing !== 'object' || !incoming || typeof incoming !== 'object') return incoming;
+  if (incoming.loader !== undefined) return incoming;
+  const kept = {};
+  if (existing.loader !== undefined) kept.loader = existing.loader;
+  if (existing.loaderExePath !== undefined) kept.loaderExePath = existing.loaderExePath;
+  return { ...incoming, ...kept };
+}
+
 // Pre-registry profiles stored a folder in xiloaderPath. Convert it to a custom loader
 // pointing at <folder>\xiloader.exe. The old key stays so a rollback to v1.6.x still works.
 function migrateProfileSettings(all) {
@@ -192,10 +206,13 @@ function isOlderVersion(a, b) {
 
 // ldloader reports the same FileVersion as stock xiloader, so versions can't tell builds
 // apart — compare the GitHub asset id we recorded at install time. Installs from before
-// the registry have no record; stock xiloader falls back to its FileVersion.
-function needsLoaderUpdate({ installed, record, latest, localVersion }) {
+// the registry have no record; stock xiloader falls back to its FileVersion. A record
+// only counts for the exe it was made for — the user can point xiloader at another folder.
+function needsLoaderUpdate({ installed, record, latest, localVersion, exePath }) {
   if (!installed) return true;
-  if (record && record.assetId != null) return record.assetId !== latest.assetId;
+  const recordApplies = record && record.assetId != null && record.exePath && exePath
+    && record.exePath.toLowerCase() === exePath.toLowerCase();
+  if (recordApplies) return record.assetId !== latest.assetId;
   if (localVersion) return isOlderVersion(localVersion, String(latest.tag || '').replace(/^v/i, ''));
   return true;
 }
@@ -215,6 +232,7 @@ module.exports = {
   planProfileLoaderSync,
   isValidExePath,
   sanitizeLoaderSettings,
+  mergeProfileSettings,
   migrateProfileSettings,
   pickReleaseAsset,
   isOlderVersion,

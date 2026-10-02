@@ -556,14 +556,14 @@ async function installLoader(id, { targetDir = loaderInstallDir(id), force = fal
   const release = await fetchLatestLoaderRelease(id);
   const latestVersion = String(release.tag || '').replace(/^v/i, '');
 
-  if (!force && !loaders.needsLoaderUpdate({ installed, record: records[id], latest: release, localVersion })) {
+  if (!force && !loaders.needsLoaderUpdate({ installed, record: records[id], latest: release, localVersion, exePath: destExe })) {
     return { success: true, updated: false, upToDate: true, currentVersion: localVersion || latestVersion };
   }
 
   fs.mkdirSync(targetDir, { recursive: true });
   sendLoaderProgress(10, `Downloading ${loader.exe}...`);
   const { pendingRestart } = await downloadLoaderExe(release.downloadUrl, destExe, sendLoaderProgress);
-  store.set('loaders', { ...records, [id]: { assetId: release.assetId, assetUpdatedAt: release.assetUpdatedAt, tag: release.tag } });
+  store.set('loaders', { ...records, [id]: { assetId: release.assetId, assetUpdatedAt: release.assetUpdatedAt, tag: release.tag, exePath: destExe } });
   sendLoaderProgress(100, `${loader.exe} ${installed ? 'updated' : 'downloaded'} successfully`);
 
   return {
@@ -1202,7 +1202,7 @@ function registerIPC() {
   ipcMain.handle('save-profile-settings', (_, profileName, settings) => {
     const all = store.get('profileSettings') || {};
     // Launch runs the stored loader exe elevated, so only accept well-formed values.
-    all[profileName] = loaders.sanitizeLoaderSettings(settings);
+    all[profileName] = loaders.sanitizeLoaderSettings(loaders.mergeProfileSettings(all[profileName], settings));
     store.set('profileSettings', all);
     return true;
   });
@@ -2609,6 +2609,12 @@ function registerIPC() {
       if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
       const destPath = path.join(destDir, 'xiloader.exe');
       fs.copyFileSync(srcExe, destPath);
+      // A self-built exe is no longer the release asset we recorded for this path.
+      const records = store.get('loaders') || {};
+      if (records.xiloader?.exePath?.toLowerCase() === destPath.toLowerCase()) {
+        const { xiloader: _dropped, ...rest } = records;
+        store.set('loaders', rest);
+      }
       return { success: true, destPath };
     } catch (e) {
       return { success: false, error: friendlyError(e, 'Copying xiloader') };
@@ -2798,7 +2804,7 @@ function registerIPC() {
       // Restore per-profile settings if present
       if (data.settings && Object.keys(data.settings).length > 0) {
         const all = store.get('profileSettings') || {};
-        all[name] = data.settings;
+        all[name] = loaders.sanitizeLoaderSettings(data.settings);
         store.set('profileSettings', all);
       }
 

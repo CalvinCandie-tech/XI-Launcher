@@ -224,11 +224,48 @@ test('pickReleaseAsset matches the exact asset name case-insensitively', () => {
 test('needsLoaderUpdate', () => {
   const latest = { tag: 'v2.2.0', assetId: 5 };
   assert.equal(L.needsLoaderUpdate({ installed: false, latest }), true);
-  assert.equal(L.needsLoaderUpdate({ installed: true, record: { assetId: 5 }, latest }), false);
-  assert.equal(L.needsLoaderUpdate({ installed: true, record: { assetId: 4 }, latest }), true);
+  const exePath = 'C:\\A\\ldloader.exe';
+  assert.equal(L.needsLoaderUpdate({ installed: true, record: { assetId: 5, exePath }, latest, exePath }), false);
+  assert.equal(L.needsLoaderUpdate({ installed: true, record: { assetId: 4, exePath }, latest, exePath }), true);
   // No record: FileVersion fallback (only ever passed for stock xiloader)
   assert.equal(L.needsLoaderUpdate({ installed: true, localVersion: '2.2.0.0', latest }), false);
   assert.equal(L.needsLoaderUpdate({ installed: true, localVersion: '2.1.2.0', latest }), true);
   // No record and no version: can't tell what it is, so replace it
   assert.equal(L.needsLoaderUpdate({ installed: true, latest }), true);
+});
+
+test('mergeProfileSettings keeps the loader choice when a save omits it', () => {
+  const existing = { serverHost: 'old', loader: 'custom', loaderExePath: 'C:\\l\\ld.exe' };
+  assert.deepEqual(
+    L.mergeProfileSettings(existing, { serverHost: 'new', loginUser: 'bob' }),
+    { serverHost: 'new', loginUser: 'bob', loader: 'custom', loaderExePath: 'C:\\l\\ld.exe' }
+  );
+});
+
+test('mergeProfileSettings lets an explicit loader save replace the old choice', () => {
+  const existing = { loader: 'custom', loaderExePath: 'C:\\l\\ld.exe', serverHost: 'h' };
+  assert.deepEqual(L.mergeProfileSettings(existing, { serverHost: 'h', loader: 'ldloader' }), { serverHost: 'h', loader: 'ldloader' });
+});
+
+test('mergeProfileSettings with no existing entry returns the incoming settings', () => {
+  assert.deepEqual(L.mergeProfileSettings(undefined, { serverHost: 'h' }), { serverHost: 'h' });
+});
+
+test('resolveLoader ignores unsafe stored custom paths instead of using or throwing on them', () => {
+  for (const loaderExePath of ['C:\\a.exe\ncommand = --server evil', 42, '\\\\nas\\x.exe', 'rel.exe']) {
+    const r = L.resolveLoader({ profileSettings: { loader: 'custom', loaderExePath }, host: 'play.edenxi.com', serverTable: TABLE, ...DIRS });
+    assert.equal(r.id, 'xiloader', `loaderExePath=${JSON.stringify(loaderExePath)}`);
+    assert.equal(r.source, 'default');
+  }
+});
+
+test('needsLoaderUpdate only trusts a record made for the same exe path', () => {
+  const latest = { tag: 'v2.2.0', assetId: 5 };
+  const record = { assetId: 5, exePath: 'C:\\A\\xiloader.exe' };
+  assert.equal(L.needsLoaderUpdate({ installed: true, record, latest, exePath: 'c:\\a\\XILOADER.exe' }), false);
+  // Same asset id but a different install folder → record doesn't apply; fall back to FileVersion
+  assert.equal(L.needsLoaderUpdate({ installed: true, record, latest, exePath: 'C:\\B\\xiloader.exe', localVersion: '2.1.2.0' }), true);
+  assert.equal(L.needsLoaderUpdate({ installed: true, record, latest, exePath: 'C:\\B\\xiloader.exe', localVersion: '2.2.0.0' }), false);
+  // Record without an exePath can't be matched to an install
+  assert.equal(L.needsLoaderUpdate({ installed: true, record: { assetId: 5 }, latest, exePath: 'C:\\A\\xiloader.exe' }), true);
 });
