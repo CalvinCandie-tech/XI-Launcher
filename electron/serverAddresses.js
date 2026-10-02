@@ -5,7 +5,8 @@ const SERVER_ADDRESSES = {
   'Gaia XI': { host: 'login.gaiaxi.com' },
   'HorizonXI': { host: '', note: 'Uses custom HorizonXI launcher — not compatible with xiloader' },
   'LevelDown': { host: 'leveldownffxi.com' },
-  'LevelDown 75': { host: 'ffxileveldown75.ddns.net' },
+  // 75 and 99 players share one server since 2026-09-16 (LevelDown Discord announcement).
+  'LevelDown 75': { host: 'leveldownffxi.com' },
   'Nasomi': { host: 'na.nasomi.com' },
   'Supernova': { host: 'login.supernovaffxi.com' },
   'Tabula Rasa': { host: 'login.tabularasaxi.com' },
