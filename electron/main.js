@@ -382,14 +382,15 @@ function githubGet(apiPath, { timeoutMs = 10000, force = false } = {}) {
 }
 
 // Check available disk space (returns bytes free on the drive containing targetPath)
+// Uses fs.statfsSync, not PowerShell: Get-PSDrive output parsed as 0 MB whenever the
+// user's PowerShell profile printed anything, which falsely blocked installs.
 function checkDiskSpace(targetPath) {
   try {
-    const drive = path.parse(path.resolve(targetPath)).root;
-    const stdout = require('child_process').execSync(
-      `powershell -Command "(Get-PSDrive ${drive[0]}).Free"`,
-      { timeout: 5000 }
-    ).toString().trim();
-    return parseInt(stdout, 10) || 0;
+    // statfs needs an existing path — walk up to the nearest ancestor that exists.
+    let p = path.resolve(targetPath);
+    while (!fs.existsSync(p) && path.dirname(p) !== p) p = path.dirname(p);
+    const stats = fs.statfsSync(p);
+    return stats.bavail * stats.bsize;
   } catch { return Infinity; } // If check fails, don't block the operation
 }
 
@@ -417,7 +418,11 @@ function downloadFile(url, destPath, { headers = {}, stallMs = 60000, onProgress
     const okReject = done(reject);
     const download = (u, redirects = 0) => {
       if (redirects > 10) return okReject(new Error('Too many redirects.'));
+      // The stall timer below only starts once headers arrive; this one covers a
+      // connection/TLS handshake that hangs first (AV HTTPS scanning, proxies).
+      const responseTimer = setTimeout(() => req.destroy(new Error('Download stalled — no response from server.')), stallMs);
       const req = https.get(u, { headers: reqHeaders }, (res) => {
+        clearTimeout(responseTimer);
         const sc = res.statusCode;
         if (sc === 301 || sc === 302 || sc === 307 || sc === 308) {
           if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
@@ -444,7 +449,7 @@ function downloadFile(url, destPath, { headers = {}, stallMs = 60000, onProgress
         res.on('end', () => { clearTimeout(stallTimer); file.end(); file.on('finish', okResolve); });
         res.on('error', (err) => { clearTimeout(stallTimer); file.destroy(); okReject(err); });
       });
-      req.on('error', okReject);
+      req.on('error', (err) => { clearTimeout(responseTimer); okReject(err); });
     };
     download(url);
   }), { label });
@@ -2144,6 +2149,13 @@ function registerIPC() {
 
   // Install Ashita v4 from GitHub
   ipcMain.handle('install-ashita-v4', async (_, destPath) => {
+    // Unique per run: a fixed name meant a file still held by AV from a failed
+    // attempt made every retry fail on cleanup.
+    const runId = Date.now();
+    const tmpZip = path.join(os.tmpdir(), `ashita-v4-${runId}.zip`);
+    const tmpExtract = path.join(os.tmpdir(), `ashita-v4-extract-${runId}`);
+    const avAdvice = 'This is usually Windows Security (or another antivirus) removing Ashita.dll/Ashita-cli.exe — a known false positive. '
+      + `Open Windows Security → Protection history, allow the Ashita items, add an exclusion for ${destPath}, then click Install again.`;
     try {
       // Check disk space (Ashita v4 needs ~200 MB)
       const freeBytes = checkDiskSpace(destPath);
@@ -2159,7 +2171,6 @@ function registerIPC() {
       if (!fs.existsSync(destPath)) fs.mkdirSync(destPath, { recursive: true });
 
       const zipUrl = 'https://github.com/AshitaXI/Ashita-v4beta/archive/refs/heads/main.zip';
-      const tmpZip = path.join(os.tmpdir(), 'ashita-v4.zip');
 
       sendProgress(5, 'Downloading Ashita v4 from GitHub...');
 
@@ -2179,10 +2190,6 @@ function registerIPC() {
 
       sendProgress(60, 'Extracting...');
 
-      const tmpExtract = path.join(os.tmpdir(), 'ashita-v4-extract');
-      if (fs.existsSync(tmpExtract)) {
-        fs.rmSync(tmpExtract, { recursive: true, force: true });
-      }
       fs.mkdirSync(tmpExtract, { recursive: true });
       await extractZip(tmpZip, tmpExtract);
 
@@ -2198,13 +2205,11 @@ function registerIPC() {
 
       sendProgress(95, 'Cleaning up...');
 
-      try { fs.unlinkSync(tmpZip); } catch (e) { console.error('[install-ashita-v4] cleanup', e.message); }
-      try { fs.rmSync(tmpExtract, { recursive: true, force: true }); } catch (e) { console.error('[install-ashita-v4] cleanup', e.message); }
-
-      // Verify install
-      const cliExe = path.join(destPath, 'Ashita-cli.exe');
-      if (!fs.existsSync(cliExe)) {
-        return { success: false, error: 'Download completed but Ashita-cli.exe not found. The repo structure may have changed.' };
+      // Verify install. Both files ship in the repo zip, so if either is missing
+      // after copying, antivirus removed it.
+      const missing = ['Ashita-cli.exe', 'Ashita.dll'].filter(f => !fs.existsSync(path.join(destPath, f)));
+      if (missing.length) {
+        return { success: false, error: `Ashita downloaded, but ${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} missing. ${avAdvice}` };
       }
 
       sendProgress(100, 'Ashita v4 installed successfully');
@@ -2215,13 +2220,28 @@ function registerIPC() {
       if (msg.includes('ENOTFOUND') || msg.includes('getaddrinfo')) {
         return { success: false, error: 'Network error: Could not reach GitHub. Check your internet connection and try again.' };
       }
-      if (msg.includes('EACCES') || msg.includes('EPERM')) {
+      if (msg.includes('Download stalled')) {
+        return { success: false, error: 'The download from GitHub stalled. Check your internet connection — a VPN, proxy or antivirus "web protection" can also block it — then try again.' };
+      }
+      // Blocked-file errors: Windows' "contains a virus" error surfaces from libuv as
+      // UNKNOWN on a file operation.
+      if (/virus|potentially unwanted/i.test(msg) || (e.code === 'UNKNOWN' && e.path)) {
+        return { success: false, error: `Windows blocked a file while installing Ashita (${msg}). ${avAdvice}` };
+      }
+      if (msg.includes('EACCES') || msg.includes('EPERM') || msg.includes('EBUSY')) {
+        // Only blame the install folder when it's the one that failed.
+        if (e.path && path.resolve(e.path).startsWith(path.resolve(os.tmpdir()))) {
+          return { success: false, error: `Windows blocked access to the temporary download (${e.path}) — usually antivirus scanning it. Wait a minute and try again.` };
+        }
         return { success: false, error: `Permission denied writing to ${destPath}. Try running XI Launcher as Administrator or choose a different install location.` };
       }
       if (msg.includes('Expand-Archive') || msg.includes('tar')) {
         return { success: false, error: 'Failed to extract the download. The ZIP file may be corrupted — try again.' };
       }
       return { success: false, error: `Install failed: ${msg}` };
+    } finally {
+      try { fs.rmSync(tmpZip, { force: true }); } catch (e) { console.error('[install-ashita-v4] cleanup', e.message); }
+      try { fs.rmSync(tmpExtract, { recursive: true, force: true }); } catch (e) { console.error('[install-ashita-v4] cleanup', e.message); }
     }
   });
 

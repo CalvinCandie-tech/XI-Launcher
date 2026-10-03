@@ -13,6 +13,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
   const [profileType, setProfileType] = useState('private');
   const [ashitaInstalling, setAshitaInstalling] = useState(false);
   const [ashitaProgress, setAshitaProgress] = useState({ percent: 0, detail: '' });
+  const [ashitaError, setAshitaError] = useState('');
   const [profiles, setProfiles] = useState([]);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -115,15 +116,19 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
   const installAshitaV4 = async () => {
     if (!api) return;
     setAshitaInstalling(true);
+    setAshitaError('');
     setAshitaProgress({ percent: 0, detail: 'Starting...' });
     try {
       const result = await api.installAshitaV4(config.ashitaPath);
       if (result.success) {
         const ashita = await api.pathExists(config.ashitaPath + '\\Ashita-cli.exe');
         setStatus(prev => ({ ...prev, ashita }));
+      } else {
+        setAshitaError(result.error || 'Ashita v4 install failed.');
       }
     } catch (e) {
       console.error('Failed to install Ashita v4:', e);
+      setAshitaError(e.message || 'Ashita v4 install failed.');
     } finally {
       setAshitaInstalling(false);
     }
@@ -354,6 +359,9 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
               )}
             </div>
 
+            {!status.ashita && !ashitaInstalling && ashitaError && (
+              <div className="home-ffxiupd-status err">✖ {ashitaError}</div>
+            )}
             {!status.ashita && !ashitaInstalling && (
               <button className="btn btn-primary btn-sm home-full-btn" onClick={installAshitaV4}>
                 ↓ Install Ashita v4

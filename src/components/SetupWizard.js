@@ -20,6 +20,7 @@ function SetupWizard({ config, updateConfig, onComplete }) {
   const [ffxiFound, setFfxiFound] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [installProgress, setInstallProgress] = useState({ percent: 0, detail: '' });
+  const [installError, setInstallError] = useState('');
   const [prereqInstalling, setPrereqInstalling] = useState(false);
   const [prereqProgress, setPrereqProgress] = useState({ percent: 0, detail: '' });
   const [prereqResult, setPrereqResult] = useState(null); // { success, results, anyRebootRequired, error }
@@ -138,12 +139,15 @@ function SetupWizard({ config, updateConfig, onComplete }) {
 
   const installAshita = async () => {
     setInstalling(true);
+    setInstallError('');
     setInstallProgress({ percent: 0, detail: 'Starting...' });
     const result = await api.installAshitaV4(ashitaPath);
     setInstalling(false);
     if (result.success) {
       const found = await api.pathExists(ashitaPath + '\\Ashita-cli.exe');
       setAshitaFound(found);
+    } else {
+      setInstallError(result.error || 'Ashita v4 install failed.');
     }
   };
 
@@ -266,6 +270,9 @@ function SetupWizard({ config, updateConfig, onComplete }) {
                     {ashitaFound ? 'Found' : 'Not Found'}
                   </span>
                 </div>
+                {!ashitaFound && !installing && installError && (
+                  <p className="wizard-status-msg wizard-status-msg-error">{installError}</p>
+                )}
                 {!ashitaFound && !installing && (
                   <button className="btn btn-primary btn-sm wizard-action-btn" onClick={installAshita}>
                     ↓ Install Ashita v4 Automatically
