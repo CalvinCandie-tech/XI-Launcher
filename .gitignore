@@ -8,3 +8,6 @@ runtime/
 
 # Large binaries handled by LFS or excluded
 *.mp3
+
+# Local brainstorming session files
+.superpowers/
