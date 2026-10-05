@@ -93,9 +93,15 @@ function ServerCard({ server, status, favorite, onToggleFavorite, onReport, onEd
         <span className="server-card-footer-spacer" />
         {onReset && server.custom && <button className="btn btn-ghost btn-sm" onClick={() => onReset(server)}>Remove</button>}
         {!server.custom && (
-          <button className="btn btn-sm server-card-report" onClick={() => onReport(server)} title="Wrong address or server closed? Tell the launcher team on GitHub">
-            ⚑ Report problem
-          </button>
+          <span className="server-report-wrap">
+            <button className="btn btn-sm server-card-report" onClick={() => onReport(server)} aria-describedby={`report-tip-${server.id}`}>
+              ⚑ Report problem
+            </button>
+            {/* Instant hover box — the native title tooltip waits ~1 s */}
+            <span className="server-report-tip" id={`report-tip-${server.id}`} role="tooltip">
+              Wrong address or server closed? Tell the launcher team on GitHub
+            </span>
+          </span>
         )}
       </div>
     </div>
