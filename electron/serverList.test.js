@@ -115,19 +115,19 @@ test('slugify makes a servers.json-style id', () => {
   assert.equal(SL.slugify(undefined), 'server');
 });
 
-test('sanitizeLocalServer turns an edit of an official server into an override of non-empty fields', () => {
+test('sanitizeLocalServer stores only the fields that differ from the official server', () => {
   const r = SL.sanitizeLocalServer(
     { id: 'eden', name: 'Eden', host: 'new.edenxi.com', port: '', website: '', discord: '' },
-    { officialIds: idSet(['eden']), localIds: idSet([]) },
+    { officialServers: official(), localIds: idSet([]) },
   );
   assert.equal(r.error, undefined);
-  assert.deepEqual(r.entry, { id: 'eden', name: 'Eden', host: 'new.edenxi.com' });
+  assert.deepEqual(r.entry, { id: 'eden', host: 'new.edenxi.com' });
 });
 
 test('sanitizeLocalServer gives a new server a unique local- id', () => {
   const r = SL.sanitizeLocalServer(
     { name: 'My Test Server!', host: '10.0.0.5', category: '75 - Custom Content' },
-    { officialIds: idSet([]), localIds: idSet(['local-my-test-server']) },
+    { officialServers: [], localIds: idSet(['local-my-test-server']) },
   );
   assert.deepEqual(r.entry, {
     id: 'local-my-test-server-2', name: 'My Test Server!', host: '10.0.0.5', port: '',
@@ -136,12 +136,12 @@ test('sanitizeLocalServer gives a new server a unique local- id', () => {
 });
 
 test('sanitizeLocalServer keeps an existing custom id when editing it', () => {
-  const r = SL.sanitizeLocalServer({ id: 'local-mine', name: 'Mine', host: 'b.com' }, { officialIds: idSet([]), localIds: idSet(['local-mine']) });
+  const r = SL.sanitizeLocalServer({ id: 'local-mine', name: 'Mine', host: 'b.com' }, { officialServers: [], localIds: idSet(['local-mine']) });
   assert.equal(r.entry.id, 'local-mine');
 });
 
 test('sanitizeLocalServer rejects bad input with a readable message', () => {
-  const opts = { officialIds: idSet([]), localIds: idSet([]) };
+  const opts = { officialServers: [], localIds: idSet([]) };
   assert.match(SL.sanitizeLocalServer({ name: '', host: 'a.com' }, opts).error, /name/i);
   assert.match(SL.sanitizeLocalServer(null, opts).error, /name/i);
   assert.match(SL.sanitizeLocalServer({ name: 'X', host: '' }, opts).error, /address/i);
@@ -324,4 +324,22 @@ test('parseServerListText accepts a UTF-8 BOM (Windows editors add one)', () => 
   const json = SL.parseServerListText('\uFEFF{"servers":[]}');
   assert.deepEqual(json, { servers: [] });
   assert.throws(() => SL.parseServerListText('not json'));
+});
+
+test('a port-only edit keeps following the official address when the server moves', () => {
+  const r = SL.sanitizeLocalServer(
+    { id: 'eden', name: 'Eden', host: 'play.edenxi.com', port: '54231', website: '', discord: '' },
+    { officialServers: official(), localIds: idSet([]) },
+  );
+  assert.deepEqual(r.entry, { id: 'eden', port: '54231' });
+  const moved = SL.validateServerList(doc([entry({ host: 'new.edenxi.com', previousHosts: ['play.edenxi.com'] })])).list.servers;
+  const eden = SL.applyLocalServers(moved, { eden: r.entry }).servers[0];
+  assert.equal(eden.host, 'new.edenxi.com');
+  assert.equal(eden.port, '54231');
+});
+
+test('profileHostEntry ignores the saved server of a retail profile', () => {
+  assert.deepEqual(SL.profileHostEntry('Retail', 'old.host', { isRetail: true, host: null }), { name: 'Retail', settingsHost: '', iniHost: '' });
+  assert.deepEqual(SL.profileHostEntry('Main', 'a.com', { isRetail: false, host: 'b.com' }), { name: 'Main', settingsHost: 'a.com', iniHost: 'b.com' });
+  assert.deepEqual(SL.profileHostEntry('NoIni', 'a.com', null), { name: 'NoIni', settingsHost: 'a.com', iniHost: '' });
 });

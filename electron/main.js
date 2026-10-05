@@ -5408,12 +5408,12 @@ function registerIPC() {
     const profiles = [];
     for (const name of names) {
       if (sanitizeName(name) !== name) continue;
-      let iniHost = '';
+      let boot = null;
       try {
-        iniHost = loaders.parseIniBoot(fs.readFileSync(profileIniPath(ashitaPath, name), 'utf-8')).host || '';
+        boot = loaders.parseIniBoot(fs.readFileSync(profileIniPath(ashitaPath, name), 'utf-8'));
       } catch { /* settings-only profile */ }
       const ps = profileSettings[name];
-      profiles.push({ name, settingsHost: (ps && typeof ps === 'object' && ps.serverHost) || '', iniHost });
+      profiles.push(serverList.profileHostEntry(name, ps && typeof ps === 'object' ? ps.serverHost : '', boot));
     }
     return {
       ashitaPath,
@@ -5453,7 +5453,7 @@ function registerIPC() {
     const state = serverListState || await loadServerList();
     const local = { ...(store.get('localServers') || {}) };
     const result = serverList.sanitizeLocalServer(input, {
-      officialIds: new Set(state.list.servers.map(s => s.id)),
+      officialServers: state.list.servers,
       localIds: new Set(Object.keys(local)),
     });
     if (result.error) return { error: result.error };
@@ -5495,11 +5495,13 @@ function registerIPC() {
       const warnings = [];
       const all = store.get('profileSettings') || {};
       let settingsChanged = false;
-      for (const [name, ps] of Object.entries(all)) {
-        if (ps && typeof ps === 'object' && serverList.sameHost(ps.serverHost, move.fromHost)) {
-          all[name] = { ...ps, serverHost: move.toHost };
+      // Only the profiles findMovedHosts counted (retail profiles are left alone).
+      for (const p of saved.profiles) {
+        const ps = all[p.name];
+        if (ps && typeof ps === 'object' && serverList.sameHost(p.settingsHost, move.fromHost)) {
+          all[p.name] = { ...ps, serverHost: move.toHost };
           settingsChanged = true;
-          changedProfiles.push(name);
+          changedProfiles.push(p.name);
         }
       }
       if (settingsChanged) store.set('profileSettings', all);

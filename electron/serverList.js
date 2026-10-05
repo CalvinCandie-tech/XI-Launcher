@@ -166,7 +166,7 @@ function slugify(name) {
 
 // Check what the Add / Edit form sent. Editing an official server stores only the fields the
 // player filled in (an override); anything else is the player's own server under a local- id.
-function sanitizeLocalServer(input, { officialIds = new Set(), localIds = new Set() } = {}) {
+function sanitizeLocalServer(input, { officialServers = [], localIds = new Set() } = {}) {
   const src = input && typeof input === 'object' ? input : {};
   const name = str(src.name);
   if (!name) return { error: 'Give the server a name.' };
@@ -181,10 +181,14 @@ function sanitizeLocalServer(input, { officialIds = new Set(), localIds = new Se
   }
 
   const id = str(src.id);
-  if (officialIds.has(id)) {
+  const official = officialServers.find(s => s.id === id);
+  if (official) {
+    // Only what the player actually changed — a field left as-is must keep following the
+    // official list (e.g. a port-only edit still picks up a later address move).
     const entry = { id };
     for (const [k, v] of Object.entries({ name, host, port, website, discord })) {
-      if (v) entry[k] = v;
+      const same = k === 'host' ? sameHost(v, official.host) : v === official[k];
+      if (v && !same) entry[k] = v;
     }
     return { entry };
   }
@@ -267,6 +271,17 @@ function findMovedHosts(servers, { favorites = [], serverHost = '', profiles = [
     note(p.iniHost, { kind: 'profile', profile: p.name });
   }
   return [...moves.values()];
+}
+
+// One profile's saved addresses for findMovedHosts. `boot` is loaders.parseIniBoot() of its ini
+// (null if there is none). Retail profiles never connect to a private server, so the server the
+// launcher copied into their settings is ignored.
+function profileHostEntry(name, settingsHost, boot) {
+  return {
+    name,
+    settingsHost: boot && boot.isRetail ? '' : str(settingsHost),
+    iniHost: (boot && str(boot.host)) || '',
+  };
 }
 
 function joinAnd(parts) {
@@ -374,6 +389,7 @@ module.exports = {
   sanitizeLocalServer,
   applyLocalServers,
   findMovedHosts,
+  profileHostEntry,
   describeUsedBy,
   applyMoveToConfig,
   ISSUE_URL_MAX,
