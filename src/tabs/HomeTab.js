@@ -10,10 +10,11 @@ import FilesUpdaterPanel from '../components/home/FilesUpdaterPanel';
 import MultiBoxPanel from '../components/home/MultiBoxPanel';
 import SetupCard from '../components/home/SetupCard';
 import NoticeBanner from '../components/home/NoticeBanner';
+import MovedServerBanner from '../components/MovedServerBanner';
 
 const api = window.xiAPI;
 
-function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, launchLog, updateInfo, onSkipVersion, onDismissUpdate, onShowWizard }) {
+function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, launchLog, updateInfo, onSkipVersion, onDismissUpdate, onShowWizard, movedServers, onApplyMove, onDismissMove }) {
   const [status, setStatus] = useState({ ashita: false, ffxi: false, xiloader: false, profileCount: 0 });
   const [loaderInfo, setLoaderInfo] = useState(null); // resolveLoader() for the active profile
   const [startupWarnings, setStartupWarnings] = useState([]);
@@ -456,6 +457,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
             onDismissUpdate={() => { setUpdateDlStatus(''); setUpdateDlProgress({ percent: 0, detail: '' }); setUpdateDlError(''); onDismissUpdate(); }}
             onDismissUpdateError={() => { setUpdateDlStatus(''); setUpdateDlError(''); }}
           />
+          <MovedServerBanner moves={movedServers} onApply={onApplyMove} onDismiss={onDismissMove} />
         </div>
       </div>
 

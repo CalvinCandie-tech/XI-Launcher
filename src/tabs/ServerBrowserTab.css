@@ -287,3 +287,5 @@ button.server-card-name:hover { color: var(--gold-bright, #ffd700); }
   color: var(--red);
   font-size: 13px;
 }
+.server-browser .home-notice { margin-bottom: 10px; }
+.moved-error { color: var(--red); }

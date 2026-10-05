@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import './ServerBrowserTab.css';
 import ServerCard from '../components/servers/ServerCard';
 import ServerEditModal from '../components/servers/ServerEditModal';
+import MovedServerBanner from '../components/MovedServerBanner';
 
 const api = window.xiAPI;
 
@@ -17,7 +18,7 @@ function sourceLabel(meta) {
   return 'Built-in copy (could not reach GitHub)';
 }
 
-function ServerBrowserTab({ config, updateConfig }) {
+function ServerBrowserTab({ config, updateConfig, movedServers = [], onApplyMove, onDismissMove }) {
   const [categories, setCategories] = useState([]);
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -143,6 +144,8 @@ function ServerBrowserTab({ config, updateConfig }) {
           />
         </div>
       </div>
+
+      <MovedServerBanner moves={movedServers} onApply={onApplyMove} onDismiss={onDismissMove} />
 
       {loading && <div className="server-browser-loading">Loading server list...</div>}
       {error && <div className="server-browser-error panel">{error}</div>}

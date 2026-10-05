@@ -11,6 +11,7 @@ import DgVoodooTab from './tabs/DgVoodooTab';
 import ReShadeTab from './tabs/ReShadeTab';
 import PluginsTab, { PLUGIN_CATALOGUE } from './tabs/PluginsTab';
 import ServerBrowserTab from './tabs/ServerBrowserTab';
+import { moveKey } from './components/MovedServerBanner';
 // ScriptEditorTab is now embedded in ProfileTab
 import SetupWizard from './components/SetupWizard';
 import UpdateModal from './components/UpdateModal';
@@ -442,6 +443,38 @@ function App() {
     doUpdateConfig(key, value);
   }, [settingsDirty, doUpdateConfig]);
 
+  // Curated server list: fetched once at startup so a moved server address can be offered on
+  // Home without visiting the Servers tab. "Not now" lasts until the launcher restarts.
+  const [movedServers, setMovedServers] = useState([]);
+  const dismissedMovesRef = useRef(new Set());
+  const configLoaded = !!config;
+
+  useEffect(() => {
+    if (!configLoaded || !api?.fetchServerList || !api?.getMovedHosts) return;
+    api.fetchServerList()
+      .catch(() => {})
+      .then(() => api.getMovedHosts())
+      .then(moves => setMovedServers((moves || []).filter(m => !dismissedMovesRef.current.has(moveKey(m)))))
+      .catch(err => console.error('Moved-server check failed:', err));
+  }, [configLoaded]);
+
+  const handleDismissMove = useCallback((m) => {
+    dismissedMovesRef.current.add(moveKey(m));
+    setMovedServers(prev => prev.filter(x => moveKey(x) !== moveKey(m)));
+  }, []);
+
+  const handleApplyMove = useCallback(async (m) => {
+    const res = await api.applyMovedHost({ serverId: m.serverId, fromHost: m.fromHost });
+    if (!res || res.error) return res?.error || 'Could not update.';
+    updateConfig('favoriteServers', res.favoriteServers);
+    if (res.serverHost !== configRef.current?.serverHost) updateConfig('serverHost', res.serverHost);
+    // A profile ini that couldn't be written keeps the row up with the reason, so the player can
+    // close the game / fix the file and press Update again (the move is re-derived each time).
+    if (res.warnings?.length) return res.warnings.join(' ');
+    setMovedServers(prev => prev.filter(x => moveKey(x) !== moveKey(m)));
+    return null;
+  }, [updateConfig]);
+
   const guardedSetActiveTab = useCallback((tab) => {
     if (settingsDirty && activeTab === 'settings' && tab !== 'settings') {
       setDirtyConfirm({
@@ -613,7 +646,7 @@ function App() {
   const renderTabContent = (tab) => {
     const tabProps = { config, updateConfig };
     switch (tab) {
-      case 'home': return <HomeTab {...tabProps} onNavigate={guardedSetActiveTab} onLaunch={handleLaunch} isLaunching={isLaunching} launchLog={launchLog} updateInfo={updateInfo} onSkipVersion={handleSkipVersion} onDismissUpdate={handleDismissUpdate} onShowWizard={() => setShowWizard(true)} />;
+      case 'home': return <HomeTab {...tabProps} onNavigate={guardedSetActiveTab} onLaunch={handleLaunch} isLaunching={isLaunching} launchLog={launchLog} updateInfo={updateInfo} onSkipVersion={handleSkipVersion} onDismissUpdate={handleDismissUpdate} onShowWizard={() => setShowWizard(true)} movedServers={movedServers} onApplyMove={handleApplyMove} onDismissMove={handleDismissMove} />;
       case 'profiles': return <ProfileTab {...tabProps} />;
       case 'addons': return <AddonsTab {...tabProps} onCheckAddonUpdates={handleManualAddonCheck} />;
       case 'plugins': return <PluginsTab {...tabProps} />;
@@ -622,7 +655,7 @@ function App() {
       case 'xipivot': return <XIPivotTab {...tabProps} onSettingsSaved={() => saveCurrentProfileSettings(config)} />;
       case 'dgvoodoo': return <DgVoodooTab {...tabProps} />;
       case 'reshade': return <ReShadeTab {...tabProps} onNavigate={guardedSetActiveTab} />;
-      case 'servers': return <ServerBrowserTab {...tabProps} />;
+      case 'servers': return <ServerBrowserTab {...tabProps} movedServers={movedServers} onApplyMove={handleApplyMove} onDismissMove={handleDismissMove} />;
       default: return null;
     }
   };
