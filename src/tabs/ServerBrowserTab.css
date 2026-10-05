@@ -341,15 +341,16 @@ button.server-card-name:hover { color: var(--gold-bright, #ffd700); }
   position: absolute;
   right: 0;
   width: max-content;
-  max-width: 220px;
-  padding: 6px 9px;
-  border-radius: 5px;
+  max-width: 250px;
+  padding: 8px 11px;
+  border-radius: 6px;
   border: 1px solid var(--gold-dim);
-  background: rgba(20, 16, 8, 0.96);
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 400;
-  line-height: 1.4;
+  background: #0d0b07; /* solid, so the card underneath doesn't show through the text */
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+  color: var(--text-bright, #f2e6cf);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
   white-space: normal;
   text-align: left;
   pointer-events: none;
