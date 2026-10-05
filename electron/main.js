@@ -5369,7 +5369,10 @@ function registerIPC() {
         });
         res.on('error', reject);
       });
-      req.setTimeout(8000, () => req.destroy(new Error('Timed out')));
+      // Hard deadline: req.setTimeout only counts once the socket has connected, so an
+      // unreachable host would wait for the OS connect timeout (~21 s on Windows) instead.
+      const deadline = setTimeout(() => req.destroy(new Error('Timed out')), 8000);
+      req.on('close', () => clearTimeout(deadline));
       req.on('error', reject);
     }), { retries: 2, delay: 1000, label: 'Server list fetch' });
   }
