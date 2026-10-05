@@ -7,6 +7,7 @@ const SERVER_LIST_URL = 'https://raw.githubusercontent.com/CalvinCandie-tech/XI-
 const REPO_URL = 'https://github.com/CalvinCandie-tech/XI-Launcher';
 const DEFAULT_PROBE_PORT = '54231';
 const MY_SERVERS_CATEGORY = 'My servers';
+const ISSUE_URL_MAX = 7000;
 
 const ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const HOST_RE = /^[A-Za-z0-9.-]+$/;
@@ -295,6 +296,60 @@ function applyMoveToConfig({ favorites = [], serverHost = '' } = {}, move) {
   return { favorites: out, serverHost: nextHost, changed };
 }
 
+const issueId = (s) => (!s.id || String(s.id).startsWith('local-') ? slugify(s.name) : s.id);
+
+// The servers.json entry a suggestion would add, ready for the owner to paste.
+function serverSnippet(server) {
+  const s = server && typeof server === 'object' ? server : {};
+  const host = str(s.host);
+  const previousHosts = (Array.isArray(s.previousHosts) ? s.previousHosts : []).map(str).filter(Boolean);
+  const officialHost = str(s.official && s.official.host);
+  if (officialHost && !sameHost(officialHost, host) && !previousHosts.some(h => sameHost(h, officialHost))) {
+    previousHosts.unshift(officialHost);
+  }
+  return JSON.stringify({
+    id: issueId(s),
+    name: str(s.name),
+    category: str(s.suggestedCategory) || (s.category === MY_SERVERS_CATEGORY ? '' : str(s.category)),
+    host,
+    port: str(s.port),
+    previousHosts,
+    website: str(s.website),
+    discord: str(s.discord),
+    tags: s.tags && typeof s.tags === 'object' ? s.tags : {},
+    note: str(s.note),
+  }, null, 2);
+}
+
+// New-issue link for the repo's issue forms. Forms prefill by field id; `body` is ignored.
+function buildIssueUrl(kind, { server, details = '' } = {}) {
+  const s = server && typeof server === 'object' ? server : {};
+  const problem = kind === 'problem';
+  const params = {
+    template: problem ? 'server-problem.yml' : 'server-suggestion.yml',
+    title: `${problem ? 'Server problem' : 'Server suggestion'}: ${str(s.name) || 'unnamed server'}`,
+    'server-id': issueId(s),
+  };
+  let det = String(details || '');
+  let json = problem ? '' : serverSnippet(s);
+  const make = () => {
+    const q = new URLSearchParams(params);
+    if (det) q.set('details', det);
+    if (json) q.set('json', json);
+    return `${REPO_URL}/issues/new?${q}`;
+  };
+  let url = make();
+  while (url.length > ISSUE_URL_MAX && det) {
+    det = det.slice(0, Math.max(0, det.length - Math.ceil((url.length - ISSUE_URL_MAX) / 9)));
+    url = make();
+  }
+  if (url.length > ISSUE_URL_MAX) {
+    json = '';
+    url = make();
+  }
+  return url;
+}
+
 module.exports = {
   SERVER_LIST_URL,
   REPO_URL,
@@ -315,4 +370,7 @@ module.exports = {
   findMovedHosts,
   describeUsedBy,
   applyMoveToConfig,
+  ISSUE_URL_MAX,
+  serverSnippet,
+  buildIssueUrl,
 };

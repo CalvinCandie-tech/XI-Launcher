@@ -269,3 +269,46 @@ test('applyMoveToConfig leaves unrelated config alone', () => {
   assert.equal(r.changed, false);
   assert.equal(r.serverHost, 'play.edenxi.com');
 });
+
+test('serverSnippet strips local- ids and launcher-only fields', () => {
+  const mine = {
+    id: 'local-mine', name: 'Mine', category: 'My servers', suggestedCategory: '75 - Custom Content', host: 'b.com', port: '',
+    previousHosts: [], website: '', discord: '', tags: {}, note: '', custom: true,
+  };
+  assert.deepEqual(JSON.parse(SL.serverSnippet(mine)), {
+    id: 'mine', name: 'Mine', category: '75 - Custom Content', host: 'b.com', port: '',
+    previousHosts: [], website: '', discord: '', tags: {}, note: '',
+  });
+});
+
+test('serverSnippet records the official host as previous when the address was edited', () => {
+  const edited = {
+    ...entry(), port: '', previousHosts: [], website: '', discord: '', tags: {}, note: '',
+    host: 'new.edenxi.com', localEdit: true, official: { name: 'Eden', host: 'play.edenxi.com', port: '' },
+  };
+  assert.deepEqual(JSON.parse(SL.serverSnippet(edited)).previousHosts, ['play.edenxi.com']);
+});
+
+test('buildIssueUrl opens the suggestion form with fields prefilled by id', () => {
+  const url = new URL(SL.buildIssueUrl('suggestion', { server: { ...entry(), host: 'new.edenxi.com' }, details: 'Address change' }));
+  assert.equal(url.origin + url.pathname, 'https://github.com/CalvinCandie-tech/XI-Launcher/issues/new');
+  assert.equal(url.searchParams.get('template'), 'server-suggestion.yml');
+  assert.equal(url.searchParams.get('title'), 'Server suggestion: Eden');
+  assert.equal(url.searchParams.get('server-id'), 'eden');
+  assert.equal(url.searchParams.get('details'), 'Address change');
+  assert.equal(JSON.parse(url.searchParams.get('json')).host, 'new.edenxi.com');
+});
+
+test('buildIssueUrl problem reports carry no json field', () => {
+  const url = new URL(SL.buildIssueUrl('problem', { server: entry(), details: 'Closed' }));
+  assert.equal(url.searchParams.get('template'), 'server-problem.yml');
+  assert.equal(url.searchParams.get('title'), 'Server problem: Eden');
+  assert.equal(url.searchParams.has('json'), false);
+});
+
+test('buildIssueUrl stays under the length cap by trimming details', () => {
+  const url = SL.buildIssueUrl('suggestion', { server: entry(), details: 'é'.repeat(5000) });
+  assert.ok(url.length <= SL.ISSUE_URL_MAX, `length ${url.length}`);
+  assert.ok(new URL(url).searchParams.get('details').length > 0);
+  assert.ok(new URL(url).searchParams.get('json'));
+});
