@@ -55,7 +55,7 @@ function Sidebar({ activeTab, onTabChange, onToggleMusic, musicPlaying, musicVol
                 <span className="topnav-tab-label">{tab.label}</span>
               </button>
               {showMusic && (
-                <>
+                <div className="topnav-music">
                   <button
                     className={`topnav-music-btn ${musicPlaying ? 'playing' : ''}`}
                     onClick={handleMusicClick}
@@ -107,7 +107,7 @@ function Sidebar({ activeTab, onTabChange, onToggleMusic, musicPlaying, musicVol
                       />
                     </>
                   )}
-                </>
+                </div>
               )}
             </div>
           ) : (

@@ -41,6 +41,9 @@ contextBridge.exposeInMainWorld('xiAPI', {
   resolveLoader: (profileName) => ipcRenderer.invoke('resolve-loader', profileName),
   syncProfileLoader: (profileName) => ipcRenderer.invoke('sync-profile-loader', profileName),
   setProfileServer: (profileName, host) => ipcRenderer.invoke('set-profile-server', profileName, host),
+  getProfileGameFiles: (profileName) => ipcRenderer.invoke('get-profile-game-files', profileName),
+  setProfileGameFiles: (profileName, mode, folder, createFolder) => ipcRenderer.invoke('set-profile-game-files', profileName, mode, folder, createFolder),
+  getGameFilesModes: (profileNames) => ipcRenderer.invoke('get-game-files-modes', profileNames),
   browseLoaderExe: (defaultPath) => ipcRenderer.invoke('browse-loader-exe', defaultPath),
   onXiloaderDownloadProgress: (callback) => {
     const handler = (_, percent, detail) => callback(percent, detail);
@@ -218,7 +221,7 @@ contextBridge.exposeInMainWorld('xiAPI', {
 
   // ── VANA-TIME CUSTOM CONTEXT BINDINGS ──
   // Accept the custom URL string as a parameter and forward it to the main handler
-  downloadFullClient: (customUrl) => ipcRenderer.invoke('download-full-client', customUrl),
+  downloadFullClient: (customUrl, profileName) => ipcRenderer.invoke('download-full-client', customUrl, profileName),
   onFullClientProgress: (callback) => {
     const handler = (_, percent, detail) => callback(percent, detail);
     ipcRenderer.on('full-client-download-progress', handler);

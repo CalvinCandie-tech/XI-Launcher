@@ -68,6 +68,102 @@
   color: var(--text-primary);
 }
 
+/* Progress of the addon currently updating, at the right of its row */
+.update-item-progress {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.update-item-progress-bar {
+  width: 90px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.update-item-progress-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--teal), var(--gold));
+  transition: width 0.2s ease;
+}
+
+.update-item-progress-pct {
+  min-width: 34px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--gold-bright);
+}
+
+.update-progress-detail {
+  color: var(--text-dim);
+}
+
+.update-progress-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+/* Background mode: a corner card with no overlay, so the launcher stays clickable */
+.update-mini {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 900;
+  width: 300px;
+  padding: 12px 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-bright);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), var(--active-glow);
+}
+
+.update-mini-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.update-mini-head.solo {
+  margin-bottom: 0;
+}
+
+.update-mini-title {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.update-mini-count {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  color: var(--gold-bright);
+}
+
+.update-mini-done {
+  color: var(--green);
+}
+
+.update-mini-fail {
+  color: var(--red);
+}
+
+.update-mini-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
 .update-footer {
   padding: 14px 24px;
   border-top: 1px solid var(--border);

@@ -127,16 +127,31 @@ function sanitizeLoaderSettings(settings) {
   if (out.loader !== undefined && out.loader !== 'custom' && !isLoaderId(out.loader)) delete out.loader;
   if (out.loaderExePath !== undefined && !isValidExePath(out.loaderExePath)) delete out.loaderExePath;
   if (out.loader === 'custom' && !out.loaderExePath) delete out.loader;
+  // Game files (Home → Game files): installed FFXI, or a sandboxed copy in sandboxFolder.
+  if (out.gameFiles !== undefined && out.gameFiles !== 'installed' && out.gameFiles !== 'sandbox') delete out.gameFiles;
+  if (out.sandboxFolder !== undefined && !isValidFolderPath(out.sandboxFolder)) delete out.sandboxFolder;
+  // FFXI Files Updater link for this profile's game files ('' = the default mirror).
+  if (out.ffxiUpdaterUrl !== undefined && !isValidUpdaterUrl(out.ffxiUpdaterUrl)) delete out.ffxiUpdaterUrl;
   return out;
 }
 
+function isValidUpdaterUrl(u) {
+  return typeof u === 'string' && (u === '' || (/^https:\/\//.test(u) && !/\s/.test(u) && u.length <= 2048));
+}
+
+function isValidFolderPath(p) {
+  return typeof p === 'string' && /^[a-zA-Z]:[\\/]/.test(p) && !/["\r\n]/.test(p);
+}
+
 // Several screens save a partial snapshot (server, login, XIPivot) for the active profile.
-// Keep the stored loader choice unless the save sets one itself.
+// Keep the stored loader choice unless the save sets one itself, and the game-files choice
+// and updater link unless the save sets them.
 function mergeProfileSettings(existing, incoming) {
   if (!existing || typeof existing !== 'object' || !incoming || typeof incoming !== 'object') return incoming;
-  if (incoming.loader !== undefined) return incoming;
   const kept = {};
-  for (const key of ['loader', 'loaderExePath', 'xiloaderPath']) {
+  const keys = ['gameFiles', 'sandboxFolder', 'ffxiUpdaterUrl'];
+  if (incoming.loader === undefined) keys.push('loader', 'loaderExePath', 'xiloaderPath');
+  for (const key of keys) {
     if (existing[key] !== undefined && incoming[key] === undefined) kept[key] = existing[key];
   }
   return { ...incoming, ...kept };

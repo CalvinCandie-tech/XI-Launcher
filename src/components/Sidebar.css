@@ -1,5 +1,8 @@
+/* Tabs share the row and wrap onto more rows when they don't fit */
 .topnav {
+  position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   padding: 6px 16px;
@@ -9,10 +12,12 @@
 }
 
 .topnav-tab {
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 10px 14px;
   background: rgba(10, 12, 16, 0.75);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -67,14 +72,37 @@
 }
 
 .topnav-home-wrap {
-  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+}
+
+/* Too narrow for one row: two even rows of five rather than one tab left on its own */
+@media (max-width: 1180px) {
+  .topnav > .topnav-tab,
+  .topnav-home-wrap {
+    flex: 1 1 calc(20% - 6px);
+  }
+  .topnav-tab {
+    padding: 9px 8px;
+  }
+}
+
+/* Music note + controls: top-left of the page, under the last tab row and under the Home
+   tab's top bar (HomeTab publishes its height as --home-top-h). The box itself has no size;
+   its children are placed from its top-left corner. */
+.topnav-music {
+  position: absolute;
+  top: calc(100% + var(--home-top-h, 0px) + 8px);
+  left: 16px;
+  width: 0;
+  height: 0;
+  z-index: 5;
 }
 
 .topnav-music-btn {
   position: absolute;
-  bottom: -72px;
-  left: 25%;
-  transform: translateX(-50%);
+  top: 0;
+  left: 0;
   background: none;
   border: none;
   cursor: pointer;
@@ -174,7 +202,7 @@
 
 .topnav-volume-slider {
   position: absolute;
-  bottom: -126px;
+  top: 94px;
   left: 0;
   width: 110px;
   height: 10px;
@@ -212,7 +240,7 @@
 
 .topnav-music-controls {
   position: absolute;
-  bottom: -72px;
+  top: 24px;
   left: 52px;
   display: flex;
   align-items: center;
@@ -252,7 +280,7 @@
 
 .topnav-track-name {
   position: absolute;
-  bottom: -108px;
+  top: 71px;
   left: 0;
   width: 200px;
   font-size: 11px;

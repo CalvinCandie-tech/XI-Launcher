@@ -224,6 +224,39 @@ test('mergeProfileSettings lets an explicit loader save replace the old choice',
   assert.deepEqual(L.mergeProfileSettings(existing, { serverHost: 'h', loader: 'ldloader' }), { serverHost: 'h', loader: 'ldloader' });
 });
 
+test('mergeProfileSettings keeps the game-files choice when a save omits it, loader save or not', () => {
+  const existing = { serverHost: 'h', gameFiles: 'sandbox', sandboxFolder: 'C:\\XI-Launcher\\Leveldown' };
+  assert.deepEqual(
+    L.mergeProfileSettings(existing, { serverHost: 'new' }),
+    { serverHost: 'new', gameFiles: 'sandbox', sandboxFolder: 'C:\\XI-Launcher\\Leveldown' }
+  );
+  assert.deepEqual(
+    L.mergeProfileSettings(existing, { serverHost: 'h', loader: 'ldloader' }),
+    { serverHost: 'h', loader: 'ldloader', gameFiles: 'sandbox', sandboxFolder: 'C:\\XI-Launcher\\Leveldown' }
+  );
+  assert.deepEqual(L.mergeProfileSettings(existing, { gameFiles: 'installed' }).gameFiles, 'installed');
+});
+
+test('mergeProfileSettings keeps the profile\'s FFXI Files Updater link when a save omits it', () => {
+  const existing = { serverHost: 'h', ffxiUpdaterUrl: 'https://leveldownffxi.com/api/download/client' };
+  assert.equal(L.mergeProfileSettings(existing, { serverHost: 'new' }).ffxiUpdaterUrl, 'https://leveldownffxi.com/api/download/client');
+});
+
+test('sanitizeLoaderSettings keeps an https updater link or a blank one, drops anything else', () => {
+  assert.deepEqual(L.sanitizeLoaderSettings({ ffxiUpdaterUrl: 'https://x.example/client.zip' }), { ffxiUpdaterUrl: 'https://x.example/client.zip' });
+  assert.deepEqual(L.sanitizeLoaderSettings({ ffxiUpdaterUrl: '' }), { ffxiUpdaterUrl: '' });
+  assert.deepEqual(L.sanitizeLoaderSettings({ ffxiUpdaterUrl: 'http://x.example/c.zip' }), {});
+  assert.deepEqual(L.sanitizeLoaderSettings({ ffxiUpdaterUrl: 'https://x\n' }), {});
+  assert.deepEqual(L.sanitizeLoaderSettings({ ffxiUpdaterUrl: 42 }), {});
+});
+
+test('sanitizeLoaderSettings drops a bad game-files mode or folder', () => {
+  assert.deepEqual(L.sanitizeLoaderSettings({ gameFiles: 'sandbox', sandboxFolder: 'C:\\XI\\LD' }), { gameFiles: 'sandbox', sandboxFolder: 'C:\\XI\\LD' });
+  assert.deepEqual(L.sanitizeLoaderSettings({ gameFiles: 'weird', a: 1 }), { a: 1 });
+  assert.deepEqual(L.sanitizeLoaderSettings({ gameFiles: 'installed', sandboxFolder: 'relative\\x' }), { gameFiles: 'installed' });
+  assert.deepEqual(L.sanitizeLoaderSettings({ sandboxFolder: 'C:\\x"\r\n' }), {});
+});
+
 test('mergeProfileSettings with no existing entry returns the incoming settings', () => {
   assert.deepEqual(L.mergeProfileSettings(undefined, { serverHost: 'h' }), { serverHost: 'h' });
 });

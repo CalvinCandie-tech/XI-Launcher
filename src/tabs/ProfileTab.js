@@ -5,6 +5,7 @@ import ScriptEditorTab from './ScriptEditorTab';
 import Modal from '../components/Modal';
 import RegistryEditor from '../components/RegistryEditor';
 import LoaderPicker from '../components/LoaderPicker';
+import GameFilesPicker, { GAME_FILES_CHANGED_EVENT } from '../components/GameFilesPicker';
 
 const api = window.xiAPI;
 
@@ -30,6 +31,7 @@ function ProfileTab({ config, updateConfig }) {
   const [profileOverlays, setProfileOverlays] = useState({});
   const [modPopover, setModPopover] = useState(null); // profile name or null
   const [showLoader, setShowLoader] = useState(false);
+  const [showGameFiles, setShowGameFiles] = useState(false);
 
   useEffect(() => {
     if (!api) return;
@@ -159,6 +161,17 @@ function ProfileTab({ config, updateConfig }) {
   const cancelEdit = () => {
     setIsEditing(false);
   };
+
+  // Game files changed (here or on Home) rewrite the ini's sandbox lines — re-read the shown profile.
+  useEffect(() => {
+    if (!selectedProfile || isEditing) return;
+    const reload = async () => {
+      const result = await api.readProfile(config.ashitaPath, selectedProfile);
+      setProfileContent(result.content || '');
+    };
+    window.addEventListener(GAME_FILES_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(GAME_FILES_CHANGED_EVENT, reload);
+  }, [selectedProfile, isEditing, config.ashitaPath]);
 
   const saveEdit = async () => {
     await api.saveProfile(config.ashitaPath, selectedProfile, editContent);
@@ -491,6 +504,14 @@ function ProfileTab({ config, updateConfig }) {
                   <button className="btn btn-ghost btn-sm" onClick={openProfileFolder}>Open Folder</button>
                   <button className="btn btn-ghost btn-sm" onClick={() => setShowRegistry(true)} title="Edit FFXI graphics & client settings with a friendly form">⚙ Graphics</button>
                   <button className="btn btn-ghost btn-sm" onClick={() => setShowLoader(true)} title="Choose which loader (xiloader, ldloader, custom) this profile launches with">⇄ Loader</button>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setShowGameFiles(true)}
+                    disabled={isEditing}
+                    title="Choose whether this profile plays the installed FFXI or its own sandboxed copy"
+                  >
+                    ◫ Game Files
+                  </button>
                   {isEditing ? (
                     <>
                       <button className="btn btn-primary btn-sm" onClick={saveEdit}>Save</button>
@@ -537,6 +558,24 @@ function ProfileTab({ config, updateConfig }) {
                     </div>
                     <div className="loader-modal-body">
                       <LoaderPicker profileName={selectedProfile} />
+                    </div>
+                  </div>
+                </Modal>
+              )}
+              {showGameFiles && (
+                <Modal onClose={() => setShowGameFiles(false)} ariaLabel="Game files for this profile" zIndex={1100}>
+                  <div className="loader-modal panel">
+                    <div className="loader-modal-header">
+                      <div>
+                        <h3 className="cinzel loader-modal-title">Game Files — {selectedProfile}</h3>
+                        <p className="loader-modal-subtitle">
+                          Play the installed FFXI, or give this profile its own sandboxed copy. Changes apply on the next launch.
+                        </p>
+                      </div>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setShowGameFiles(false)}>✕</button>
+                    </div>
+                    <div className="loader-modal-body">
+                      <GameFilesPicker profileName={selectedProfile} ffxiPath={config.ffxiPath} />
                     </div>
                   </div>
                 </Modal>

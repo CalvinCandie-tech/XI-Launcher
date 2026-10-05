@@ -1,12 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './HomeTab.css';
 import { DEFAULT_PROFILE_INI } from '../utils/profileTemplates';
 import LoaderPicker, { LOADER_CHANGED_EVENT } from '../components/LoaderPicker';
+import GameFilesPicker, { GAME_FILES_CHANGED_EVENT, announceGameFilesChange } from '../components/GameFilesPicker';
+import HomeTopBar from '../components/home/HomeTopBar';
+import ProfileSwitcher from '../components/home/ProfileSwitcher';
+import ServerPanel from '../components/home/ServerPanel';
+import FilesUpdaterPanel from '../components/home/FilesUpdaterPanel';
+import MultiBoxPanel from '../components/home/MultiBoxPanel';
+import SetupCard from '../components/home/SetupCard';
+import NoticeBanner from '../components/home/NoticeBanner';
 
 const api = window.xiAPI;
 
 function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, launchLog, updateInfo, onSkipVersion, onDismissUpdate, onShowWizard }) {
   const [status, setStatus] = useState({ ashita: false, ffxi: false, xiloader: false, profileCount: 0 });
+  const [loaderInfo, setLoaderInfo] = useState(null); // resolveLoader() for the active profile
   const [startupWarnings, setStartupWarnings] = useState([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -15,19 +24,16 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
   const [ashitaProgress, setAshitaProgress] = useState({ percent: 0, detail: '' });
   const [ashitaError, setAshitaError] = useState('');
   const [profiles, setProfiles] = useState([]);
-  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
-  const dropdownRef = useRef(null);
-  const [multiBoxOpen, setMultiBoxOpen] = useState(false);
   const [multiBoxProfiles, setMultiBoxProfiles] = useState([]);
   const [multiBoxLaunching, setMultiBoxLaunching] = useState(false);
   const [multiBoxLog, setMultiBoxLog] = useState('');
   const [serverStatus, setServerStatus] = useState(null); // { online, latency }
-  const [serverPickerOpen, setServerPickerOpen] = useState(false);
-  const serverPickerRef = useRef(null);
   const [updateDlStatus, setUpdateDlStatus] = useState(''); // '' | 'downloading' | 'installing' | 'error'
   const [updateDlProgress, setUpdateDlProgress] = useState({ percent: 0, detail: '' });
   const [updateDlError, setUpdateDlError] = useState('');
   const [loaderChangeCount, setLoaderChangeCount] = useState(0); // re-runs the readiness check
+  const topRef = useRef(null);
+  const noticesRef = useRef(null);
 
   useEffect(() => {
     const bump = () => setLoaderChangeCount(n => n + 1);
@@ -43,11 +49,6 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
   const [ffxiUpdaterStatus, setFfxiUpdaterStatus] = useState(null); // { ok: bool, msg: string }
 
   useEffect(() => {
-    if (!api?.storeGet) return;
-    api.storeGet('ffxiUpdaterUrl').then(v => setFfxiMirrorUrl(v || ''));
-  }, []);
-
-  useEffect(() => {
     if (!api?.onFullClientProgress) return;
     return api.onFullClientProgress((pct, detail) => {
       setFfxiDlPercent(pct);
@@ -55,44 +56,62 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
     });
   }, []);
 
+  // The updater installs into the active profile's game files (shown so players know where)
+  // from that profile's own link — each sandboxed copy keeps the server it came from.
+  // The same lookup feeds the Game files tile's summary.
+  const [updaterTarget, setUpdaterTarget] = useState('');
+  const [gameFiles, setGameFiles] = useState(null);
+  useEffect(() => {
+    const refresh = async (loadLink) => {
+      if (!api?.getProfileGameFiles || !config.activeProfile) {
+        setUpdaterTarget(config.ffxiPath || '');
+        setGameFiles(null);
+        if (loadLink && api?.storeGet) setFfxiMirrorUrl((await api.storeGet('ffxiUpdaterUrl')) || '');
+        return;
+      }
+      const gf = await api.getProfileGameFiles(config.activeProfile);
+      if (gf?.error) { setUpdaterTarget(config.ffxiPath || ''); setGameFiles(null); return; }
+      setGameFiles(gf);
+      setUpdaterTarget(gf.mode === 'sandbox' ? gf.folder : gf.installedFfxiPath);
+      // Only on a profile switch — a game-files change mustn't wipe a link being typed.
+      if (loadLink) setFfxiMirrorUrl(gf.updaterUrl || '');
+    };
+    refresh(true);
+    const onGameFilesChange = () => refresh(false);
+    window.addEventListener(GAME_FILES_CHANGED_EVENT, onGameFilesChange);
+    return () => window.removeEventListener(GAME_FILES_CHANGED_EVENT, onGameFilesChange);
+  }, [config.activeProfile, config.ffxiPath]);
+
+  // Tags in the profile list so players can see which profiles play a sandboxed copy.
+  const [gameFilesModes, setGameFilesModes] = useState({});
+  useEffect(() => {
+    if (!api?.getGameFilesModes) return;
+    const refresh = async () => setGameFilesModes((await api.getGameFilesModes(profiles)) || {});
+    refresh();
+    window.addEventListener(GAME_FILES_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(GAME_FILES_CHANGED_EVENT, refresh);
+  }, [profiles]);
+  const gameFilesTag = (name) => gameFilesModes[name] ? (
+    <span className={`home-profile-tag ${gameFilesModes[name] === 'sandbox' ? 'sandbox' : ''}`}>
+      {gameFilesModes[name] === 'sandbox' ? 'sandboxed' : 'installed'}
+    </span>
+  ) : null;
+
   const runFfxiUpdater = async () => {
     if (!api?.downloadFullClient) return;
     setFfxiUpdaterStatus(null);
     setFfxiUpdating(true);
     setFfxiDlDetail('Starting FFXI files update...');
-    if (api.storeSet) await api.storeSet('ffxiUpdaterUrl', ffxiMirrorUrl);
-    const result = await api.downloadFullClient(ffxiMirrorUrl);
+    // Main saves the link to the active profile.
+    const result = await api.downloadFullClient(ffxiMirrorUrl, config.activeProfile);
     setFfxiUpdating(false);
     if (result.success) {
       setFfxiUpdaterStatus({ ok: true, msg: result.message || 'FFXI files successfully updated!' });
+      announceGameFilesChange(); // "no game files here yet" notes are now stale
     } else {
       setFfxiUpdaterStatus({ ok: false, msg: result.error });
     }
   };
-
-  // Close profile dropdown when clicking outside
-  useEffect(() => {
-    if (!profileDropdownOpen) return;
-    const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setProfileDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [profileDropdownOpen]);
-
-  // Close server picker when clicking outside
-  useEffect(() => {
-    if (!serverPickerOpen) return;
-    const handleClickOutside = (e) => {
-      if (serverPickerRef.current && !serverPickerRef.current.contains(e.target)) {
-        setServerPickerOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [serverPickerOpen]);
 
   useEffect(() => {
     if (!api?.getStartupWarnings) return;
@@ -146,6 +165,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
       // A retail profile doesn't use a loader, so never flag one as missing for it.
       const loaderOk = !loader || loader.isRetail || loader.exists;
       setStatus({ ashita, ffxi, xiloader: loaderOk, loaderName: loader?.name || 'xiloader', profileCount: profiles.length });
+      setLoaderInfo(loader || {});
       setProfiles(profiles);
     };
     check();
@@ -204,25 +224,41 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
     setMultiBoxLaunching(false);
   };
 
-  // Server status — checked on demand only. Auto-polling was removed because
-  // probing the LSB login port with a TCP connect+destroy shows up in the
-  // connect server log as "stream truncated / Failed to handshake" for every
-  // poll (auth_session sees EOF mid-handshake).
+  // Server status — one check when Home opens and whenever the profile or server changes,
+  // plus the manual button. Never polled: probing the LSB login port with a TCP
+  // connect+destroy shows up in the connect server log as "stream truncated / Failed to
+  // handshake" for every probe (auth_session sees EOF mid-handshake).
   const [checkingServer, setCheckingServer] = useState(false);
-  const checkServer = async () => {
-    if (!api?.checkServerStatus || !config.serverHost || checkingServer) return;
+  const serverCheckId = useRef(0); // only the latest check may report, so a switch mid-check can't show the old server's result
+  const checkServer = useCallback(async () => {
+    if (!api?.checkServerStatus || !config.serverHost) return;
+    const id = ++serverCheckId.current;
     setCheckingServer(true);
     try {
       const result = await api.checkServerStatus(config.serverHost, config.serverPort);
-      setServerStatus(result);
+      if (id === serverCheckId.current) setServerStatus(result);
     } catch (e) {
-      setServerStatus({ online: false, error: e.message || 'Check failed' });
+      if (id === serverCheckId.current) setServerStatus({ online: false, error: e.message || 'Check failed' });
     } finally {
-      setCheckingServer(false);
+      if (id === serverCheckId.current) setCheckingServer(false);
+    }
+  }, [config.serverHost, config.serverPort]);
+  // Retail profiles don't use the private server (null until the first readiness check).
+  const isRetail = loaderInfo ? !!loaderInfo.isRetail : null;
+  useEffect(() => {
+    setServerStatus(null);
+    if (isRetail === false) checkServer();
+  }, [checkServer, config.activeProfile, isRetail]);
+
+  const pickServer = async (s) => {
+    updateConfig('serverHost', s.host);
+    if (s.port) updateConfig('serverPort', s.port);
+    // Launches connect to the profile ini's --server, so change it there too.
+    if (config.activeProfile && api?.setProfileServer) {
+      const res = await api.setProfileServer(config.activeProfile, s.host);
+      if (res?.error) console.error('Failed to update profile server:', res.error);
     }
   };
-  // Clear stale status when the target server changes
-  useEffect(() => { setServerStatus(null); }, [config.serverHost, config.serverPort]);
 
   // Listen for update download progress
   useEffect(() => {
@@ -251,271 +287,170 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
     }
   };
 
-  const setupComplete = status.ashita && status.ffxi && config.activeProfile;
-  const stepsComplete = [status.ashita, status.ffxi, !!config.activeProfile].filter(Boolean).length;
+  // The Sidebar's music note sits just under the top bar (and any notice), so tell it how
+  // far down that reaches.
+  useEffect(() => {
+    const root = document.documentElement;
+    const measure = () => {
+      const top = topRef.current;
+      if (!top) return;
+      const noticesH = noticesRef.current?.offsetHeight || 0;
+      root.style.setProperty('--home-top-h', `${top.offsetTop + top.offsetHeight + (noticesH ? noticesH + 8 : 0)}px`);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (topRef.current) ro.observe(topRef.current);
+    if (noticesRef.current) ro.observe(noticesRef.current);
+    return () => { ro.disconnect(); root.style.removeProperty('--home-top-h'); };
+  }, []);
+
+  // A profile playing its own sandboxed copy doesn't need an installed FFXI — e.g. a launcher on a
+  // thumb drive, used on a PC that never had the game installed.
+  const readiness = {
+    ...status,
+    ffxi: status.ffxi || (gameFiles?.mode === 'sandbox' && !!gameFiles.filesFound),
+  };
+  const setupComplete = readiness.ashita && readiness.ffxi && config.activeProfile;
+  const stepsComplete = [readiness.ashita, readiness.ffxi, !!config.activeProfile].filter(Boolean).length;
+
+  const profileSwitcher = (close) => (
+    <ProfileSwitcher
+      profiles={profiles}
+      activeProfile={config.activeProfile}
+      gameFilesTag={gameFilesTag}
+      onSelect={name => { updateConfig('activeProfile', name); if (close) close(); }}
+      onManage={() => { if (close) close(); onNavigate('profiles'); }}
+    />
+  );
+
+  const ok = <span className="home-tile-ok">✓</span>;
+  const gameFilesOk = !!gameFiles && gameFiles.filesFound && (gameFiles.mode === 'sandbox' || gameFiles.registered);
+  const serverTile = () => {
+    const host = config.serverHost;
+    if (isRetail) {
+      return { id: 'server', label: 'Server', readOnly: true, summary: 'Retail (PlayOnline)', title: 'Retail profiles connect through PlayOnline' };
+    }
+    let summary = <><span className="home-tile-dim">◌</span> {host} · <span className="home-tile-dim">checking</span></>;
+    let title = `${host}${config.serverPort ? ':' + config.serverPort : ''}`;
+    if (serverStatus && !checkingServer) {
+      summary = serverStatus.online
+        ? <><span className="home-tile-online">●</span> {host} · <span className="home-tile-online">Online {serverStatus.latency} ms</span></>
+        : <>⚠ {host} · Offline</>;
+      title += serverStatus.online ? ` — Online (${serverStatus.latency} ms)` : ' — Offline';
+    }
+    return {
+      id: 'server', label: 'Server', summary, title,
+      warn: !!serverStatus && !serverStatus.online && !checkingServer,
+      render: () => (
+        <ServerPanel
+          serverHost={host}
+          serverPort={config.serverPort}
+          favoriteServers={config.favoriteServers}
+          serverStatus={serverStatus}
+          checkingServer={checkingServer}
+          onCheck={checkServer}
+          onPick={pickServer}
+        />
+      ),
+    };
+  };
+
+  const tiles = !setupComplete ? [] : [
+    {
+      id: 'profile',
+      label: 'Profile',
+      summary: <><span className="mono">{config.activeProfile}</span>{gameFilesTag(config.activeProfile)}</>,
+      title: config.activeProfile,
+      render: close => profileSwitcher(close),
+    },
+    isRetail ? {
+      id: 'loader', label: 'Loader', readOnly: true, summary: 'Retail (PlayOnline)', title: "Retail profiles don't use a loader",
+    } : {
+      id: 'loader',
+      label: 'Loader',
+      summary: status.xiloader ? <>{status.loaderName} {ok}</> : '⚠ not installed',
+      title: loaderInfo?.label || status.loaderName,
+      warn: !status.xiloader,
+      render: () => <LoaderPicker compact profileName={config.activeProfile} />,
+    },
+    {
+      id: 'gamefiles',
+      label: 'Game files',
+      summary: gameFiles
+        ? <>{gameFiles.mode === 'sandbox' ? 'Sandboxed' : 'Installed'} {gameFilesOk ? ok : '⚠'}</>
+        : <span className="home-tile-dim">—</span>,
+      title: updaterTarget,
+      warn: !!gameFiles && !gameFilesOk,
+      panelWidth: 380,
+      render: () => <GameFilesPicker profileName={config.activeProfile} ffxiPath={config.ffxiPath} inDropdown />,
+    },
+    config.serverHost && serverTile(),
+    {
+      id: 'updater',
+      label: 'Files updater',
+      summary: ffxiUpdating ? `⚡ ${ffxiDlPercent}%` : '⚡ Run',
+      title: ffxiUpdating ? ffxiDlDetail : 'FFXI Files Updater',
+      panelWidth: 380,
+      render: () => (
+        <FilesUpdaterPanel
+          activeProfile={config.activeProfile}
+          mirrorUrl={ffxiMirrorUrl}
+          onMirrorUrlChange={setFfxiMirrorUrl}
+          updating={ffxiUpdating}
+          percent={ffxiDlPercent}
+          detail={ffxiDlDetail}
+          status={ffxiUpdaterStatus}
+          target={updaterTarget}
+          onRun={runFfxiUpdater}
+        />
+      ),
+    },
+    profiles.length > 1 && {
+      id: 'multibox',
+      label: 'Multi-box',
+      summary: `${multiBoxProfiles.length} selected`,
+      render: () => (
+        <MultiBoxPanel
+          profiles={profiles}
+          activeProfile={config.activeProfile}
+          selected={multiBoxProfiles}
+          onToggle={toggleMultiBoxProfile}
+          launching={multiBoxLaunching}
+          log={multiBoxLog}
+          onLaunch={launchMultiBox}
+        />
+      ),
+    },
+  ].filter(Boolean);
 
   return (
     <div className="home-tab">
-      {/* Left side — branding area, video shows through */}
-      <div className="home-left">
+      <div className="home-top" ref={topRef}>
+        {setupComplete && <HomeTopBar tiles={tiles} />}
+        <div className="home-notices" ref={noticesRef}>
+          <NoticeBanner
+            startupWarnings={startupWarnings}
+            onDismissWarnings={() => setStartupWarnings([])}
+            updateInfo={updateInfo}
+            updateDlStatus={updateDlStatus}
+            updateDlProgress={updateDlProgress}
+            updateDlError={updateDlError}
+            onDownloadUpdate={handleDownloadUpdate}
+            onSkipVersion={onSkipVersion}
+            onDismissUpdate={() => { setUpdateDlStatus(''); setUpdateDlProgress({ percent: 0, detail: '' }); setUpdateDlError(''); onDismissUpdate(); }}
+            onDismissUpdateError={() => { setUpdateDlStatus(''); setUpdateDlError(''); }}
+          />
+        </div>
+      </div>
+
+      {/* Middle — video shows through; scrolls on short windows rather than hiding Start Game */}
+      <div className="home-middle">
         <div className="home-branding">
           <img className="home-crystal-img" src="./crystal.svg" alt="Crystal" />
           <h1 className="home-title cinzel">XI Launcher</h1>
           <p className="home-subtitle">Final Fantasy XI</p>
-        </div>
-      </div>
-
-      {/* Right side — status panel */}
-      <div className="home-right">
-        {/* Startup warnings */}
-        {startupWarnings.length > 0 && (
-          <div className="home-panel-section home-warning-banner">
-            {startupWarnings.map((w, i) => (
-              <div key={i} className="home-warning-text">{w}</div>
-            ))}
-            <button className="home-update-dismiss" onClick={() => setStartupWarnings([])} aria-label="Dismiss">✕</button>
-          </div>
-        )}
-
-        {/* Update notification */}
-        {updateInfo && updateDlStatus === '' && (
-          <div className="home-panel-section home-update-banner">
-            <div className="home-update-row">
-              <span className="home-update-title">Update Available</span>
-              <div className="home-update-row-right">
-                <span className="pill pill-gold pill-xs">v{updateInfo.latest}</span>
-                <button className="home-update-dismiss" onClick={() => { setUpdateDlStatus(''); setUpdateDlProgress({ percent: 0, detail: '' }); setUpdateDlError(''); onDismissUpdate(); }} aria-label="Dismiss">✕</button>
-              </div>
-            </div>
-            {updateInfo.releaseNotes && (
-              <p className="home-update-notes">{updateInfo.releaseNotes.split('\n')[0]}</p>
-            )}
-            <div className="home-update-actions">
-              <button className="btn btn-primary btn-sm" onClick={handleDownloadUpdate}>
-                Download & Install
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => onSkipVersion(updateInfo.latest)}>
-                Skip this version
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Update downloading */}
-        {updateInfo && (updateDlStatus === 'downloading' || updateDlStatus === 'installing') && (
-          <div className="home-panel-section home-update-banner">
-            <div className="home-update-row">
-              <span className="home-update-title">
-                {updateDlStatus === 'installing' ? 'Installing...' : 'Downloading update...'}
-              </span>
-              <span className="pill pill-gold pill-xs">v{updateInfo.latest}</span>
-            </div>
-            <div className="home-update-progress">
-              <div className="home-progress-bar">
-                <div className="home-progress-fill" style={{ width: `${updateDlProgress.percent}%` }} />
-              </div>
-              <span className="home-progress-text">{updateDlProgress.percent}%</span>
-            </div>
-            <p className="home-update-detail">{updateDlProgress.detail}</p>
-          </div>
-        )}
-
-        {/* Update error */}
-        {updateInfo && updateDlStatus === 'error' && (
-          <div className="home-panel-section home-update-banner home-update-error">
-            <div className="home-update-row">
-              <span className="home-update-title">Update Failed</span>
-              <button className="home-update-dismiss" onClick={() => { setUpdateDlStatus(''); setUpdateDlError(''); }} aria-label="Dismiss">✕</button>
-            </div>
-            <p className="home-update-notes">{updateDlError}</p>
-            <button className="btn btn-primary btn-sm" onClick={handleDownloadUpdate}>
-              Retry
-            </button>
-          </div>
-        )}
-
-        {/* Status section — only show when something needs attention */}
-        {(!status.ashita || !status.ffxi || !status.xiloader) && (
-          <div className="home-panel-section">
-            <div className="home-panel-label">Game Status</div>
-            <div className="home-status-rows">
-              {!status.ashita && (
-                <div className="home-status-row">
-                  <span>Ashita v4</span>
-                  <span className="pill pill-red">Not Found</span>
-                </div>
-              )}
-              {!status.ffxi && (
-                <div className="home-status-row">
-                  <span>FFXI Client</span>
-                  <span className="pill pill-red">Not Set</span>
-                </div>
-              )}
-              {!status.xiloader && (
-                <div className="home-status-row">
-                  <span>{status.loaderName || 'xiloader'}</span>
-                  <span className="pill pill-red">Not Installed</span>
-                </div>
-              )}
-            </div>
-
-            {!status.ashita && !ashitaInstalling && ashitaError && (
-              <div className="home-ffxiupd-status err">✖ {ashitaError}</div>
-            )}
-            {!status.ashita && !ashitaInstalling && (
-              <button className="btn btn-primary btn-sm home-full-btn" onClick={installAshitaV4}>
-                ↓ Install Ashita v4
-              </button>
-            )}
-            {ashitaInstalling && (
-              <div className="home-install-progress">
-                <div className="home-progress-bar home-progress-bar-tight">
-                  <div className="home-progress-fill" style={{ width: `${ashitaProgress.percent}%` }} />
-                </div>
-                <span className="home-progress-text">{ashitaProgress.detail}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Quick create — only shows when no profile exists */}
-        {!config.activeProfile && status.ashita && status.ffxi && status.profileCount === 0 && (
-          <div className="home-panel-section">
-            <div className="home-panel-label">Quick Setup</div>
-            <div className="home-quick-create">
-              <select
-                className="form-select home-full-input"
-                value={profileType}
-                onChange={e => setProfileType(e.target.value)}
-              >
-                <option value="private">Private server</option>
-                <option value="retail">Retail (PlayOnline)</option>
-              </select>
-              <input
-                type="text"
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                placeholder="Profile name..."
-                onKeyDown={e => e.key === 'Enter' && createAndActivate()}
-              />
-              <button
-                className="btn btn-primary btn-sm home-full-btn"
-                onClick={createAndActivate}
-                disabled={creating || !newName.trim()}
-              >
-                {creating ? '◌ Creating...' : 'Create Profile'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Setup progress — only when not complete */}
-        {!setupComplete && (
-          <div className="home-panel-section">
-            <div className="home-panel-label">Setup Progress</div>
-            <div className="home-progress">
-              <div className="home-progress-bar">
-                <div className="home-progress-fill" style={{ width: `${(stepsComplete / 3) * 100}%` }} />
-              </div>
-              <span className="home-progress-text">{stepsComplete} of 3</span>
-            </div>
-          </div>
-        )}
-
-        {/* Profile + Start Game */}
-        <div className="home-panel-section">
-          <div className="home-panel-label">Game Profile</div>
-          {profiles.length > 0 ? (
-            <div className="home-profile-switcher" ref={dropdownRef}>
-              <div
-                className="home-profile-display"
-                role="button"
-                tabIndex={0}
-                aria-expanded={profileDropdownOpen}
-                onClick={() => setProfileDropdownOpen(prev => !prev)}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setProfileDropdownOpen(prev => !prev); } }}
-              >
-                <span className="home-profile-name mono">{config.activeProfile || 'Select profile'}</span>
-                <span className="home-profile-change">{profileDropdownOpen ? '▲' : '▼'}</span>
-              </div>
-              {profileDropdownOpen && (
-                <div className="home-profile-dropdown" role="listbox">
-                  {profiles.map(name => (
-                    <div
-                      key={name}
-                      role="option"
-                      aria-selected={config.activeProfile === name}
-                      className={`home-profile-option ${config.activeProfile === name ? 'active' : ''}`}
-                      onClick={() => { updateConfig('activeProfile', name); setProfileDropdownOpen(false); }}
-                    >
-                      {config.activeProfile === name && <span className="home-profile-active-dot">✦</span>}
-                      <span>{name}</span>
-                    </div>
-                  ))}
-                  <div role="option" className="home-profile-option home-profile-manage" onClick={() => { setProfileDropdownOpen(false); onNavigate('profiles'); }}>
-                    ⚙ Manage Profiles...
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="home-profile-none" onClick={() => onNavigate('profiles')}>
-              <span>No profiles yet</span>
-              <span className="home-step-action">Go to Profiles →</span>
-            </div>
-          )}
-          {setupComplete && (
-            <div className="home-panel-launch home-launch-merged">
-              <LoaderPicker
-                compact
-                profileName={config.activeProfile}
-              />
-              {config.serverHost && (
-                <div className="home-conn-section">
-                  <div className="home-server-picker-wrap" ref={serverPickerRef}>
-                    <div className="home-conn-host mono" onClick={() => setServerPickerOpen(o => !o)}>
-                      <span>{config.serverHost}</span>
-                      <span className="home-conn-host-caret">{serverPickerOpen ? '▴' : '▾'}</span>
-                    </div>
-                    {serverPickerOpen && (
-                      <div className="home-server-picker">
-                        {(config.favoriteServers || []).length === 0 ? (
-                          <div className="home-server-picker-empty">
-                            No favorites yet — star a server in the Servers tab
-                          </div>
-                        ) : (config.favoriteServers || []).map((s, i) => (
-                          <div
-                            key={i}
-                            className={`home-server-picker-item${s.host === config.serverHost ? ' active' : ''}`}
-                            onClick={async () => {
-                              updateConfig('serverHost', s.host);
-                              if (s.port) updateConfig('serverPort', s.port);
-                              setServerStatus(null);
-                              setServerPickerOpen(false);
-                              // Launches connect to the profile ini's --server, so change it there too.
-                              if (config.activeProfile && api?.setProfileServer) {
-                                const res = await api.setProfileServer(config.activeProfile, s.host);
-                                if (res?.error) console.error('Failed to update profile server:', res.error);
-                              }
-                            }}
-                          >
-                            <span className="home-server-picker-name">{s.name}</span>
-                            <span className="home-server-picker-host mono">{s.host}{s.port ? ':' + s.port : ''}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="home-conn-check-row">
-                    <button className="btn btn-ghost home-conn-btn" onClick={checkServer} disabled={checkingServer}>
-                      {checkingServer ? 'Checking...' : 'Check connection'}
-                    </button>
-                    <div className={`home-conn-status-box${!serverStatus ? '' : serverStatus.online ? ' online' : ' offline'}`}>
-                      {!serverStatus ? '—' : serverStatus.online ? `Online (${serverStatus.latency}ms)` : 'Offline'}
-                    </div>
-                  </div>
-                </div>
-              )}
+          {setupComplete ? (
+            <div className="home-hero-launch">
               <button
                 className="btn btn-primary home-start-btn"
                 disabled={isLaunching || !config.activeProfile}
@@ -529,99 +464,27 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
                 </span>
               )}
             </div>
+          ) : (
+            <SetupCard
+              status={readiness}
+              stepsComplete={stepsComplete}
+              activeProfile={config.activeProfile}
+              profiles={profiles}
+              profileSwitcher={profileSwitcher()}
+              onNavigate={onNavigate}
+              ashitaInstalling={ashitaInstalling}
+              ashitaProgress={ashitaProgress}
+              ashitaError={ashitaError}
+              onInstallAshita={installAshitaV4}
+              profileType={profileType}
+              onProfileTypeChange={setProfileType}
+              newName={newName}
+              onNewNameChange={setNewName}
+              creating={creating}
+              onCreate={createAndActivate}
+            />
           )}
         </div>
-
-        {/* Multi-Box Launch */}
-        {setupComplete && profiles.length > 1 && (
-          <div className="home-panel-section home-panel-divider">
-            <div
-              className="home-profile-display"
-              role="button"
-              tabIndex={0}
-              aria-expanded={multiBoxOpen}
-              onClick={() => setMultiBoxOpen(o => !o)}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setMultiBoxOpen(o => !o); } }}
-            >
-              <span className="home-multibox-title">Multi-Box Launch</span>
-              <span className="home-profile-change">{multiBoxOpen ? '▲' : '▼'}</span>
-            </div>
-            {multiBoxOpen && (
-              <div className="home-multibox-body">
-                <p className="home-multibox-hint">
-                  Select profiles to launch simultaneously. Each will start in sequence with a 2-second delay.
-                </p>
-                <div className="home-multibox-list">
-                  {profiles.map(name => (
-                    <label key={name} className={`home-multibox-label ${multiBoxProfiles.includes(name) ? 'selected' : ''}`}>
-                      <input type="checkbox" checked={multiBoxProfiles.includes(name)} onChange={() => toggleMultiBoxProfile(name)} />
-                      <span>{name}</span>
-                      {config.activeProfile === name && <span className="pill pill-gold pill-xs">Active</span>}
-                    </label>
-                  ))}
-                </div>
-                <button
-                  className="btn btn-primary btn-sm home-full-btn"
-                  disabled={multiBoxLaunching || multiBoxProfiles.length === 0}
-                  onClick={launchMultiBox}
-                >
-                  {multiBoxLaunching ? '◌ Launching...' : `Launch ${multiBoxProfiles.length} Instance${multiBoxProfiles.length !== 1 ? 's' : ''}`}
-                </button>
-                {multiBoxLog && (
-                  <pre className="home-multibox-log">{multiBoxLog}</pre>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* FFXI Files Updater */}
-        {setupComplete && (
-          <div className="home-panel-section home-panel-divider">
-            <div className="home-panel-label home-panel-label-tight">FFXI Files Updater</div>
-            <div className="form-field home-ffxiupd-field">
-              <div className="form-field-label"><span className="form-field-name">Mirror URL</span></div>
-              <input
-                type="text"
-                className="form-input"
-                value={ffxiMirrorUrl}
-                placeholder="Custom mirror link (optional, https)"
-                onChange={e => setFfxiMirrorUrl(e.target.value)}
-                disabled={ffxiUpdating}
-                spellCheck={false}
-              />
-              <p className="form-field-desc">
-                Downloads pre-patched FFXI files into your game folder. Leave blank for the default{' '}
-                <a href="#vana-portal" className="home-ffxiupd-link" onClick={e => { e.preventDefault(); api?.openExternal?.('https://vana-portal.com/downloads/updates'); }}>Vana Portal</a>{' '}
-                mirror. Close FFXI before running.
-              </p>
-            </div>
-            {ffxiUpdating && (
-              <div className="home-install-progress">
-                <div className="home-progress-bar home-progress-bar-tight">
-                  <div className="home-progress-fill" style={{ width: `${ffxiDlPercent}%` }} />
-                </div>
-                <span className="home-progress-text">{ffxiDlDetail}</span>
-              </div>
-            )}
-            {ffxiUpdaterStatus && !ffxiUpdating && (
-              <div className={`home-ffxiupd-status ${ffxiUpdaterStatus.ok ? 'ok' : 'err'}`}>
-                {ffxiUpdaterStatus.ok ? '✔ ' : '✖ '}{ffxiUpdaterStatus.msg}
-              </div>
-            )}
-            <button
-              className="btn btn-primary btn-sm home-full-btn"
-              onClick={runFfxiUpdater}
-              disabled={ffxiUpdating}
-            >
-              {ffxiUpdating ? `◌ Updating (${ffxiDlPercent}%)` : '⚡ Run FFXI Files Updater'}
-            </button>
-            <div className="home-contrib-credit">
-              contributed by Demetrie
-            </div>
-          </div>
-        )}
-
       </div>
 
       {/* Bottom-left utility corner */}

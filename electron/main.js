@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, safeStorage, session, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, safeStorage, session, Tray, Menu, nativeImage, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -9,6 +9,8 @@ const crypto = require('crypto');
 const loaders = require('./loaders');
 const { SERVER_ADDRESSES } = require('./serverAddresses');
 const ffxiMirror = require('./ffxiMirror');
+const sandbox = require('./sandbox');
+const windowState = require('./windowState');
 const addonInstall = require('./addonInstall');
 
 /**
@@ -16,9 +18,12 @@ const addonInstall = require('./addonInstall');
  * @param {string} zipPath - Path to the zip file
  * @param {string} destDir - Directory to extract into
  * @param {function} onProgress - Called with (percent, filename) during extraction
+ * @param {object} [options]
+ * @param {function} [options.resolveDest] - (entryName) → { base, rel } to place the entry at
+ *   base/rel, or null to skip it. Defaults to destDir/entryName.
  * @returns {Promise<number>} Number of files extracted
  */
-function extractZip(zipPath, destDir, onProgress) {
+function extractZip(zipPath, destDir, onProgress, { resolveDest } = {}) {
   return new Promise((resolve, reject) => {
     let settled = false;
     const fail = (err) => { if (!settled) { settled = true; reject(err); } };
@@ -34,10 +39,16 @@ function extractZip(zipPath, destDir, onProgress) {
 
       zipfile.readEntry();
       zipfile.on('entry', (entry) => {
-        const entryPath = path.join(destDir, entry.fileName);
-        // Zip slip protection: reject entries that escape destDir
+        const dest = resolveDest ? resolveDest(entry.fileName) : { base: destDir, rel: entry.fileName };
+        if (!dest) {
+          extracted++;
+          zipfile.readEntry();
+          return;
+        }
+        const entryPath = path.join(dest.base, dest.rel);
+        // Zip slip protection: reject entries that escape their target folder
         const resolved = path.resolve(entryPath);
-        if (!resolved.startsWith(path.resolve(destDir) + path.sep) && resolved !== path.resolve(destDir)) {
+        if (!resolved.startsWith(path.resolve(dest.base) + path.sep) && resolved !== path.resolve(dest.base)) {
           return fail(new Error(`Zip entry escapes target: ${entry.fileName}`));
         }
 
@@ -60,7 +71,13 @@ function extractZip(zipPath, destDir, onProgress) {
           }
           zipfile.openReadStream(entry, (err, readStream) => {
             if (err) return fail(err);
-            const writeStream = fs.createWriteStream(entryPath);
+            let writeStream;
+            try {
+              writeStream = createOverwriteStream(entryPath);
+            } catch (e) {
+              try { readStream.destroy(); } catch {}
+              return fail(e);
+            }
             // Both streams need error listeners — an unhandled 'error' event
             // crashes the main process.
             readStream.on('error', (e) => { try { writeStream.destroy(); } catch {} fail(e); });
@@ -78,6 +95,40 @@ function extractZip(zipPath, destDir, onProgress) {
       });
 
       zipfile.on('end', () => finish(extracted));
+    });
+  });
+}
+
+// Windows refuses to open an existing hidden, system or read-only file for writing (EPERM),
+// but does allow deleting it — so replace such a file instead of overwriting it in place.
+function createOverwriteStream(filePath) {
+  let fd;
+  try {
+    fd = fs.openSync(filePath, 'w');
+  } catch (e) {
+    if ((e.code !== 'EPERM' && e.code !== 'EACCES') || !fs.existsSync(filePath)) throw e;
+    try {
+      fs.chmodSync(filePath, 0o666);
+      fs.unlinkSync(filePath);
+      fd = fs.openSync(filePath, 'w');
+    } catch {
+      throw e;
+    }
+  }
+  return fs.createWriteStream(filePath, { fd });
+}
+
+// A zip's entries as { name, size } (uncompressed bytes), read from its central directory
+// without extracting anything.
+function listZipEntries(zipPath) {
+  return new Promise((resolve, reject) => {
+    yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
+      if (err) return reject(err);
+      const entries = [];
+      zipfile.on('error', reject);
+      zipfile.on('entry', (entry) => { entries.push({ name: entry.fileName, size: entry.uncompressedSize }); zipfile.readEntry(); });
+      zipfile.on('end', () => resolve(entries));
+      zipfile.readEntry();
     });
   });
 }
@@ -384,6 +435,9 @@ function githubGet(apiPath, { timeoutMs = 10000, force = false } = {}) {
 // Check available disk space (returns bytes free on the drive containing targetPath)
 // Uses fs.statfsSync, not PowerShell: Get-PSDrive output parsed as 0 MB whenever the
 // user's PowerShell profile printed anything, which falsely blocked installs.
+// Headroom left on a drive after a big download/extract, so Windows isn't left at 0 bytes.
+const DISK_SPACE_MARGIN = 256 * 1024 * 1024;
+
 function checkDiskSpace(targetPath) {
   try {
     // statfs needs an existing path — walk up to the nearest ancestor that exists.
@@ -625,6 +679,73 @@ function syncProfileLoader(ashitaPath, profileName) {
   return { resolved };
 }
 
+// Which game files a profile plays from: the installed FFXI (Profiles → Installation Paths)
+// or its own sandboxed copy. Picked per profile under Home → Game files.
+function profileGameFiles(ashitaPath, profileName) {
+  let ini = null;
+  try { ini = fs.readFileSync(profileIniPath(ashitaPath, profileName), 'utf-8'); } catch {}
+  const settings = (store.get('profileSettings') || {})[profileName] || {};
+  const gameFiles = sandbox.resolveGameFiles({ settings, ini, installedFfxiPath: store.get('ffxiPath') });
+  // An ini written on another PC (no saved settings here) can name a copy in this launcher's
+  // runtime\clients under an old drive letter — use the copy where it is now.
+  if (gameFiles.mode === 'sandbox' && !gameFiles.chosen && !fs.existsSync(gameFiles.ffxi)) {
+    const rebased = sandbox.rebaseClientCopy(gameFiles.ffxi, runtimeDir);
+    if (rebased && fs.existsSync(rebased)) {
+      const folder = path.win32.dirname(rebased);
+      return { ...gameFiles, folder, ...sandbox.copyPaths(folder) };
+    }
+  }
+  return gameFiles;
+}
+
+// The launcher is portable: a thumb drive's letter can change between PCs, or the folder can
+// be moved. Saved paths that pointed inside its previous folder (Ashita, xiloader, sandboxed
+// copies, custom loaders) are moved to where it is now. Paths elsewhere are left alone.
+function relocateSavedPaths() {
+  const lastRoot = store.get('launcherRoot');
+  if (lastRoot && !sandbox.isSameFolder(lastRoot, appRoot)) {
+    for (const key of ['ashitaPath', 'xiloaderPath', 'ffxiPath']) {
+      const saved = store.get(key);
+      const moved = sandbox.relocatePath(saved, lastRoot, appRoot);
+      if (moved !== saved) store.set(key, moved);
+    }
+    const all = store.get('profileSettings') || {};
+    let changed = false;
+    for (const settings of Object.values(all)) {
+      if (!settings || typeof settings !== 'object') continue;
+      for (const key of ['sandboxFolder', 'loaderExePath', 'xiloaderPath']) {
+        const moved = sandbox.relocatePath(settings[key], lastRoot, appRoot);
+        if (moved !== settings[key]) { settings[key] = moved; changed = true; }
+      }
+    }
+    if (changed) store.set('profileSettings', all);
+    console.log(`[launcher] moved from ${lastRoot} to ${appRoot} — saved paths updated`);
+  }
+  store.set('launcherRoot', appRoot);
+}
+
+// Make the profile's [ashita.polplugins] sandbox / [sandbox.paths] match its game files before
+// Ashita reads the ini. Retail profiles too — Sandbox works for both.
+function syncProfileGameFiles(ashitaPath, profileName) {
+  const iniPath = profileIniPath(ashitaPath, profileName);
+  const content = fs.readFileSync(iniPath, 'utf-8');
+  const updated = sandbox.planGameFilesSync(content, profileGameFiles(ashitaPath, profileName));
+  if (updated !== null) fs.writeFileSync(iniPath, updated, 'utf-8');
+}
+
+// True if PlayOnline's installer registered ffxiPath as the FFXI install — i.e. the game runs
+// from it without Sandbox.
+async function isRegisteredFfxiInstall(ffxiPath) {
+  for (const region of ['PlayOnlineUS', 'PlayOnline', 'PlayOnlineEU']) {
+    const regFfxi = await new Promise((resolve) => {
+      execFile('reg', ['query', `HKLM\\SOFTWARE\\WOW6432Node\\${region}\\InstallFolder`, '/v', '0001'], { windowsHide: true, timeout: 5000 },
+        (err, stdout) => resolve(err ? null : sandbox.parseRegFfxiFolder(stdout)));
+    });
+    if (sandbox.isSameFolder(regFfxi, ffxiPath)) return true;
+  }
+  return false;
+}
+
 // xiloader 2.2.0 removed --serverport and exits on unknown arguments. Profiles the
 // launcher generated before then may still pass it, so strip it from the boot command.
 function stripRemovedXiloaderArgs(profileIni) {
@@ -746,11 +867,18 @@ function createTray() {
 }
 
 function createWindow() {
+  // Reopen at the size and place the player left it (centred at the default size the first
+  // time, or when the saved spot is on a screen that's no longer connected).
+  const bounds = windowState.restoreWindowState(
+    store.get('windowState'),
+    screen.getAllDisplays().map(d => d.workArea)
+  );
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
+    ...(bounds.x !== undefined ? { x: bounds.x, y: bounds.y } : {}),
+    width: bounds.width,
+    height: bounds.height,
+    minWidth: windowState.MIN_SIZE.width,
+    minHeight: windowState.MIN_SIZE.height,
     frame: false,
     icon: getAppIcon(),
     backgroundColor: '#0a0c10',
@@ -760,6 +888,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js')
     }
   });
+  if (bounds.maximized) mainWindow.maximize();
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
@@ -795,6 +924,11 @@ function createWindow() {
   });
 
   mainWindow.on('close', (e) => {
+    // Normal bounds = the restored size even while maximized, so un-maximizing next time
+    // goes back to it.
+    try {
+      store.set('windowState', { ...mainWindow.getNormalBounds(), maximized: mainWindow.isMaximized() });
+    } catch {}
     if (minimizeToTray && tray) {
       e.preventDefault();
       mainWindow.hide();
@@ -1088,6 +1222,9 @@ app.whenReady().then(async () => {
 
   await initStore();
 
+  // Run before anything reads a saved path: the launcher may have moved since last time.
+  relocateSavedPaths();
+
   // Set default paths only if not already configured
   if (!store.get('ashitaPath')) {
     store.set('ashitaPath', defaultAshitaPath);
@@ -1239,6 +1376,74 @@ function registerIPC() {
     if (!profileName || !sanitizeName(profileName)) return { error: 'Invalid profile name.' };
     try {
       return syncProfileLoader(store.get('ashitaPath') || defaultAshitaPath, profileName);
+    } catch (e) {
+      return { error: `Could not update profile: ${e.message}` };
+    }
+  });
+
+  // Game files for the Home / Profiles picker. filesFound = the FFXI folder has game data;
+  // registered (installed mode) = Windows lists it as the FFXI install, so it runs unsandboxed.
+  const gameFilesStatus = async (profileName) => {
+    const gameFiles = profileGameFiles(store.get('ashitaPath') || defaultAshitaPath, profileName);
+    const settings = (store.get('profileSettings') || {})[profileName] || {};
+    return {
+      ...gameFiles,
+      installedFfxiPath: store.get('ffxiPath') || '',
+      lastSandboxFolder: settings.sandboxFolder || (gameFiles.mode === 'sandbox' ? gameFiles.folder : ''),
+      // Default home for a new copy. Inside runtime\ because the launcher's self-update
+      // mirrors over everything else in its folder.
+      suggestedFolder: path.join(runtimeDir, 'clients', profileName),
+      // The profile's FFXI Files Updater link; profiles from before it was per profile
+      // start from the launcher-wide one.
+      updaterUrl: settings.ffxiUpdaterUrl ?? store.get('ffxiUpdaterUrl') ?? '',
+      filesFound: !!gameFiles.ffxi && fs.existsSync(path.join(gameFiles.ffxi, 'ROM')),
+      registered: gameFiles.mode === 'installed' && !!gameFiles.ffxi ? await isRegisteredFfxiInstall(gameFiles.ffxi) : false,
+    };
+  };
+
+  ipcMain.handle('get-profile-game-files', async (_, profileName) => {
+    if (!profileName || !sanitizeName(profileName)) return { error: 'Invalid profile name.' };
+    try {
+      return await gameFilesStatus(profileName);
+    } catch (e) {
+      return { error: `Could not read profile: ${e.message}` };
+    }
+  });
+
+  // Home profile list tags: profile name → 'installed' | 'sandbox'. No registry lookups, so it
+  // stays quick for a long list.
+  ipcMain.handle('get-game-files-modes', (_, profileNames) => {
+    const ashitaPath = store.get('ashitaPath') || defaultAshitaPath;
+    const modes = {};
+    for (const name of Array.isArray(profileNames) ? profileNames : []) {
+      if (typeof name === 'string' && sanitizeName(name)) modes[name] = profileGameFiles(ashitaPath, name).mode;
+    }
+    return modes;
+  });
+
+  // mode 'installed' | 'sandbox'; folder = the sandboxed copy's folder (or a game folder in it).
+  // createFolder: make the folder first (the suggested default doesn't exist yet). Saved per
+  // profile and applied to the profile ini straight away.
+  ipcMain.handle('set-profile-game-files', async (_, profileName, mode, folder, createFolder) => {
+    if (!profileName || !sanitizeName(profileName)) return { error: 'Invalid profile name.' };
+    if (mode !== 'installed' && mode !== 'sandbox') return { error: 'Invalid game files choice.' };
+    const all = store.get('profileSettings') || {};
+    const next = { ...(all[profileName] || {}), gameFiles: mode };
+    if (mode === 'sandbox') {
+      const copyFolder = sandbox.normalizeCopyFolder(folder || next.sandboxFolder);
+      if (copyFolder && createFolder && path.win32.isAbsolute(copyFolder)) {
+        try { fs.mkdirSync(copyFolder, { recursive: true }); } catch (e) {
+          return { error: `Couldn't create ${copyFolder}: ${e.message}` };
+        }
+      }
+      if (!copyFolder || !fs.existsSync(copyFolder)) return { error: 'Pick the folder for this profile\'s game files first.' };
+      next.sandboxFolder = copyFolder;
+    }
+    try {
+      all[profileName] = loaders.sanitizeLoaderSettings(next);
+      store.set('profileSettings', all);
+      syncProfileGameFiles(store.get('ashitaPath') || defaultAshitaPath, profileName);
+      return { success: true, ...(await gameFilesStatus(profileName)) };
     } catch (e) {
       return { error: `Could not update profile: ${e.message}` };
     }
@@ -1717,7 +1922,7 @@ function registerIPC() {
   });
 
   // ── 📥 FFXI FILES UPDATER (Vana Portal mirror or custom URL) ──
-  ipcMain.handle('download-full-client', async (_, customUrl) => {
+  ipcMain.handle('download-full-client', async (_, customUrl, profileName) => {
     if (fullClientUpdateInProgress) {
       return { success: false, error: 'An FFXI files update is already in progress.' };
     }
@@ -1744,12 +1949,45 @@ function registerIPC() {
         }
       }
 
-      // The target must already exist — extracting into a freshly created empty
-      // folder just hides a misconfigured path (and Program Files needs admin).
-      const targetFfxiPath = store.get('ffxiPath')
-        || 'C:\\Program Files (x86)\\PlayOnline\\SquareEnix\\FINAL FANTASY XI';
-      if (!fs.existsSync(targetFfxiPath)) {
-        return { success: false, error: `FFXI directory not found: ${targetFfxiPath} — set your FFXI path in the Profiles tab first.` };
+      // Each profile remembers its own link — a sandboxed copy keeps updating from the server
+      // it came from. ('' = the default mirror.)
+      const validProfile = profileName && sanitizeName(profileName);
+      if (validProfile) {
+        const all = store.get('profileSettings') || {};
+        all[profileName] = loaders.sanitizeLoaderSettings({ ...(all[profileName] || {}), ffxiUpdaterUrl: clientUrl });
+        store.set('profileSettings', all);
+      } else {
+        store.set('ffxiUpdaterUrl', clientUrl);
+      }
+
+      // Install into the active profile's game files: its sandboxed copy, or the installed FFXI.
+      const gameFiles = validProfile
+        ? profileGameFiles(store.get('ashitaPath') || defaultAshitaPath, profileName)
+        : { mode: 'installed', ffxi: store.get('ffxiPath') };
+      let targetFfxiPath;
+      let polPath;
+      if (gameFiles.mode === 'sandbox') {
+        // The player picked this folder for the copy, so its game folders can be created.
+        if (!fs.existsSync(gameFiles.folder)) {
+          return { success: false, error: `Game files folder not found: ${gameFiles.folder} — pick it again under Game files on the Home tab.` };
+        }
+        targetFfxiPath = gameFiles.ffxi;
+        polPath = gameFiles.pol;
+        fs.mkdirSync(targetFfxiPath, { recursive: true });
+      } else {
+        // The target must already exist — extracting into a freshly created empty
+        // folder just hides a misconfigured path (and Program Files needs admin).
+        targetFfxiPath = gameFiles.ffxi || 'C:\\Program Files (x86)\\PlayOnline\\SquareEnix\\FINAL FANTASY XI';
+        polPath = path.join(path.dirname(targetFfxiPath), 'PlayOnlineViewer');
+        if (!fs.existsSync(targetFfxiPath)) {
+          return { success: false, error: `FFXI directory not found: ${targetFfxiPath} — set your FFXI path in the Profiles tab first.` };
+        }
+        // The FFXI path must be the FINAL FANTASY XI folder itself, not the folder holding it —
+        // otherwise the game files land one level too high.
+        const innerFfxiPath = path.join(targetFfxiPath, 'FINAL FANTASY XI');
+        if (fs.existsSync(innerFfxiPath) && !fs.existsSync(path.join(targetFfxiPath, 'ROM'))) {
+          return { success: false, error: `Your FFXI path points at the folder that contains FINAL FANTASY XI. Set it to ${innerFfxiPath} in Profiles → Installation Paths, or choose "Sandboxed copy" for this profile under Game files on the Home tab.` };
+        }
       }
 
       // Refuse to overwrite game files while the client holds them open — a
@@ -1803,6 +2041,16 @@ function registerIPC() {
           }
 
           const totalSize = parseInt(response.headers['content-length'] || '0', 10);
+          // The archive is downloaded to the temp folder first — make sure it fits there.
+          if (totalSize > 0) {
+            const freeForDownload = checkDiskSpace(tmpDir);
+            if (freeForDownload < totalSize + DISK_SPACE_MARGIN) {
+              // Reject before aborting — an aborted net.request emits neither 'end' nor 'error'.
+              reject(new Error(`Not enough disk space to download: the update is ${ffxiMirror.formatSize(totalSize)}, but only ${ffxiMirror.formatSize(freeForDownload)} is free on ${path.parse(tmpDir).root} (where Windows keeps temporary files). Free up some space and run the updater again.`));
+              try { request.abort(); } catch {}
+              return;
+            }
+          }
           let downloaded = 0;
           const writeStream = fs.createWriteStream(tmpZipFile);
 
@@ -1896,16 +2144,49 @@ function registerIPC() {
         sendProgress(75, 'No checksum published by this mirror — proceeding unverified...');
       }
 
+      // Mirrors wrap the files differently (see planClientLayout): FFXI files go into the
+      // FFXI folder, PlayOnline files into the PlayOnlineViewer folder beside it — the same
+      // pair of paths a sandboxed profile is pointed at.
+      const zipEntries = await listZipEntries(tmpZipFile);
+      const layout = ffxiMirror.planClientLayout(zipEntries.map(e => e.name));
+      const fileEntries = zipEntries.filter(e => !/[\\/]$/.test(e.name));
+      const placedFiles = fileEntries.map(e => layout(e.name)).filter(Boolean);
+      if (placedFiles.length === 0) {
+        try { fs.unlinkSync(tmpZipFile); } catch {}
+        return { success: false, error: 'The downloaded archive contained no FFXI files — nothing was installed. Check the mirror link.' };
+      }
+      const polFiles = placedFiles.filter(p => p.root === 'pol').length;
+      const resolveDest = (name) => {
+        const placed = layout(name);
+        return placed && { base: placed.root === 'pol' ? polPath : targetFfxiPath, rel: placed.rel };
+      };
+
+      // Running out of space mid-extraction leaves a half-updated game, so check first.
+      sendProgress(76, 'Checking disk space...');
+      const spaceNeeded = ffxiMirror.extractSpaceNeeded(fileEntries.map(e => {
+        const dest = resolveDest(e.name);
+        if (!dest) return { size: 0 };
+        let existingSize = 0;
+        try { existingSize = fs.statSync(path.join(dest.base, dest.rel)).size; } catch {}
+        return { size: e.size, existingSize };
+      }));
+      const freeOnTarget = checkDiskSpace(targetFfxiPath);
+      if (freeOnTarget < spaceNeeded + DISK_SPACE_MARGIN) {
+        try { fs.unlinkSync(tmpZipFile); } catch {}
+        return { success: false, error: `Not enough disk space to install: the game files need ${ffxiMirror.formatSize(spaceNeeded)} more on ${path.parse(path.resolve(targetFfxiPath)).root}, but only ${ffxiMirror.formatSize(freeOnTarget)} is free. Free up some space (or pick a folder on another drive under Game files) and run the updater again.` };
+      }
+
       await extractZip(tmpZipFile, targetFfxiPath, (pct, filename) => {
         const scaledExtractPct = 77 + Math.round(pct * 0.21);
         sendProgress(scaledExtractPct, `Applying updates: ${pct}% — ${path.basename(filename)}`);
-      });
+      }, { resolveDest });
 
       sendProgress(99, 'Cleaning up...');
       try { if (fs.existsSync(tmpZipFile)) fs.unlinkSync(tmpZipFile); } catch {}
 
       sendProgress(100, 'FFXI files successfully updated!');
-      return { success: true, message: `FFXI files updated in ${targetFfxiPath}${checksumNote}` };
+      const polNote = polFiles ? ` and PlayOnline files in ${polPath}` : '';
+      return { success: true, message: `FFXI files updated in ${targetFfxiPath}${polNote}${checksumNote}` };
 
     } catch (err) {
       console.error('❌ [FFXI Files Updater Failure]:', err.message);
@@ -2511,6 +2792,7 @@ function registerIPC() {
       let sync;
       try {
         sync = syncProfileLoader(opts.ashitaPath, opts.profileName);
+        syncProfileGameFiles(opts.ashitaPath, opts.profileName);
       } catch (e) {
         return { error: `Couldn't update profile "${opts.profileName}" before launch: ${e.message}` };
       }

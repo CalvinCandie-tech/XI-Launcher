@@ -1,0 +1,140 @@
+/* Game files choice — Home tab (under the Loader) and the Profiles-tab Game Files popup */
+.game-files {
+  margin-top: 12px;
+}
+
+.game-files-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.game-files-info {
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, text-shadow 0.15s;
+}
+
+.game-files-info-text {
+  margin-left: 5px;
+  font-size: 11px;
+}
+
+/* In the Home drop-down, which has its own heading: start at the top, ⓘ link on the right */
+.game-files.in-dropdown {
+  margin-top: 0;
+}
+
+.game-files.in-dropdown .game-files-label {
+  justify-content: flex-end;
+}
+
+.game-files-info:hover,
+.game-files-info.open {
+  color: var(--gold-bright);
+  text-shadow: 0 0 6px var(--gold-glow);
+}
+
+.game-files-info:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.game-files-explain {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-bright);
+  border-left: 2px solid var(--gold);
+  border-radius: 4px;
+  background: var(--bg-card);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.game-files-explain strong {
+  color: var(--text-primary);
+}
+
+.game-files-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.game-files-option:hover {
+  background: var(--bg-hover);
+}
+
+.game-files-option.selected {
+  border-color: var(--border-bright);
+  background: var(--active-bg);
+  color: var(--text-bright);
+}
+
+.game-files-option input[type="radio"] {
+  accent-color: var(--gold);
+  margin: 0;
+  cursor: pointer;
+}
+
+.game-files-sub {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.game-files-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 6px 30px;
+}
+
+.game-files-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.game-files-actions {
+  display: flex;
+  gap: 8px;
+  margin: 2px 0;
+}
+
+.game-files-path {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.game-files-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.game-files-note.ok {
+  color: var(--green);
+}
+
+.game-files-note.err {
+  color: var(--amber);
+}

@@ -1,0 +1,151 @@
+/* Top bar — tiles wrap into balanced rows; --cols is set from the bar's width */
+.home-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+  background: rgba(8, 11, 16, 0.86);
+  border: 1px solid var(--border-bright);
+  border-radius: 9px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+
+.home-tile {
+  position: relative;
+  flex: 1 1 calc((100% - (var(--cols) - 1) * 6px) / var(--cols) - 1px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 6px 22px 6px 10px;
+  background: var(--bg-panel-alpha);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.home-tile:hover {
+  border-color: var(--gold-dim);
+}
+
+.home-tile.open {
+  border-color: var(--gold);
+  box-shadow: 0 0 8px var(--gold-glow);
+}
+
+.home-tile.warn {
+  border-color: var(--amber-border);
+}
+
+.home-tile.warn .home-tile-summary {
+  color: var(--amber);
+}
+
+.home-tile.readonly {
+  cursor: default;
+  padding-right: 10px;
+}
+
+.home-tile.readonly:hover {
+  border-color: var(--border);
+}
+
+.home-tile-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.home-tile-summary {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.home-tile-caret {
+  position: absolute;
+  right: 9px;
+  bottom: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.home-tile-ok {
+  color: var(--green);
+}
+
+.home-tile-dim {
+  color: var(--text-dim);
+}
+
+.home-tile-online {
+  color: var(--green);
+}
+
+.home-tile-offline {
+  color: var(--red);
+}
+
+/* Drop-down — fixed to the window, under its tile */
+.home-dropdown {
+  position: fixed;
+  z-index: var(--z-overlay);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-deepest-alpha);
+  border: 1px solid var(--border-bright);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 8px var(--gold-glow);
+  backdrop-filter: blur(6px);
+  animation: home-dropdown-in 0.12s ease-out;
+}
+
+@keyframes home-dropdown-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.home-dropdown-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px 7px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.home-dropdown-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.home-dropdown-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.home-dropdown-close:hover {
+  color: var(--text-primary);
+}
+
+.home-dropdown-body {
+  padding: 12px 14px 14px;
+  overflow-y: auto;
+  min-height: 0;
+}
