@@ -7,7 +7,7 @@ const { execSync, spawn, exec, execFile } = require('child_process');
 const yauzl = require('yauzl');
 const crypto = require('crypto');
 const loaders = require('./loaders');
-const { SERVER_ADDRESSES } = require('./serverAddresses');
+const serverList = require('./serverList');
 const ffxiMirror = require('./ffxiMirror');
 const sandbox = require('./sandbox');
 const windowState = require('./windowState');
@@ -5331,105 +5331,200 @@ function registerIPC() {
     });
   });
 
-  // Fetch community server list from XiPrivateServers GitHub
-  // (known connection addresses live in serverAddresses.js)
+  // Curated server list — servers/servers.json in the XI-Launcher repo, so addresses, new
+  // servers and closures reach players without a launcher release. Falls back to the last
+  // good fetch, then to the copy packaged with the launcher.
+  let serverListState = null;
 
-  // Extra servers not listed on XiPrivateServers SERVERS.md
-  const EXTRA_SERVERS = [
-    { name: 'CatsEyeXI', category: '75 - Custom Content', website: 'https://catseyexi.com', discord: 'https://discord.gg/catseyexi', expansion: 'WotG', rates: 'Custom', moveSpeed: '', features: ['Sync', 'Trusts', 'Multi'] },
-    { name: 'Phoenix XI', category: '75 - Retail-Like', website: 'https://phoenix-xi.com', discord: '', expansion: 'ToAU', rates: '1x', moveSpeed: '', features: [] },
-  ];
+  function readBundledServerList() {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'servers', 'servers.json'), 'utf-8'));
+    } catch {
+      return null;
+    }
+  }
 
-  // Servers confirmed no longer active — hidden even if still present in the
-  // upstream XiPrivateServers list. Matched against the parsed server name.
-  const REMOVED_SERVERS = new Set(['Demiurge', 'Era', 'DSP Old School', 'Tonberry', 'Caldera', 'Made to Raid']);
+  function fetchServerListJson() {
+    // Dev-only override for testing the offline / cache / moved-banner paths.
+    const override = !app.isPackaged && process.env.XI_SERVER_LIST_URL;
+    const url = override || serverList.SERVER_LIST_URL;
+    if (override && !/^https?:/i.test(url)) {
+      return Promise.resolve(JSON.parse(fs.readFileSync(url, 'utf-8')));
+    }
+    return retryAsync(() => new Promise((resolve, reject) => {
+      const req = https.get(url, { headers: { 'User-Agent': 'XI-Launcher', 'Cache-Control': 'no-cache' } }, (res) => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          return reject(new Error(`HTTP ${res.statusCode}`));
+        }
+        let data = '';
+        res.setEncoding('utf8');
+        res.on('data', c => data += c);
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch {
+            reject(new Error('Server list is not valid JSON'));
+          }
+        });
+        res.on('error', reject);
+      });
+      req.setTimeout(8000, () => req.destroy(new Error('Timed out')));
+      req.on('error', reject);
+    }), { retries: 2, delay: 1000, label: 'Server list fetch' });
+  }
+
+  async function loadServerList() {
+    let fetched = null;
+    try {
+      fetched = await fetchServerListJson();
+    } catch (e) {
+      console.error('[server-list] fetch failed:', e.message);
+    }
+    if (fetched && serverList.validateServerList(fetched).list?.servers.length) {
+      store.set('serverListCache', { json: fetched, fetchedAt: Date.now() });
+    }
+    const cache = store.get('serverListCache');
+    const resolved = serverList.resolveServerList({ fetched, cached: cache?.json, bundled: readBundledServerList() });
+    const fetchedAt = resolved.source === 'live' ? Date.now() : resolved.source === 'cache' ? cache?.fetchedAt || null : null;
+    serverListState = { ...resolved, fetchedAt };
+    return serverListState;
+  }
+
+  // Every place a server address is saved: favourites, the selected server, and each
+  // profile's settings + Ashita ini (--server). Retail inis have no host.
+  function savedServerHosts() {
+    const ashitaPath = store.get('ashitaPath') || defaultAshitaPath;
+    const profileSettings = store.get('profileSettings') || {};
+    const names = new Set(Object.keys(profileSettings));
+    try {
+      for (const f of fs.readdirSync(path.join(ashitaPath, 'config', 'boot'))) {
+        if (f.toLowerCase().endsWith('.ini')) names.add(f.slice(0, -4));
+      }
+    } catch { /* no Ashita profiles yet */ }
+    const profiles = [];
+    for (const name of names) {
+      if (sanitizeName(name) !== name) continue;
+      let iniHost = '';
+      try {
+        iniHost = loaders.parseIniBoot(fs.readFileSync(profileIniPath(ashitaPath, name), 'utf-8')).host || '';
+      } catch { /* settings-only profile */ }
+      const ps = profileSettings[name];
+      profiles.push({ name, settingsHost: (ps && typeof ps === 'object' && ps.serverHost) || '', iniHost });
+    }
+    return {
+      ashitaPath,
+      favorites: store.get('favoriteServers') || [],
+      serverHost: store.get('serverHost') || '',
+      profiles,
+    };
+  }
 
   ipcMain.handle('fetch-server-list', async () => {
     try {
-      const raw = await retryAsync(() => new Promise((resolve, reject) => {
-        https.get({
-          hostname: 'raw.githubusercontent.com',
-          path: '/XiPrivateServers/Servers/main/SERVERS.md',
-          headers: { 'User-Agent': 'XI-Launcher' }
-        }, (res) => {
-          if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
-          let data = '';
-          res.on('data', c => data += c);
-          res.on('end', () => resolve(data));
-          res.on('error', reject);
-        }).on('error', reject);
-      }), { label: 'Server list fetch' });
-
-      // Parse markdown tables into structured data
-      const categories = [];
-      let currentCategory = null;
-      for (const line of raw.split('\n')) {
-        // Category headers: "# Level Cap: 75 - Retail-Like"
-        const catMatch = line.match(/^#\s+Level Cap:\s*(.+)/);
-        if (catMatch) {
-          currentCategory = { name: catMatch[1].trim(), servers: [] };
-          categories.push(currentCategory);
-          continue;
-        }
-        // Table rows (skip header and separator rows)
-        if (!currentCategory || !line.startsWith('|') || line.includes('---') || line.includes('Name')) continue;
-        const cells = line.split('|').map(c => c.trim()).filter(Boolean);
-        if (cells.length < 8 || cells[0] === 'N/A') continue;
-        // Parse name + URL: [Name](url)
-        const nameMatch = cells[0].match(/\[([^\]]+)\]\(([^)]+)\)/);
-        const discordMatch = cells[1].match(/\[Join\]\(([^)]+)\)/);
-        const serverName = nameMatch ? nameMatch[1] : cells[0];
-        if (REMOVED_SERVERS.has(serverName)) continue;
-        // Try category-qualified lookup first (e.g. "LevelDown 75"), then plain name
-        const capMatch = currentCategory.name.match(/^(\d+)/);
-        const qualifiedName = capMatch ? `${serverName} ${capMatch[1]}` : serverName;
-        const known = SERVER_ADDRESSES[qualifiedName] || SERVER_ADDRESSES[serverName] || {};
-        currentCategory.servers.push({
-          name: serverName,
-          website: nameMatch ? nameMatch[2] : '',
-          discord: discordMatch ? discordMatch[1] : '',
-          expansion: cells[2].replace(/<br\s*\/?>/gi, ' ').replace(/[_()]/g, '').trim(),
-          rates: cells[3],
-          moveSpeed: cells[4],
-          levelSync: cells[5].includes('heavy_check_mark'),
-          trusts: cells[6].includes('heavy_check_mark'),
-          dualBox: cells[7].replace(/<br\s*\/?>/gi, ' ').replace(/[_()]/g, '').replace(/:heavy_check_mark:/g, 'Yes').replace(/:x:/g, 'No').replace(/:question:/g, '?').trim(),
-          address: known.host || '',
-          port: known.port || '',
-          note: known.note || ''
-        });
+      const state = await loadServerList();
+      if (state.source === 'none') {
+        return { success: false, error: 'Could not load the server list. Check your internet connection and try again.' };
       }
-      // Merge extra servers not on XiPrivateServers list
-      const existingNames = new Set();
-      for (const cat of categories) for (const s of cat.servers) existingNames.add(s.name);
-      for (const extra of EXTRA_SERVERS) {
-        if (existingNames.has(extra.name)) continue;
-        const known = SERVER_ADDRESSES[extra.name] || {};
-        let targetCat = categories.find(c => c.name === extra.category);
-        if (!targetCat) {
-          targetCat = { name: extra.category, servers: [] };
-          categories.push(targetCat);
-        }
-        targetCat.servers.push({
-          name: extra.name,
-          website: extra.website,
-          discord: extra.discord,
-          expansion: extra.expansion,
-          rates: extra.rates,
-          moveSpeed: extra.moveSpeed,
-          levelSync: extra.features.includes('Sync'),
-          trusts: extra.features.includes('Trusts'),
-          dualBox: extra.features.includes('Multi') ? 'Yes' : '',
-          address: known.host || '',
-          port: known.port || '',
-          note: known.note || ''
-        });
+      const local = store.get('localServers') || {};
+      const { servers, redundant } = serverList.applyLocalServers(state.list.servers, local);
+      if (redundant.length) {
+        const next = { ...local };
+        for (const id of redundant) delete next[id];
+        store.set('localServers', next);
       }
-
-      return { success: true, categories: categories.filter(c => c.servers.length > 0) };
+      return {
+        success: true,
+        categories: serverList.groupByCategory(servers),
+        source: state.source,
+        updated: state.list.updated,
+        fetchedAt: state.fetchedAt,
+      };
     } catch (e) {
-      return { success: false, error: friendlyError(e, 'Fetching server list') };
+      const err = friendlyError(e, 'Fetching server list');
+      return { success: false, error: typeof err === 'string' ? err : err.error };
     }
+  });
+
+  ipcMain.handle('save-local-server', async (_, input) => {
+    const state = serverListState || await loadServerList();
+    const local = { ...(store.get('localServers') || {}) };
+    const result = serverList.sanitizeLocalServer(input, {
+      officialIds: new Set(state.list.servers.map(s => s.id)),
+      localIds: new Set(Object.keys(local)),
+    });
+    if (result.error) return { error: result.error };
+    local[result.entry.id] = result.entry;
+    store.set('localServers', local);
+    return { success: true, id: result.entry.id };
+  });
+
+  ipcMain.handle('reset-local-server', (_, id) => {
+    const local = { ...(store.get('localServers') || {}) };
+    if (typeof id === 'string') delete local[id];
+    store.set('localServers', local);
+    return { success: true };
+  });
+
+  ipcMain.handle('get-moved-hosts', async () => {
+    try {
+      const state = serverListState || await loadServerList();
+      return serverList.findMovedHosts(state.list.servers, savedServerHosts())
+        .map(m => ({ ...m, summary: serverList.describeUsedBy(m.usedBy) }));
+    } catch (e) {
+      console.error('[server-list] moved-host check failed:', e.message);
+      return [];
+    }
+  });
+
+  // Player clicked Update on a "server moved" banner. The move is re-derived here from the
+  // official list rather than trusted from the renderer. Main rewrites profile settings and
+  // inis; the renderer saves favourites + selected server through updateConfig.
+  ipcMain.handle('apply-moved-host', async (_, request) => {
+    try {
+      const state = serverListState || await loadServerList();
+      const saved = savedServerHosts();
+      const move = serverList.findMovedHosts(state.list.servers, saved).find(m =>
+        m.serverId === request?.serverId && serverList.sameHost(m.fromHost, request?.fromHost));
+      if (!move) return { error: 'That server address change no longer applies.' };
+
+      const changedProfiles = [];
+      const warnings = [];
+      const all = store.get('profileSettings') || {};
+      let settingsChanged = false;
+      for (const [name, ps] of Object.entries(all)) {
+        if (ps && typeof ps === 'object' && serverList.sameHost(ps.serverHost, move.fromHost)) {
+          all[name] = { ...ps, serverHost: move.toHost };
+          settingsChanged = true;
+          changedProfiles.push(name);
+        }
+      }
+      if (settingsChanged) store.set('profileSettings', all);
+
+      for (const p of saved.profiles) {
+        if (!serverList.sameHost(p.iniHost, move.fromHost)) continue;
+        try {
+          const iniPath = profileIniPath(saved.ashitaPath, p.name);
+          const content = fs.readFileSync(iniPath, 'utf-8');
+          const updated = loaders.setIniServer(content, move.toHost);
+          if (updated !== content) fs.writeFileSync(iniPath, updated, 'utf-8');
+          if (!changedProfiles.includes(p.name)) changedProfiles.push(p.name);
+        } catch (e) {
+          warnings.push(`Could not update profile '${p.name}': ${e.message}`);
+        }
+      }
+
+      const next = serverList.applyMoveToConfig({ favorites: saved.favorites, serverHost: saved.serverHost }, move);
+      return { success: true, favoriteServers: next.favorites, serverHost: next.serverHost, changedProfiles, warnings };
+    } catch (e) {
+      return { error: `Could not update: ${e.message}` };
+    }
+  });
+
+  ipcMain.handle('open-server-issue', async (_, kind, payload) => {
+    if (kind !== 'suggestion' && kind !== 'problem') return false;
+    await shell.openExternal(serverList.buildIssueUrl(kind, payload || {}));
+    return true;
   });
 
   // One-Click Backup — creates a ZIP of config/boot, scripts, and addon settings

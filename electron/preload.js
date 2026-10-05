@@ -168,6 +168,11 @@ contextBridge.exposeInMainWorld('xiAPI', {
   // Server status
   checkServerStatus: (host, port) => ipcRenderer.invoke('check-server-status', host, port),
   fetchServerList: () => ipcRenderer.invoke('fetch-server-list'),
+  saveLocalServer: (entry) => ipcRenderer.invoke('save-local-server', entry),
+  resetLocalServer: (id) => ipcRenderer.invoke('reset-local-server', id),
+  getMovedHosts: () => ipcRenderer.invoke('get-moved-hosts'),
+  applyMovedHost: (move) => ipcRenderer.invoke('apply-moved-host', move),
+  openServerIssue: (kind, payload) => ipcRenderer.invoke('open-server-issue', kind, payload),
 
   // Backup / Restore
   backupAshitaConfig: () => ipcRenderer.invoke('backup-ashita-config'),
