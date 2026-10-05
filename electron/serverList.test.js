@@ -312,3 +312,10 @@ test('buildIssueUrl stays under the length cap by trimming details', () => {
   assert.ok(new URL(url).searchParams.get('details').length > 0);
   assert.ok(new URL(url).searchParams.get('json'));
 });
+
+test('the shipped servers/servers.json validates with no errors', () => {
+  const json = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'servers', 'servers.json'), 'utf-8'));
+  const { list, errors } = SL.validateServerList(json);
+  assert.deepEqual(errors, []);
+  assert.ok(list.servers.length >= 10);
+});

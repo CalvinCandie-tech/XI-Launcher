@@ -10,7 +10,7 @@
     "react-start": "react-scripts start",
     "build": "react-scripts build",
     "dist": "npm run build && electron-builder",
-    "test:electron": "node --test electron/*.test.js"
+    "test:electron": "node --test electron/*.test.js scripts/*.test.js"
   },
   "dependencies": {
     "electron-store": "^8.1.0",
@@ -34,6 +34,7 @@
     "files": [
       "build/**/*",
       "electron/**/*",
+      "servers/servers.json",
       "node_modules/**/*",
       "package.json"
     ],

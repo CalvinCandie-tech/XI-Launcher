@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "updated": "2026-10-05",
+  "ignoredUpstream": ["Demiurge", "Era", "DSP Old School", "Tonberry", "Caldera", "Made to Raid"],
+  "servers": [
+    {
+      "id": "eden",
+      "name": "Eden",
+      "category": "75 - Retail-Like",
+      "host": "play.edenxi.com",
+      "port": "",
+      "previousHosts": [],
+      "website": "https://edenxi.com/",
+      "discord": "https://discord.gg/S3EAWr2Jec",
+      "tags": { "expansion": "ToAU", "rates": "Retail", "levelSync": true, "multiBox": true },
+      "note": ""
+    },
+    {
+      "id": "omega",
+      "name": "Omega",
+      "category": "75 - Retail-Like",
+      "host": "lobby.ffxi.party",
+      "port": "54230",
+      "previousHosts": [],
+      "website": "https://ffxi.party/",
+      "discord": "https://discord.gg/srNwwCs",
+      "tags": { "expansion": "ToAU", "rates": "Retail", "moveSpeed": "Slightly faster than retail", "levelSync": true, "multiBox": true },
+      "note": ""
+    },
+    {
+      "id": "phoenix-xi",
+      "name": "Phoenix XI",
+      "category": "75 - Retail-Like",
+      "host": "",
+      "port": "",
+      "previousHosts": [],
+      "website": "https://phoenix-xi.com",
+      "discord": "https://discord.gg/phoenix-xi",
+      "tags": { "expansion": "ToAU", "rates": "1x" },
+      "note": "Uses its own Phoenix Launcher — no public address to connect with XI Launcher."
+    },
+    {
+      "id": "gaia-xi",
+      "name": "Gaia XI",
+      "category": "75 - Custom Content",
+      "host": "login.gaiaxi.com",
+      "port": "",
+      "previousHosts": [],
+      "website": "https://gaiaxi.com/",
+      "discord": "https://discord.gg/2c6HjwNuNK",
+      "tags": { "expansion": "ToAU", "rates": "Custom", "moveSpeed": "2x retail", "levelSync": true, "multiBox": true },
+      "note": ""
+    },
+    {
+      "id": "horizonxi",
+      "name": "HorizonXI",
+      "category": "75 - Custom Content",
+      "host": "",
+      "port": "",
+      "previousHosts": [],
+      "website": "https://horizonxi.com/",
+      "discord": "https://discord.gg/horizonxi",
+      "tags": { "expansion": "CoP", "rates": "Retail" },
+      "note": "Uses its own HorizonXI launcher — it can't be started from XI Launcher."
+    },
+    {
+      "id": "leveldown",
+      "name": "LevelDown",
+      "category": "75 - Custom Content",
+      "host": "leveldownffxi.com",
+      "port": "",
+      "previousHosts": [],
+      "website": "https://ffxileveldown.fandom.com/wiki/FFXILevelDown_Wiki",
+      "discord": "https://discord.gg/uZ5J2KwAPA",
+      "tags": { "expansion": "WotG", "rates": "Custom", "levelSync": true, "trusts": true, "multiBox": true },
+      "note": "75 and 99 players share one server since 2026-09-16."
+    },
+    {
+      "id": "nasomi",
+      "name": "Nasomi",
+      "category": "75 - Custom Content",
+      "host": "na.nasomi.com",
+      "port": "",
+      "previousHosts": [],
+      "website": "https://na.nasomi.com/",
+      "discord": "",
+      "tags": { "expansion": "ToAU", "levelSync": true, "multiBox": true },
+      "note": ""
+    },
+    {
+      "id": "supernova",
+      "name": "Supernova",
+      "category": "75 - Custom Content",
+      "host": "login.supernovaffxi.com",
+      "port": "",
+      "previousHosts": [],
+      "website": "https://supernovaffxi.wordpress.com/",
+      "discord": "https://discord.gg/QBBdfQh",
+      "tags": { "expansion": "ToAU", "rates": "Custom", "levelSync": true, "multiBox": true },
+      "note": ""
+    },
+    {
+      "id": "catseyexi",
+      "name": "CatsEyeXI",
+      "category": "75 - Custom Content",
+      "host": "server.catseyexi.com",
+      "port": "",
+      "previousHosts": [],
+      "website": "https://catseyexi.com",
+      "discord": "https://discord.gg/catseyexi",
+      "tags": { "expansion": "WotG", "rates": "Custom", "levelSync": true, "trusts": true, "multiBox": true },
+      "note": ""
+    },
+    {
+      "id": "valhalla",
+      "name": "Valhalla",
+      "category": "90 - Custom Content",
+      "host": "logon.valhalla.group",
+      "port": "",
+      "previousHosts": [],
+      "website": "https://valhalla.group/",
+      "discord": "https://discord.gg/enB8nh3FKp",
+      "tags": { "expansion": "Abyssea", "rates": "Custom", "levelSync": true, "trusts": true, "multiBox": true },
+      "note": ""
+    },
+    {
+      "id": "legendary",
+      "name": "Legendary",
+      "category": "99 - Custom Content",
+      "host": "",
+      "port": "",
+      "previousHosts": [],
+      "website": "https://legendary-ffxi.pages.dev/",
+      "discord": "https://discord.gg/7asbVtR",
+      "tags": { "expansion": "All", "rates": "Custom", "moveSpeed": "5x retail", "levelSync": true, "trusts": true, "multiBox": true },
+      "note": "Connection address not listed yet — use Edit if you know it."
+    },
+    {
+      "id": "ff11sf",
+      "name": "ff11sf",
+      "category": "99 - Custom Content (Chinese Servers)",
+      "host": "update.ff11sf.com",
+      "port": "",
+      "previousHosts": [],
+      "website": "http://update.ff11sf.com/",
+      "discord": "",
+      "tags": { "expansion": "All", "rates": "Retail", "levelSync": true, "trusts": true, "multiBox": true },
+      "note": ""
+    }
+  ]
+}
