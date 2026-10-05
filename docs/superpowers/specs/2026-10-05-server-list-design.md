@@ -68,22 +68,22 @@ Field rules:
 
 - `id` — required, lowercase slug `[a-z0-9-]+`, unique, never changes (survives renames). Ids beginning `local-` are reserved for player-made servers.
 - `name`, `category` — required strings. Category order in the tab follows first appearance in the file.
-- `host` — may be empty; then `note` explains why (e.g. HorizonXI needs its own launcher; Phoenix not launched). Empty host ⇒ no status badge, no favourite star, no edit-host.
+- `host` — may be empty; then `note` explains why (e.g. HorizonXI needs its own launcher; Phoenix not launched). Empty host ⇒ no status badge and no favourite star; ✎ Edit is still offered so a player who knows the address can add it locally.
 - `port` — optional string of digits. Used only for the status probe (xiloader 2.2.0 has no `--serverport`); probe falls back to 54231.
 - `previousHosts` — old addresses, newest first. Must not contain the current `host`. When the owner changes an address, the old one moves here.
 - `upstreamName` — optional; the name used on XiPrivateServers when it differs from `name`. Defaults to `name`.
 - `tags` — all optional: `expansion` (string), `rates` (string), `moveSpeed` (string), `levelSync`/`trusts`/`multiBox` (booleans).
-- `website`, `discord`, `note` — optional strings. Links must be `https://`.
+- `website`, `discord`, `note` — optional strings. Links must start with `https://` or `http://` (same rule as the `open-external` IPC); any other link is cleared and reported as an error.
 - `ignoredUpstream` — top-level; XiPrivateServers names the owner has deliberately not listed (closed or unsupported).
 - Unknown fields are ignored. Removing a server = deleting its entry.
 
-Seed: generated once from today's SERVERS.md parse + `serverAddresses.js` + `EXTRA_SERVERS`, minus `REMOVED_SERVERS` (which become `ignoredUpstream`), with tags cleaned by hand. A copy is bundled in the build as `resources/servers.json` (first-run-offline fallback only).
+Seed: generated once from today's SERVERS.md parse + `serverAddresses.js` + `EXTRA_SERVERS`, minus `REMOVED_SERVERS` (which become `ignoredUpstream`), with tags cleaned by hand. The same file is packaged into the app by adding `servers/servers.json` to `build.files` and read from `path.join(__dirname, '..', 'servers', 'servers.json')` (first-run-offline fallback only).
 
 ## 2. Launcher
 
 ### 2.1 `electron/serverList.js` (new, pure, unit-tested)
 
-- `validateServerList(json)` → `{ list, errors }`. Drops entries without valid `id`/`name`, duplicate ids (keeps first), non-https links; strips a `previousHosts` entry equal to `host`. Never throws.
+- `validateServerList(json)` → `{ list, errors }`. Drops entries without a valid `id`/`name`/`category` and duplicate ids (keeps first); clears links that are not http(s); strips a `previousHosts` entry equal to `host`. Never throws.
 - `resolveServerList({ fetched, cached, bundled })` → `{ list, source: 'live'|'cache'|'bundled', updated }`. First valid of live → cache → bundled.
 - `applyLocalServers(list, localServers)` → merged list. Overrides (official id) replace host/port/name/links and set `localEdit: true`; custom (`local-*`) entries are appended under category "My servers". An override whose values now equal the official entry is returned in `redundant` and deleted from `localServers` by `fetch-server-list`.
 - `findMovedHosts(list, saved)` → array of `{ serverId, name, fromHost, toHost, usedBy: [{ kind: 'favourite'|'profile', profile? }] }`. `saved` = favourites, `profileSettings[*].serverHost`, and the `--server` host of each Ashita profile ini (`loaders.parseIniBoot(text).host`, read by `main.js` and passed in). Matching is case-insensitive on host.
@@ -95,6 +95,7 @@ Seed: generated once from today's SERVERS.md parse + `serverAddresses.js` + `EXT
 - `get-moved-hosts` → `findMovedHosts` result for the current saved state.
 - `apply-moved-host({ serverId, fromHost, toHost })` → rewrites matching favourites (host, and adds `id`), every `profileSettings[*].serverHost` equal to `fromHost`, and each matching profile ini via the existing `loaders.setIniServer`. Returns what changed.
 - `check-server-status` — unchanged; the tab calls it per server.
+- Dev-only override: when `!app.isPackaged` and `XI_SERVER_LIST_URL` is set, that URL (or a local file path) is used instead of the GitHub URL — for live testing of the offline, cache and moved-banner paths.
 
 ### 2.3 Servers tab (`src/tabs/ServerBrowserTab.js`)
 
@@ -115,12 +116,12 @@ Keeps the current card layout. Additions:
 Daily schedule + `workflow_dispatch`. Node, no dependencies; reuses `validateServerList` from `electron/serverList.js`.
 
 - **Health:** TCP-probe each `host` (`port` or 54231), 3 attempts 30 s apart. State `health.json` = `{ [id]: { lastOk, firstFail } }` committed to branch `server-health` (not `master`). If `now - lastOk ≥ 3 days` and no open issue labelled `server-down` with that id in the title → open "⚠ <name> unreachable since <date> (<id>)". When the server answers again → comment and close that issue.
-- **Upstream watch:** fetch SERVERS.md, collect names; diff against `upstreamName ?? name` of all entries plus `ignoredUpstream`. Open one issue per change, labelled `upstream-change`, deduped by title: "XiPrivateServers added: <name>" / "XiPrivateServers removed: <name>".
+- **Upstream watch:** fetch SERVERS.md, collect names; diff day-over-day against the previous run's names (kept in `health.json` as `upstream`). Added = new names that are not already listed (`upstreamName ?? name`) or in `ignoredUpstream`; on the first run (no previous names) every unlisted, non-ignored name counts as added. Removed = names that disappeared and belong to a server we list. Open one issue per change, labelled `upstream-change`, deduped by title: "XiPrivateServers added: <name>" / "XiPrivateServers removed: <name>".
 - Uses `GITHUB_TOKEN` with `issues: write`, `contents: write`.
 
 ### 3.2 `.github/workflows/servers-validate.yml`
 
-On push / PR touching `servers/servers.json`: run `validateServerList`; fail on any error (bad JSON, missing/duplicate id, non-https link, current host in `previousHosts`).
+On push / PR touching `servers/servers.json`: run `validateServerList`; fail on any error (bad JSON, missing/duplicate id, non-http(s) link, current host in `previousHosts`).
 
 ### 3.3 Issue templates
 
