@@ -152,6 +152,87 @@ function groupByCategory(servers) {
   ];
 }
 
+const OVERRIDE_KEYS = ['name', 'host', 'port', 'website', 'discord'];
+
+function slugify(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'server';
+}
+
+// Check what the Add / Edit form sent. Editing an official server stores only the fields the
+// player filled in (an override); anything else is the player's own server under a local- id.
+function sanitizeLocalServer(input, { officialIds = new Set(), localIds = new Set() } = {}) {
+  const src = input && typeof input === 'object' ? input : {};
+  const name = str(src.name);
+  if (!name) return { error: 'Give the server a name.' };
+  const host = str(src.host);
+  if (host && !HOST_RE.test(host)) return { error: 'The address can only contain letters, digits, dots and dashes.' };
+  const port = str(src.port);
+  if (port && !isPort(port)) return { error: 'The port must be a number up to 65535.' };
+  const website = str(src.website);
+  const discord = str(src.discord);
+  if ((website && !isLink(website)) || (discord && !isLink(discord))) {
+    return { error: 'Links must start with https:// or http://.' };
+  }
+
+  const id = str(src.id);
+  if (officialIds.has(id)) {
+    const entry = { id };
+    for (const [k, v] of Object.entries({ name, host, port, website, discord })) {
+      if (v) entry[k] = v;
+    }
+    return { entry };
+  }
+
+  if (!host) return { error: 'Enter the server address (for example login.example.com).' };
+  let localId = id.startsWith('local-') && localIds.has(id) ? id : '';
+  if (!localId) {
+    const base = `local-${slugify(name)}`;
+    localId = base;
+    for (let n = 2; localIds.has(localId); n++) localId = `${base}-${n}`;
+  }
+  return { entry: { id: localId, name, host, port, website, discord, category: str(src.category) } };
+}
+
+// Lay the player's local edits over the official list. Overrides whose values now match the
+// official entry are returned in `redundant` so the caller can delete them.
+function applyLocalServers(servers, localServers) {
+  const local = localServers && typeof localServers === 'object' ? localServers : {};
+  const redundant = [];
+  const merged = servers.map((s) => {
+    const o = local[s.id];
+    if (!o || typeof o !== 'object') return s;
+    const changes = {};
+    for (const k of OVERRIDE_KEYS) {
+      const v = str(o[k]);
+      if (!v) continue;
+      const same = k === 'host' ? sameHost(v, s.host) : v === s[k];
+      if (!same) changes[k] = v;
+    }
+    if (Object.keys(changes).length === 0) {
+      redundant.push(s.id);
+      return s;
+    }
+    return { ...s, ...changes, localEdit: true, official: { name: s.name, host: s.host, port: s.port } };
+  });
+  const custom = Object.values(local)
+    .filter(o => o && typeof o === 'object' && typeof o.id === 'string' && o.id.startsWith('local-'))
+    .map(o => ({
+      id: o.id,
+      name: str(o.name) || o.id,
+      category: MY_SERVERS_CATEGORY,
+      suggestedCategory: str(o.category),
+      host: str(o.host),
+      port: str(o.port),
+      previousHosts: [],
+      website: str(o.website),
+      discord: str(o.discord),
+      tags: {},
+      note: '',
+      custom: true,
+    }));
+  return { servers: [...custom, ...merged], redundant };
+}
+
 module.exports = {
   SERVER_LIST_URL,
   REPO_URL,
@@ -166,4 +247,7 @@ module.exports = {
   validateServerList,
   resolveServerList,
   groupByCategory,
+  slugify,
+  sanitizeLocalServer,
+  applyLocalServers,
 };

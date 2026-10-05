@@ -102,3 +102,86 @@ test('groupByCategory keeps first-appearance order and puts My servers first', (
     [['My servers', ['local-d']], ['X', ['a', 'c']], ['Y', ['b']]],
   );
 });
+
+const official = () => SL.validateServerList(doc([
+  entry(),
+  entry({ id: 'valhalla', name: 'Valhalla', category: '90 - Custom Content', host: 'logon.valhalla.group' }),
+])).list.servers;
+const idSet = (arr) => new Set(arr);
+
+test('slugify makes a servers.json-style id', () => {
+  assert.equal(SL.slugify('My Test Server!'), 'my-test-server');
+  assert.equal(SL.slugify('  ***  '), 'server');
+  assert.equal(SL.slugify(undefined), 'server');
+});
+
+test('sanitizeLocalServer turns an edit of an official server into an override of non-empty fields', () => {
+  const r = SL.sanitizeLocalServer(
+    { id: 'eden', name: 'Eden', host: 'new.edenxi.com', port: '', website: '', discord: '' },
+    { officialIds: idSet(['eden']), localIds: idSet([]) },
+  );
+  assert.equal(r.error, undefined);
+  assert.deepEqual(r.entry, { id: 'eden', name: 'Eden', host: 'new.edenxi.com' });
+});
+
+test('sanitizeLocalServer gives a new server a unique local- id', () => {
+  const r = SL.sanitizeLocalServer(
+    { name: 'My Test Server!', host: '10.0.0.5', category: '75 - Custom Content' },
+    { officialIds: idSet([]), localIds: idSet(['local-my-test-server']) },
+  );
+  assert.deepEqual(r.entry, {
+    id: 'local-my-test-server-2', name: 'My Test Server!', host: '10.0.0.5', port: '',
+    website: '', discord: '', category: '75 - Custom Content',
+  });
+});
+
+test('sanitizeLocalServer keeps an existing custom id when editing it', () => {
+  const r = SL.sanitizeLocalServer({ id: 'local-mine', name: 'Mine', host: 'b.com' }, { officialIds: idSet([]), localIds: idSet(['local-mine']) });
+  assert.equal(r.entry.id, 'local-mine');
+});
+
+test('sanitizeLocalServer rejects bad input with a readable message', () => {
+  const opts = { officialIds: idSet([]), localIds: idSet([]) };
+  assert.match(SL.sanitizeLocalServer({ name: '', host: 'a.com' }, opts).error, /name/i);
+  assert.match(SL.sanitizeLocalServer(null, opts).error, /name/i);
+  assert.match(SL.sanitizeLocalServer({ name: 'X', host: '' }, opts).error, /address/i);
+  assert.match(SL.sanitizeLocalServer({ name: 'X', host: 'a b' }, opts).error, /address/i);
+  assert.match(SL.sanitizeLocalServer({ name: 'X', host: 'a.com', port: '99999x' }, opts).error, /port/i);
+  assert.match(SL.sanitizeLocalServer({ name: 'X', host: 'a.com', website: 'file://c:/x' }, opts).error, /http/i);
+});
+
+test('applyLocalServers applies an override and remembers the official values', () => {
+  const { servers, redundant } = SL.applyLocalServers(official(), { eden: { id: 'eden', host: 'new.edenxi.com' } });
+  const eden = servers.find(s => s.id === 'eden');
+  assert.equal(eden.host, 'new.edenxi.com');
+  assert.equal(eden.localEdit, true);
+  assert.deepEqual(eden.official, { name: 'Eden', host: 'play.edenxi.com', port: '' });
+  assert.deepEqual(redundant, []);
+});
+
+test('applyLocalServers reports an override that now matches the official entry', () => {
+  const { servers, redundant } = SL.applyLocalServers(official(), { eden: { id: 'eden', name: 'Eden', host: 'PLAY.edenxi.com' } });
+  assert.deepEqual(redundant, ['eden']);
+  assert.equal(servers.find(s => s.id === 'eden').localEdit, undefined);
+});
+
+test('applyLocalServers lists custom servers first under My servers and ignores junk', () => {
+  const { servers } = SL.applyLocalServers(official(), {
+    'local-mine': { id: 'local-mine', name: 'Mine', host: 'b.com', port: '', website: '', discord: '', category: '75 - Custom Content' },
+    junk: 'x',
+  });
+  assert.deepEqual(servers.map(s => s.id), ['local-mine', 'eden', 'valhalla']);
+  assert.equal(servers[0].category, 'My servers');
+  assert.equal(servers[0].suggestedCategory, '75 - Custom Content');
+  assert.equal(servers[0].custom, true);
+});
+
+test('applyLocalServers ignores an override for an id that is no longer listed', () => {
+  const { servers, redundant } = SL.applyLocalServers(official(), { ghost: { id: 'ghost', host: 'g.com' } });
+  assert.deepEqual(servers.map(s => s.id), ['eden', 'valhalla']);
+  assert.deepEqual(redundant, []);
+});
+
+test('applyLocalServers tolerates a missing store value', () => {
+  assert.equal(SL.applyLocalServers(official(), undefined).servers.length, 2);
+});
