@@ -63,13 +63,17 @@ function ServerCard({ server, status, favorite, onToggleFavorite, onReport, onEd
         {server.discord && <button className="btn btn-ghost btn-sm" onClick={() => open(server.discord)}>Discord</button>}
         {server.website && <button className="btn btn-ghost btn-sm" onClick={() => open(server.website)}>Website</button>}
         <span className="server-card-footer-spacer" />
-        {onEdit && <button className="btn btn-ghost btn-sm" onClick={() => onEdit(server)} title="Change this server on this PC">✎ Edit</button>}
+        {onEdit && (
+          <button className="btn btn-ghost btn-sm server-card-edit" onClick={() => onEdit(server)} title="Edit this server on this PC" aria-label="Edit">
+            ✎
+          </button>
+        )}
         {onReset && server.localEdit && (
           <button className="btn btn-ghost btn-sm" onClick={() => onReset(server)}>Reset to official</button>
         )}
         {onReset && server.custom && <button className="btn btn-ghost btn-sm" onClick={() => onReset(server)}>Remove</button>}
         {!server.custom && (
-          <button className="link-btn server-card-report" onClick={() => onReport(server)} title="Wrong address or server closed? Tell the launcher team on GitHub">
+          <button className="btn btn-sm server-card-report" onClick={() => onReport(server)} title="Wrong address or server closed? Tell the launcher team on GitHub">
             ⚑ Report problem
           </button>
         )}
