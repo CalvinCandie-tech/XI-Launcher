@@ -1,0 +1,23 @@
+name: Server suggestion
+description: Add a server or correct a server's address (usually opened from XI Launcher)
+title: "Server suggestion: "
+labels: ["server-suggestion"]
+body:
+  - type: input
+    id: server-id
+    attributes:
+      label: Server id
+      description: The id used in servers/servers.json
+  - type: textarea
+    id: details
+    attributes:
+      label: What changed?
+      description: New server, new address, where you found it…
+    validations:
+      required: true
+  - type: textarea
+    id: json
+    attributes:
+      label: servers.json entry
+      description: Filled in by XI Launcher. The launcher team checks it before adding it.
+      render: json

@@ -1,0 +1,57 @@
+name: Server watch
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Only print what would happen (no issues, no health commit)'
+        type: boolean
+        default: true
+permissions:
+  contents: write
+  issues: write
+concurrency: server-watch
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    env:
+      DRY: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Ensure labels exist
+        if: env.DRY != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create server-down --color B60205 --description "Server not answering" --force
+          gh label create upstream-change --color 5319E7 --description "XiPrivateServers list changed" --force
+          gh label create server-suggestion --color 0E8A16 --description "Player-suggested server change" --force
+          gh label create server-problem --color D93F0B --description "Player-reported server problem" --force
+      - name: Load health state
+        run: git show origin/server-health:health.json > health.json 2>/dev/null || echo '{}' > health.json
+      - name: Watch servers
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ env.DRY == 'true' && '1' || '' }}
+        run: node scripts/server-watch.js
+      - name: Save health state
+        if: env.DRY != 'true'
+        run: |
+          mv health.json "$RUNNER_TEMP/health.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git show-ref --quiet refs/remotes/origin/server-health; then
+            git switch -c server-health origin/server-health
+          else
+            git switch --orphan server-health
+          fi
+          cp "$RUNNER_TEMP/health.json" health.json
+          git add health.json
+          git commit -m "health: $(date -u +%F)" || exit 0
+          git push origin server-health

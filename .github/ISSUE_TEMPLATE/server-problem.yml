@@ -1,0 +1,17 @@
+name: Server problem
+description: A server's address is wrong or the server has closed (usually opened from XI Launcher)
+title: "Server problem: "
+labels: ["server-problem"]
+body:
+  - type: input
+    id: server-id
+    attributes:
+      label: Server id
+      description: The id used in servers/servers.json
+  - type: textarea
+    id: details
+    attributes:
+      label: What's wrong?
+      description: Wrong address (what is the right one?), server closed, can't connect since…
+    validations:
+      required: true
