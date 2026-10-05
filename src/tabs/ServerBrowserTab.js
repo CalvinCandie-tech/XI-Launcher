@@ -1,47 +1,82 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './ServerBrowserTab.css';
+import ServerCard from '../components/servers/ServerCard';
 
 const api = window.xiAPI;
 
+// Favourites saved before servers had ids only carry a host.
+const sameFav = (f, s) => (f.id ? f.id === s.id : f.host === s.host);
+
+function sourceLabel(meta) {
+  if (!meta) return '';
+  if (meta.source === 'live') return `Live list${meta.updated ? ` · updated ${meta.updated}` : ''}`;
+  if (meta.source === 'cache') {
+    return `Offline copy${meta.fetchedAt ? ` from ${new Date(meta.fetchedAt).toLocaleDateString()}` : ''}`;
+  }
+  return 'Built-in copy (could not reach GitHub)';
+}
+
 function ServerBrowserTab({ config, updateConfig }) {
   const [categories, setCategories] = useState([]);
+  const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
+  const [status, setStatus] = useState({});
 
   const favorites = config?.favoriteServers || [];
-  const isFavorite = (server) => favorites.some(f => f.host === server.address);
-  const toggleFavorite = (server) => {
-    if (!server.address) return;
-    const entry = { name: server.name, host: server.address, port: server.port || '' };
-    const next = isFavorite(server)
-      ? favorites.filter(f => f.host !== server.address)
-      : [...favorites, entry];
+  const isFavorite = (s) => favorites.some(f => sameFav(f, s));
+  const toggleFavorite = (s) => {
+    if (!s.host) return;
+    const next = isFavorite(s)
+      ? favorites.filter(f => !sameFav(f, s))
+      : [...favorites, { id: s.id, name: s.name, host: s.host, port: s.port || '' }];
     updateConfig('favoriteServers', next);
   };
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!api?.fetchServerList) return;
     setLoading(true);
-    api.fetchServerList().then(result => {
-      if (result.success) {
+    setError('');
+    try {
+      const result = await api.fetchServerList();
+      if (result?.success) {
         setCategories(result.categories);
+        setMeta({ source: result.source, updated: result.updated, fetchedAt: result.fetchedAt });
       } else {
-        setError(typeof result.error === 'string' ? result.error : 'Failed to fetch server list');
+        setError(typeof result?.error === 'string' ? result.error : 'Failed to fetch server list');
       }
-      setLoading(false);
-    }).catch(() => {
+    } catch {
       setError('Failed to fetch server list');
-      setLoading(false);
-    });
+    }
+    setLoading(false);
   }, []);
 
+  const checkAll = useCallback((cats) => {
+    if (!api?.checkServerStatus) return;
+    const servers = cats.flatMap(c => c.servers).filter(s => s.host);
+    setStatus(Object.fromEntries(servers.map(s => [s.id, { checking: true }])));
+    for (const s of servers) {
+      api.checkServerStatus(s.host, s.port)
+        .then(r => setStatus(prev => ({ ...prev, [s.id]: { online: !!r?.online, latency: r?.latency } })))
+        .catch(() => setStatus(prev => ({ ...prev, [s.id]: { online: false } })));
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { checkAll(categories); }, [categories, checkAll]);
+
+  const handleReport = (s) => api?.openServerIssue('problem', { server: s });
+
+  const q = filter.trim().toLowerCase();
   const filteredCategories = categories.map(cat => ({
     ...cat,
     servers: cat.servers.filter(s =>
-      !filter || s.name.toLowerCase().includes(filter.toLowerCase()) ||
-      s.expansion.toLowerCase().includes(filter.toLowerCase())
-    )
+      !q ||
+      s.name.toLowerCase().includes(q) ||
+      (s.tags?.expansion || '').toLowerCase().includes(q) ||
+      (s.host || '').toLowerCase().includes(q)
+    ),
   })).filter(cat => cat.servers.length > 0);
 
   const totalCount = categories.reduce((sum, c) => sum + c.servers.length, 0);
@@ -52,8 +87,12 @@ function ServerBrowserTab({ config, updateConfig }) {
         <div className="server-browser-toolbar-left">
           <span className="server-browser-title cinzel">Private Servers</span>
           <span className="pill pill-teal">{totalCount} servers</span>
+          {meta && <span className={`server-browser-status${meta.source === 'live' ? '' : ' stale'}`}>{sourceLabel(meta)}</span>}
         </div>
         <div className="server-browser-toolbar-right">
+          <button className="btn btn-ghost btn-sm" onClick={() => checkAll(categories)} title="Check which servers are online">
+            ↻ Check
+          </button>
           <input
             type="text"
             placeholder="Search servers..."
@@ -61,9 +100,6 @@ function ServerBrowserTab({ config, updateConfig }) {
             onChange={e => setFilter(e.target.value)}
             className="server-browser-search"
           />
-          <span className="server-browser-source">
-            via <button className="link-btn" onClick={() => api?.openExternal('https://github.com/XiPrivateServers/Servers')}>XiPrivateServers</button>
-          </span>
         </div>
       </div>
 
@@ -75,59 +111,14 @@ function ServerBrowserTab({ config, updateConfig }) {
           <div className="section-header">{cat.name}</div>
           <div className="server-cards">
             {cat.servers.map(server => (
-              <div key={server.name} className={`server-card${isFavorite(server) ? ' favorited' : ''}`}>
-                <div className="server-card-header">
-                  <div className="server-card-name-wrap">
-                    {server.website ? (
-                      <button className="link-btn server-card-name" onClick={() => api?.openExternal(server.website)}>
-                        {server.name}
-                      </button>
-                    ) : (
-                      <span className="server-card-name">{server.name}</span>
-                    )}
-                    {server.address && (
-                      <span className="server-card-address mono">
-                        {server.address}{server.port ? ':' + server.port : ''}
-                      </span>
-                    )}
-                  </div>
-                  {server.address && (
-                    <button
-                      className={`server-fav-btn${isFavorite(server) ? ' favorited' : ''}`}
-                      onClick={() => toggleFavorite(server)}
-                      title={isFavorite(server) ? 'Remove from favorites' : 'Add to favorites'}
-                    >
-                      {isFavorite(server) ? '★' : '☆'}
-                    </button>
-                  )}
-                </div>
-
-                <div className="server-card-tags">
-                  {server.expansion && <span className="server-tag server-tag-exp">{server.expansion}</span>}
-                  {server.rates && <span className="server-tag">{server.rates} rates</span>}
-                  {server.moveSpeed && server.moveSpeed !== 'Retail' && <span className="server-tag">{server.moveSpeed}</span>}
-                  {server.levelSync && <span className="server-tag server-tag-feature">Level Sync</span>}
-                  {server.trusts && <span className="server-tag server-tag-feature">Trusts</span>}
-                  {server.dualBox && server.dualBox !== 'No' && server.dualBox !== '?' && (
-                    <span className="server-tag server-tag-feature">Multi-Box</span>
-                  )}
-                </div>
-
-                {server.note && <p className="server-card-note">{server.note}</p>}
-
-                <div className="server-card-footer">
-                  {server.discord && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => api?.openExternal(server.discord)}>
-                      Discord
-                    </button>
-                  )}
-                  {server.website && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => api?.openExternal(server.website)}>
-                      Website
-                    </button>
-                  )}
-                </div>
-              </div>
+              <ServerCard
+                key={server.id}
+                server={server}
+                status={status[server.id]}
+                favorite={isFavorite(server)}
+                onToggleFavorite={toggleFavorite}
+                onReport={handleReport}
+              />
             ))}
           </div>
         </div>

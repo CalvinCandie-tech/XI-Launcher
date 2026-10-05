@@ -227,3 +227,40 @@ button.server-card-name:hover { color: var(--gold-bright, #ffd700); }
   text-decoration-style: dotted;
 }
 .link-btn:hover { color: var(--gold-bright, #ffd700); }
+
+/* Where the list came from */
+.server-browser-status {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.server-browser-status.stale { color: var(--gold); }
+
+/* Card header right: status + star */
+.server-card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.server-status {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.server-status.online { color: var(--green, #5cc46a); }
+.server-status.offline { color: var(--red); }
+.server-status.checking { color: var(--text-dim); }
+
+.server-card-local {
+  font-size: 11px;
+  color: var(--gold);
+}
+
+.server-card-footer { align-items: center; flex-wrap: wrap; }
+.server-card-footer-spacer { flex: 1; }
+.server-card-report {
+  font-size: 11px;
+  color: var(--text-dim);
+}
