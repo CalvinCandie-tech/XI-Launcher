@@ -331,28 +331,33 @@ button.server-card-name:hover { color: var(--gold-bright, #ffd700); }
 .server-browser .home-notice { margin-bottom: 10px; }
 .moved-error { color: var(--red); }
 
-/* Report problem explanation: shown the moment the button is hovered or focused */
-.server-report-wrap {
+/* Card button explanations: shown the moment a button is hovered or focused
+   (the native title tooltip waits ~1 s) */
+.instant-tip-wrap {
   position: relative;
   display: inline-flex;
 }
-.server-report-tip {
+.instant-tip {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 6px);
   width: max-content;
   max-width: 220px;
   padding: 6px 9px;
   border-radius: 5px;
-  border: 1px solid rgba(240, 163, 94, 0.55);
+  border: 1px solid var(--gold-dim);
   background: rgba(20, 16, 8, 0.96);
   color: var(--text-secondary);
   font-size: 11px;
+  font-weight: 400;
   line-height: 1.4;
   white-space: normal;
+  text-align: left;
   pointer-events: none;
   visibility: hidden;
   z-index: 5;
 }
-.server-report-wrap:hover .server-report-tip,
-.server-report-wrap:focus-within .server-report-tip { visibility: visible; }
+.instant-tip.above { bottom: calc(100% + 6px); }
+.instant-tip.below { top: calc(100% + 6px); }
+.instant-tip.warn { border-color: rgba(240, 163, 94, 0.55); }
+.instant-tip-wrap:hover .instant-tip,
+.instant-tip-wrap:focus-within .instant-tip { visibility: visible; }

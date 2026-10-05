@@ -23,6 +23,16 @@ function Flag({ label, value }) {
   return <span className={`server-flag ${state}`}>{mark} {label}</span>;
 }
 
+// Wraps a button with an explanation box that appears instantly on hover / keyboard focus.
+function InstantTip({ id, text, placement, tone = '', children }) {
+  return (
+    <span className="instant-tip-wrap">
+      {React.cloneElement(children, { 'aria-describedby': id })}
+      <span className={`instant-tip ${placement} ${tone}`} id={id} role="tooltip">{text}</span>
+    </span>
+  );
+}
+
 // One server on the Servers tab. Every card shows the same six facts in the same order (? when
 // unknown). Edit / Reset only appear when the tab passes handlers.
 function ServerCard({ server, status, favorite, onToggleFavorite, onReport, onEdit, onReset }) {
@@ -46,18 +56,26 @@ function ServerCard({ server, status, favorite, onToggleFavorite, onReport, onEd
         <div className="server-card-header-right">
           {server.host && <StatusPill status={status} />}
           {onEdit && (
-            <button className="server-fav-btn server-card-edit" onClick={() => onEdit(server)} title="Edit this server on this PC" aria-label="Edit">
-              ✎
-            </button>
+            <InstantTip id={`edit-tip-${server.id}`} placement="below" text="Change this server's address or links on this PC only">
+              <button className="server-fav-btn server-card-edit" onClick={() => onEdit(server)} aria-label="Edit">
+                ✎
+              </button>
+            </InstantTip>
           )}
           {server.host && (
-            <button
-              className={`server-fav-btn${favorite ? ' favorited' : ''}`}
-              onClick={() => onToggleFavorite(server)}
-              title={favorite ? 'Remove from favorites' : 'Add to favorites'}
+            <InstantTip
+              id={`fav-tip-${server.id}`}
+              placement="below"
+              text={favorite ? 'Remove from favorites' : 'Add to favorites — pick it from the Server tile on Home'}
             >
-              {favorite ? '★' : '☆'}
-            </button>
+              <button
+                className={`server-fav-btn${favorite ? ' favorited' : ''}`}
+                onClick={() => onToggleFavorite(server)}
+                aria-label={favorite ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                {favorite ? '★' : '☆'}
+              </button>
+            </InstantTip>
           )}
         </div>
       </div>
@@ -93,15 +111,11 @@ function ServerCard({ server, status, favorite, onToggleFavorite, onReport, onEd
         <span className="server-card-footer-spacer" />
         {onReset && server.custom && <button className="btn btn-ghost btn-sm" onClick={() => onReset(server)}>Remove</button>}
         {!server.custom && (
-          <span className="server-report-wrap">
-            <button className="btn btn-sm server-card-report" onClick={() => onReport(server)} aria-describedby={`report-tip-${server.id}`}>
+          <InstantTip id={`report-tip-${server.id}`} placement="above" tone="warn" text="Wrong address or server closed? Tell the launcher team on GitHub">
+            <button className="btn btn-sm server-card-report" onClick={() => onReport(server)}>
               ⚑ Report problem
             </button>
-            {/* Instant hover box — the native title tooltip waits ~1 s */}
-            <span className="server-report-tip" id={`report-tip-${server.id}`} role="tooltip">
-              Wrong address or server closed? Tell the launcher team on GitHub
-            </span>
-          </span>
+          </InstantTip>
         )}
       </div>
     </div>
