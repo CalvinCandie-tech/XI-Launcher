@@ -45,6 +45,12 @@ function ServerCard({ server, status, favorite, onToggleFavorite, onReport, onEd
       {server.localEdit && (
         <div className="server-card-local">
           Your edit{officialHost && officialHost !== server.host ? ` · official address: ${officialHost}` : ''}
+          {onReset && (
+            <>
+              {' · '}
+              <button className="link-btn server-card-reset" onClick={() => onReset(server)}>Reset to official</button>
+            </>
+          )}
         </div>
       )}
 
@@ -68,13 +74,10 @@ function ServerCard({ server, status, favorite, onToggleFavorite, onReport, onEd
             ✎
           </button>
         )}
-        {onReset && server.localEdit && (
-          <button className="btn btn-ghost btn-sm" onClick={() => onReset(server)}>Reset to official</button>
-        )}
         {onReset && server.custom && <button className="btn btn-ghost btn-sm" onClick={() => onReset(server)}>Remove</button>}
         {!server.custom && (
-          <button className="btn btn-sm server-card-report" onClick={() => onReport(server)} title="Wrong address or server closed? Tell the launcher team on GitHub">
-            ⚑ Report problem
+          <button className="btn btn-sm server-card-report" onClick={() => onReport(server)} title="Report a problem — wrong address or server closed? Tell the launcher team on GitHub">
+            ⚑ Report
           </button>
         )}
       </div>

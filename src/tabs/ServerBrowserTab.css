@@ -258,16 +258,17 @@ button.server-card-name:hover { color: var(--gold-bright, #ffd700); }
   color: var(--gold);
 }
 
-.server-card-footer { align-items: center; flex-wrap: wrap; }
+/* One button row pinned to the bottom of every card, same layout on every tile */
+.server-card-footer { align-items: center; flex-wrap: nowrap; }
+.server-card-footer .btn { padding-left: 9px; padding-right: 9px; white-space: nowrap; }
 .server-card-footer-spacer { flex: 1; }
-.server-card-edit { padding-left: 10px; padding-right: 10px; }
+.server-card-reset { font-size: inherit; }
 /* Amber outline so players notice where to flag a dead or moved server */
 .server-card-report {
   color: #f0a35e;
   background: rgba(240, 163, 94, 0.1);
   border: 1px solid rgba(240, 163, 94, 0.55);
   font-weight: 600;
-  margin-left: auto; /* right-aligned whether it fits on the button row or wraps below */
 }
 .server-card-report:hover {
   color: #ffc48a;
