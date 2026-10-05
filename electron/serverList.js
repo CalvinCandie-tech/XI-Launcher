@@ -233,6 +233,68 @@ function applyLocalServers(servers, localServers) {
   return { servers: [...custom, ...merged], redundant };
 }
 
+// Saved addresses (favourites, the selected server, each profile's settings and ini) that a
+// server has since moved away from. One Move per server + old host, listing everywhere it's used.
+function findMovedHosts(servers, { favorites = [], serverHost = '', profiles = [] } = {}) {
+  const moves = new Map();
+  const ownerOf = (host) => {
+    if (!str(host) || servers.some(s => sameHost(s.host, host))) return null;
+    return servers.find(s => s.host && s.previousHosts.some(p => sameHost(p, host))) || null;
+  };
+  const note = (host, use) => {
+    const server = ownerOf(host);
+    if (!server) return;
+    const key = `${server.id}|${str(host).toLowerCase()}`;
+    if (!moves.has(key)) {
+      moves.set(key, { serverId: server.id, name: server.name, fromHost: str(host), toHost: server.host, usedBy: [] });
+    }
+    const usedBy = moves.get(key).usedBy;
+    if (!usedBy.some(u => u.kind === use.kind && u.profile === use.profile)) usedBy.push(use);
+  };
+  for (const f of Array.isArray(favorites) ? favorites : []) {
+    if (f && typeof f === 'object') note(f.host, { kind: 'favourite' });
+  }
+  note(serverHost, { kind: 'current' });
+  for (const p of Array.isArray(profiles) ? profiles : []) {
+    if (!p || typeof p !== 'object') continue;
+    note(p.settingsHost, { kind: 'profile', profile: p.name });
+    note(p.iniHost, { kind: 'profile', profile: p.name });
+  }
+  return [...moves.values()];
+}
+
+function joinAnd(parts) {
+  if (parts.length <= 1) return parts[0] || '';
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
+function describeUsedBy(usedBy = []) {
+  const parts = [];
+  if (usedBy.some(u => u.kind === 'favourite')) parts.push('your favourite');
+  if (usedBy.some(u => u.kind === 'current')) parts.push('the selected server');
+  const profiles = usedBy.filter(u => u.kind === 'profile').map(u => `'${u.profile}'`);
+  if (profiles.length) parts.push(`${profiles.length === 1 ? 'profile' : 'profiles'} ${joinAnd(profiles)}`);
+  return joinAnd(parts);
+}
+
+// New favourites + selected server after the player accepts a move.
+function applyMoveToConfig({ favorites = [], serverHost = '' } = {}, move) {
+  let changed = false;
+  const out = [];
+  for (const f of Array.isArray(favorites) ? favorites : []) {
+    const moved = !!f && typeof f === 'object' && sameHost(f.host, move.fromHost);
+    const next = moved ? { ...f, id: move.serverId, host: move.toHost } : f;
+    if (moved) {
+      changed = true;
+      if (out.some(o => o && sameHost(o.host, next.host))) continue;
+    }
+    out.push(next);
+  }
+  const nextHost = sameHost(serverHost, move.fromHost) ? move.toHost : serverHost;
+  if (nextHost !== serverHost) changed = true;
+  return { favorites: out, serverHost: nextHost, changed };
+}
+
 module.exports = {
   SERVER_LIST_URL,
   REPO_URL,
@@ -250,4 +312,7 @@ module.exports = {
   slugify,
   sanitizeLocalServer,
   applyLocalServers,
+  findMovedHosts,
+  describeUsedBy,
+  applyMoveToConfig,
 };

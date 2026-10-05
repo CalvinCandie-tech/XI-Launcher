@@ -185,3 +185,87 @@ test('applyLocalServers ignores an override for an id that is no longer listed',
 test('applyLocalServers tolerates a missing store value', () => {
   assert.equal(SL.applyLocalServers(official(), undefined).servers.length, 2);
 });
+
+const movedList = () => SL.validateServerList(doc([
+  entry({ id: 'valhalla', name: 'Valhalla', host: 'new.valhalla.group', previousHosts: ['logon.valhalla.group'] }),
+  entry(),
+])).list.servers;
+
+test('findMovedHosts finds a favourite, the selected server and profiles still on an old host', () => {
+  const moves = SL.findMovedHosts(movedList(), {
+    favorites: [{ name: 'Valhalla', host: 'LOGON.valhalla.group' }, { name: 'Eden', host: 'play.edenxi.com' }],
+    serverHost: 'logon.valhalla.group',
+    profiles: [
+      { name: 'Main', settingsHost: 'logon.valhalla.group', iniHost: 'logon.valhalla.group' },
+      { name: 'Alt', settingsHost: '', iniHost: 'logon.valhalla.group' },
+      { name: 'Eden', settingsHost: 'play.edenxi.com', iniHost: 'play.edenxi.com' },
+    ],
+  });
+  assert.deepEqual(moves, [{
+    serverId: 'valhalla', name: 'Valhalla', fromHost: 'LOGON.valhalla.group', toHost: 'new.valhalla.group',
+    usedBy: [{ kind: 'favourite' }, { kind: 'current' }, { kind: 'profile', profile: 'Main' }, { kind: 'profile', profile: 'Alt' }],
+  }]);
+});
+
+test('findMovedHosts returns nothing when no saved host is an old address', () => {
+  assert.deepEqual(SL.findMovedHosts(movedList(), { favorites: [], serverHost: 'new.valhalla.group', profiles: [] }), []);
+  assert.deepEqual(SL.findMovedHosts(movedList(), undefined), []);
+});
+
+test('findMovedHosts: retail profile hosts are ignored', () => {
+  // main passes iniHost '' for retail profiles (parseIniBoot(...).host is null)
+  assert.deepEqual(SL.findMovedHosts(movedList(), { profiles: [{ name: 'Retail', settingsHost: '', iniHost: '' }] }), []);
+});
+
+test("findMovedHosts ignores an old host that is now some server's current host", () => {
+  const servers = SL.validateServerList(doc([
+    entry({ id: 'a', host: 'a2.com', previousHosts: ['shared.com'] }),
+    entry({ id: 'b', host: 'shared.com' }),
+  ])).list.servers;
+  assert.deepEqual(SL.findMovedHosts(servers, { serverHost: 'shared.com' }), []);
+});
+
+test('findMovedHosts skips servers with no current host', () => {
+  const servers = SL.validateServerList(doc([entry({ host: '', previousHosts: ['old.com'] })])).list.servers;
+  assert.deepEqual(SL.findMovedHosts(servers, { serverHost: 'old.com' }), []);
+});
+
+test('describeUsedBy reads naturally', () => {
+  assert.equal(SL.describeUsedBy([{ kind: 'favourite' }]), 'your favourite');
+  assert.equal(SL.describeUsedBy([{ kind: 'profile', profile: 'Main' }]), "profile 'Main'");
+  assert.equal(
+    SL.describeUsedBy([{ kind: 'favourite' }, { kind: 'current' }, { kind: 'profile', profile: 'Main' }, { kind: 'profile', profile: 'Alt' }]),
+    "your favourite, the selected server and profiles 'Main' and 'Alt'",
+  );
+});
+
+const move = { serverId: 'valhalla', name: 'Valhalla', fromHost: 'logon.valhalla.group', toHost: 'new.valhalla.group', usedBy: [] };
+
+test('applyMoveToConfig rewrites matching favourites and the selected server', () => {
+  const r = SL.applyMoveToConfig({
+    favorites: [{ name: 'Valhalla', host: 'Logon.Valhalla.Group', port: '' }, { name: 'Eden', host: 'play.edenxi.com' }],
+    serverHost: 'logon.valhalla.group',
+  }, move);
+  assert.deepEqual(r.favorites, [
+    { id: 'valhalla', name: 'Valhalla', host: 'new.valhalla.group', port: '' },
+    { name: 'Eden', host: 'play.edenxi.com' },
+  ]);
+  assert.equal(r.serverHost, 'new.valhalla.group');
+  assert.equal(r.changed, true);
+});
+
+test('applyMoveToConfig drops a moved favourite that would duplicate one already on the new host', () => {
+  const r = SL.applyMoveToConfig({
+    favorites: [{ name: 'V', host: 'new.valhalla.group' }, { name: 'V old', host: 'logon.valhalla.group' }],
+    serverHost: 'x.com',
+  }, move);
+  assert.deepEqual(r.favorites.map(f => f.host), ['new.valhalla.group']);
+  assert.equal(r.serverHost, 'x.com');
+  assert.equal(r.changed, true);
+});
+
+test('applyMoveToConfig leaves unrelated config alone', () => {
+  const r = SL.applyMoveToConfig({ favorites: [{ name: 'Eden', host: 'play.edenxi.com' }], serverHost: 'play.edenxi.com' }, move);
+  assert.equal(r.changed, false);
+  assert.equal(r.serverHost, 'play.edenxi.com');
+});
