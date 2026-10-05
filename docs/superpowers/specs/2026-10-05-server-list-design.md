@@ -86,9 +86,8 @@ Seed: generated once from today's SERVERS.md parse + `serverAddresses.js` + `EXT
 - `validateServerList(json)` → `{ list, errors }`. Drops entries without valid `id`/`name`, duplicate ids (keeps first), non-https links; strips a `previousHosts` entry equal to `host`. Never throws.
 - `resolveServerList({ fetched, cached, bundled })` → `{ list, source: 'live'|'cache'|'bundled', updated }`. First valid of live → cache → bundled.
 - `applyLocalServers(list, localServers)` → merged list. Overrides (official id) replace host/port/name/links and set `localEdit: true`; custom (`local-*`) entries are appended under category "My servers". An override whose values now equal the official entry is returned in `redundant` and deleted from `localServers` by `fetch-server-list`.
-- `findMovedHosts(list, saved)` → array of `{ serverId, name, fromHost, toHost, usedBy: [{ kind: 'favourite'|'profile', profile? }] }`. `saved` = favourites, `profileSettings[*].serverHost`, and the `--server` host read from each Ashita profile ini. Matching is case-insensitive on host.
-- `buildIssueUrl(kind, payload)` → GitHub new-issue URL for `server-suggestion.yml` / `server-problem.yml`, prefilled title + body containing the JSON snippet for `servers.json`. Kept under 7,000 characters.
-
+- `findMovedHosts(list, saved)` → array of `{ serverId, name, fromHost, toHost, usedBy: [{ kind: 'favourite'|'profile', profile? }] }`. `saved` = favourites, `profileSettings[*].serverHost`, and the `--server` host of each Ashita profile ini (`loaders.parseIniBoot(text).host`, read by `main.js` and passed in). Matching is case-insensitive on host.
+- `buildIssueUrl(kind, payload)` → GitHub new-issue URL `…/issues/new?template=<file>&title=…&<field-id>=…` for `server-suggestion.yml` / `server-problem.yml`. Issue forms prefill by field `id` (the `body` param is ignored for forms; dropdowns/checkboxes cannot be prefilled), so templates use only `input`/`textarea` fields: `server-id`, `details`, and `json` (the snippet to paste into `servers.json`). Kept under 7,000 characters.
 ### 2.2 IPC (in `main.js`)
 
 - `fetch-server-list` (replaced): called once in the background at launcher start (so the moved banner can appear on Home without visiting the Servers tab) and again when the Servers tab opens. Fetch the URL above with existing `retryAsync` and an 8 s timeout; on a valid result write store `serverListCache = { json, fetchedAt }`; resolve via `resolveServerList`; apply `localServers`; return `{ success, categories, source, updated }`. The SERVERS.md parser, `SERVER_ADDRESSES`, `EXTRA_SERVERS`, `REMOVED_SERVERS` and `electron/serverAddresses.js` are deleted.
@@ -125,7 +124,7 @@ On push / PR touching `servers/servers.json`: run `validateServerList`; fail on 
 
 ### 3.3 Issue templates
 
-`.github/ISSUE_TEMPLATE/server-suggestion.yml` (label `server-suggestion`) and `server-problem.yml` (label `server-problem`). The launcher opens them with `?template=…&title=…&body=…`. Owner loop: read issue → edit `servers.json` (or merge PR) → close issue; players get it within ~5 minutes (raw CDN cache).
+`.github/ISSUE_TEMPLATE/server-suggestion.yml` (label `server-suggestion`) and `server-problem.yml` (label `server-problem`), each with `input`/`textarea` fields `server-id`, `details`, `json`. The launcher opens them with `?template=…&title=…&server-id=…&details=…&json=…`. Owner loop: read issue → edit `servers.json` (or merge PR) → close issue; players get it within ~5 minutes (raw CDN cache).
 
 ## 4. Testing
 
