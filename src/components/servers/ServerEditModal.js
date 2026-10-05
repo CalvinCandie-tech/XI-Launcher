@@ -32,7 +32,7 @@ function ServerEditModal({ server, onSave, onClose }) {
   const field = (key, label, placeholder = '') => (
     <label className="form-field">
       <span className="form-field-name">{label}</span>
-      <input className="form-input" value={form[key]} onChange={set(key)} placeholder={placeholder} />
+      <input type="text" className="form-input" value={form[key]} onChange={set(key)} placeholder={placeholder} />
     </label>
   );
 
@@ -53,10 +53,16 @@ function ServerEditModal({ server, onSave, onClose }) {
           {field('discord', 'Discord', 'https://discord.gg/')}
           {showCategory && field('category', 'Category (for the suggestion)', '75 - Custom Content')}
         </div>
-        <label className="server-edit-suggest">
-          <input type="checkbox" checked={suggest} onChange={e => setSuggest(e.target.checked)} />
-          Suggest to everyone — opens a GitHub issue for the launcher team (needs a GitHub account)
-        </label>
+        <div className="server-edit-suggest">
+          <label className="toggle">
+            <input type="checkbox" checked={suggest} onChange={e => setSuggest(e.target.checked)} aria-label="Suggest to everyone" />
+            <span className="toggle-slider" />
+          </label>
+          <span>
+            <span className="form-field-name">Suggest to everyone</span>
+            <span className="server-edit-suggest-desc">Opens a GitHub issue for the launcher team (needs a GitHub account)</span>
+          </span>
+        </div>
         {error && <div className="server-edit-error" role="alert">{error}</div>}
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
