@@ -130,6 +130,14 @@
   gap: 8px;
 }
 
+/* The active profile's game files + Files Updater, when it has none */
+.home-setup-gamefiles {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .home-status-row {
   display: flex;
   align-items: center;

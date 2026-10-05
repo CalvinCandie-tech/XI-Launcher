@@ -12,6 +12,7 @@ const ffxiMirror = require('./ffxiMirror');
 const sandbox = require('./sandbox');
 const windowState = require('./windowState');
 const addonInstall = require('./addonInstall');
+const updateScript = require('./updateScript');
 
 /**
  * Extract a zip file using yauzl (streaming, handles large files, reports progress).
@@ -1397,6 +1398,8 @@ function registerIPC() {
       // start from the launcher-wide one.
       updaterUrl: settings.ffxiUpdaterUrl ?? store.get('ffxiUpdaterUrl') ?? '',
       filesFound: !!gameFiles.ffxi && fs.existsSync(path.join(gameFiles.ffxi, 'ROM')),
+      // A sandboxed copy's folder can vanish (deleted, drive unplugged) — say so rather than "empty".
+      folderFound: gameFiles.mode === 'sandbox' ? !!gameFiles.folder && fs.existsSync(gameFiles.folder) : true,
       registered: gameFiles.mode === 'installed' && !!gameFiles.ffxi ? await isRegisteredFfxiInstall(gameFiles.ffxi) : false,
     };
   };
@@ -1754,7 +1757,7 @@ function registerIPC() {
       if (isDev) return { success: false, error: 'Updates cannot be installed in development mode' };
 
       // Pin updater to this project's GitHub releases only. The renderer should never
-      // be able to point us at an arbitrary zip — robocopy /MIR over appRoot would
+      // be able to point us at an arbitrary zip — robocopy over appRoot would
       // effectively self-replace the launcher.
       try {
         const u = new URL(downloadUrl);
@@ -1834,43 +1837,14 @@ function registerIPC() {
         // any sub-processes it spawns, and Wait-Process collapses the polling
         // loop into one syscall.
         const exePath = app.getPath('exe');
-        const exeName = path.basename(exePath);
-        const exeBaseName = exeName.replace(/\.exe$/i, '');
         const ps1Path = path.join(tmpDir, 'update.ps1');
         const errorMarker = path.join(runtimeDir, 'update-error.log');
         // Pre-remove any stale marker so a successful run doesn't leave one behind
         try { if (fs.existsSync(errorMarker)) fs.unlinkSync(errorMarker); } catch {}
-        // PowerShell single-quoted strings literal-escape '$' and backticks,
-        // so we only need to double-up embedded single quotes for safety.
-        const psQuote = (s) => "'" + String(s).replace(/'/g, "''") + "'";
         // Unique scheduled-task name — created below and self-deleted by the
         // script once the copy/relaunch is done.
         const taskName = `XILauncherUpdate_${Date.now()}`;
-        const psContent = [
-          '$ErrorActionPreference = "SilentlyContinue"',
-          // Wait up to 30s for the launcher to exit. Get-Process by base name
-          // (no .exe). If multiple instances are running (rare), wait for all.
-          `$procs = Get-Process -Name ${psQuote(exeBaseName)}`,
-          'if ($procs) {',
-          '  try { $procs | Wait-Process -Timeout 30 } catch {}',
-          '}',
-          // Mirror sourceDir into appRoot. /XD protects runtime/ (music, user
-          // xiloader, ashita), /XF protects loose config files at appRoot.
-          `$rc = & robocopy ${psQuote(sourceDir)} ${psQuote(appRoot)} /MIR /R:3 /W:1 /XD runtime node_modules /XF *.json *.log /NFL /NDL /NJH /NJS`,
-          'if ($LASTEXITCODE -ge 8) {',
-          `  $errLines = @(`,
-          `    "Robocopy failed with exit code $LASTEXITCODE while copying update files.",`,
-          `    "Source: ${sourceDir.replace(/\\/g, '\\\\')}",`,
-          `    "Dest: ${appRoot.replace(/\\/g, '\\\\')}"`,
-          '  )',
-          `  $errLines | Out-File -FilePath ${psQuote(errorMarker)} -Encoding utf8`,
-          '}',
-          // Relaunch before cleanup so the tmpdir delete can't race the script.
-          `Start-Process -FilePath ${psQuote(exePath)}`,
-          `Remove-Item -Recurse -Force ${psQuote(tmpDir)} -ErrorAction SilentlyContinue`,
-          // Self-delete the scheduled task that ran this script.
-          `schtasks /delete /tn ${psQuote(taskName)} /f | Out-Null`,
-        ].join('\r\n');
+        const psContent = updateScript.buildUpdateScript({ exePath, sourceDir, appRoot, tmpDir, errorMarker, taskName });
         fs.writeFileSync(ps1Path, psContent, 'utf-8');
 
         // Launch the update script via a Windows Scheduled Task rather than

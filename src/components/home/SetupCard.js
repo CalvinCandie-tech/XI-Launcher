@@ -2,13 +2,18 @@ import React from 'react';
 import './HomePanels.css';
 
 // Takes Start Game's place (and hides the top bar) until setup is complete: progress, what's
-// missing (with Install Ashita v4), quick-create for a first profile, and the profile picker.
+// missing (with Install Ashita v4, and the active profile's game files + Files Updater when
+// it has none), quick-create for a first profile, and the profile picker.
 function SetupCard({
-  status, stepsComplete, activeProfile, profiles, profileSwitcher, onNavigate,
+  status, stepsComplete, activeProfile, profiles, profileSwitcher, onNavigate, gameFiles, gameFilesFix,
   ashitaInstalling, ashitaProgress, ashitaError, onInstallAshita,
   profileType, onProfileTypeChange, newName, onNewNameChange, creating, onCreate,
 }) {
   const showQuickCreate = !activeProfile && status.ashita && status.ffxi && status.profileCount === 0;
+  // A sandboxed profile's own copy is missing — name it, so it doesn't read as "never set up".
+  const sandboxed = activeProfile && gameFiles?.mode === 'sandbox';
+  const ffxiLabel = sandboxed ? `${activeProfile}'s game files` : 'FFXI Client';
+  const ffxiPill = !sandboxed ? 'Not Set' : gameFiles.folderFound === false ? 'Folder missing' : 'No game files';
   return (
     <div className="home-setup-card">
       <div className="home-setup-section">
@@ -33,8 +38,8 @@ function SetupCard({
             )}
             {!status.ffxi && (
               <div className="home-status-row">
-                <span>FFXI Client</span>
-                <span className="pill pill-red">Not Set</span>
+                <span>{ffxiLabel}</span>
+                <span className="pill pill-red">{ffxiPill}</span>
               </div>
             )}
             {!status.xiloader && (
@@ -61,6 +66,7 @@ function SetupCard({
               <span className="home-progress-text">{ashitaProgress.detail}</span>
             </div>
           )}
+          {!status.ffxi && gameFilesFix}
         </div>
       )}
 

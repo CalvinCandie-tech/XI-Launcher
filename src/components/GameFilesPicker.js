@@ -12,8 +12,9 @@ export const announceGameFilesChange = () => window.dispatchEvent(new Event(GAME
 // sandboxed copy in a folder the player picks — run through Ashita's Sandbox plugin, no
 // install needed. Main saves the choice and writes the ini (electron/sandbox.js).
 // inDropdown: shown in the Home tab's Game files drop-down, which already has its own heading
-// and sits beside the Files updater tile.
-function GameFilesPicker({ profileName, ffxiPath, inDropdown = false }) {
+// and sits beside the Files updater tile. updaterName: where the Files Updater is, when the
+// picker is shown somewhere else (the Home setup card has it right below).
+function GameFilesPicker({ profileName, ffxiPath, inDropdown = false, updaterName }) {
   const [status, setStatus] = useState(null);
   const [pendingSandbox, setPendingSandbox] = useState(false); // chose "Sandboxed copy", no folder yet
   const [busy, setBusy] = useState(false);
@@ -65,7 +66,7 @@ function GameFilesPicker({ profileName, ffxiPath, inDropdown = false }) {
 
   const mode = pendingSandbox ? 'sandbox' : status.mode;
   const radioName = `game-files-${profileName}`;
-  const updater = inDropdown ? 'the Files updater tile' : 'the FFXI Files Updater on the Home tab';
+  const updater = updaterName || (inDropdown ? 'the Files updater tile' : 'the FFXI Files Updater on the Home tab');
 
   return (
     <div className={`form-field game-files ${inDropdown ? 'in-dropdown' : ''}`}>
@@ -131,6 +132,16 @@ function GameFilesPicker({ profileName, ffxiPath, inDropdown = false }) {
           </div>
           {status.filesFound ? (
             <span className="game-files-note ok">✔ Game files found</span>
+          ) : status.folderFound === false ? (
+            <>
+              <span className="game-files-note err">⚠ This folder doesn't exist any more — it was deleted or its drive isn't plugged in.</span>
+              <div className="game-files-actions">
+                <button className="btn btn-primary btn-sm" onClick={() => apply('sandbox', status.folder, true)} disabled={busy}>
+                  Recreate it
+                </button>
+              </div>
+              <span className="game-files-note">Then run {updater} to download the game files into it.</span>
+            </>
           ) : (
             <span className="game-files-note err">⚠ No game files here yet — run {updater} to download them.</span>
           )}

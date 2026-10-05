@@ -355,6 +355,34 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
     };
   };
 
+  const filesUpdaterPanel = (
+    <FilesUpdaterPanel
+      activeProfile={config.activeProfile}
+      mirrorUrl={ffxiMirrorUrl}
+      onMirrorUrlChange={setFfxiMirrorUrl}
+      updating={ffxiUpdating}
+      percent={ffxiDlPercent}
+      detail={ffxiDlDetail}
+      status={ffxiUpdaterStatus}
+      target={updaterTarget}
+      onRun={runFfxiUpdater}
+    />
+  );
+
+  // The top bar (with its Game files and Files updater tiles) waits for setup, so a profile
+  // whose game files are missing gets both in the setup card — otherwise a sandboxed copy
+  // that was deleted, or a new one on a PC without FFXI, could never be filled.
+  const gameFilesFix = config.activeProfile && !readiness.ffxi && (
+    <div className="home-setup-gamefiles">
+      <GameFilesPicker
+        profileName={config.activeProfile}
+        ffxiPath={config.ffxiPath}
+        updaterName="the FFXI Files Updater below"
+      />
+      {gameFiles?.mode === 'sandbox' && filesUpdaterPanel}
+    </div>
+  );
+
   const tiles = !setupComplete ? [] : [
     {
       id: 'profile',
@@ -391,19 +419,7 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
       summary: ffxiUpdating ? `⚡ ${ffxiDlPercent}%` : '⚡ Run',
       title: ffxiUpdating ? ffxiDlDetail : 'FFXI Files Updater',
       panelWidth: 380,
-      render: () => (
-        <FilesUpdaterPanel
-          activeProfile={config.activeProfile}
-          mirrorUrl={ffxiMirrorUrl}
-          onMirrorUrlChange={setFfxiMirrorUrl}
-          updating={ffxiUpdating}
-          percent={ffxiDlPercent}
-          detail={ffxiDlDetail}
-          status={ffxiUpdaterStatus}
-          target={updaterTarget}
-          onRun={runFfxiUpdater}
-        />
-      ),
+      render: () => filesUpdaterPanel,
     },
     profiles.length > 1 && {
       id: 'multibox',
@@ -472,6 +488,8 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
               profiles={profiles}
               profileSwitcher={profileSwitcher()}
               onNavigate={onNavigate}
+              gameFiles={gameFiles}
+              gameFilesFix={gameFilesFix}
               ashitaInstalling={ashitaInstalling}
               ashitaProgress={ashitaProgress}
               ashitaError={ashitaError}

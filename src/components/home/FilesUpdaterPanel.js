@@ -23,7 +23,7 @@ function FilesUpdaterPanel({ activeProfile, mirrorUrl, onMirrorUrlChange, updati
           spellCheck={false}
         />
         <p className="form-field-desc">
-          Downloads pre-patched FFXI files into this profile's game files (see the Game files tile). Leave blank for the default{' '}
+          Downloads pre-patched FFXI files into this profile's game files (the folder below). Leave blank for the default{' '}
           <a href="#vana-portal" className="home-ffxiupd-link" onClick={e => { e.preventDefault(); api?.openExternal?.('https://vana-portal.com/downloads/updates'); }}>Vana Portal</a>{' '}
           mirror. Close FFXI before running.
         </p>
