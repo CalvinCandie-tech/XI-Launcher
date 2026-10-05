@@ -69,7 +69,7 @@
       "category": "75 - Custom Content",
       "host": "leveldownffxi.com",
       "port": "",
-      "previousHosts": [],
+      "previousHosts": ["ffxileveldown.ddns.net", "ffxileveldown75.ddns.net"],
       "website": "https://ffxileveldown.fandom.com/wiki/FFXILevelDown_Wiki",
       "discord": "https://discord.gg/uZ5J2KwAPA",
       "tags": { "expansion": "WotG", "exp": "Custom", "speed": "Retail", "trusts": true, "levelSync": true, "multiBox": true },
