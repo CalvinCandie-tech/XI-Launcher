@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './ServerBrowserTab.css';
 import ServerCard from '../components/servers/ServerCard';
+import ServerEditModal from '../components/servers/ServerEditModal';
 
 const api = window.xiAPI;
 
@@ -23,6 +24,7 @@ function ServerBrowserTab({ config, updateConfig }) {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
   const [status, setStatus] = useState({});
+  const [editing, setEditing] = useState(null); // null | { server } — server undefined = Add
 
   const favorites = config?.favoriteServers || [];
   const isFavorite = (s) => favorites.some(f => sameFav(f, s));
@@ -68,6 +70,42 @@ function ServerBrowserTab({ config, updateConfig }) {
 
   const handleReport = (s) => api?.openServerIssue('problem', { server: s });
 
+  const handleSave = async (form, suggest) => {
+    const res = await api.saveLocalServer(form);
+    if (!res || res.error) return res?.error || 'Could not save the server.';
+    const before = editing?.server;
+    // Keep a favourite of this server pointing at the address the player just entered.
+    if (before && form.host.trim()) {
+      const next = favorites.map(f => (sameFav(f, before)
+        ? { ...f, id: before.id, host: form.host.trim(), port: form.port.trim() }
+        : f));
+      if (next.some((f, i) => f !== favorites[i])) updateConfig('favoriteServers', next);
+    }
+    if (suggest) {
+      const official = before?.official || (before && !before.custom ? { name: before.name, host: before.host, port: before.port } : undefined);
+      const server = { ...(before || {}), ...form, id: res.id, official };
+      const details = !before
+        ? 'New server, added in XI Launcher.'
+        : official?.host && form.host.trim() && official.host !== form.host.trim()
+          ? `Address change: ${official.host} → ${form.host.trim()}`
+          : `Updated details for ${form.name.trim()}.`;
+      await api.openServerIssue('suggestion', { server, details });
+    }
+    setEditing(null);
+    await load();
+    return null;
+  };
+
+  const handleReset = async (s) => {
+    await api.resetLocalServer(s.id);
+    // A favourite that followed the local edit goes back to the official address.
+    if (s.official?.host) {
+      const next = favorites.map(f => (f.id === s.id ? { ...f, host: s.official.host, port: s.official.port || '' } : f));
+      if (next.some((f, i) => f !== favorites[i])) updateConfig('favoriteServers', next);
+    }
+    await load();
+  };
+
   const q = filter.trim().toLowerCase();
   const filteredCategories = categories.map(cat => ({
     ...cat,
@@ -90,6 +128,9 @@ function ServerBrowserTab({ config, updateConfig }) {
           {meta && <span className={`server-browser-status${meta.source === 'live' ? '' : ' stale'}`}>{sourceLabel(meta)}</span>}
         </div>
         <div className="server-browser-toolbar-right">
+          <button className="btn btn-primary btn-sm" onClick={() => setEditing({ server: undefined })}>
+            + Add a server
+          </button>
           <button className="btn btn-ghost btn-sm" onClick={() => checkAll(categories)} title="Check which servers are online">
             ↻ Check
           </button>
@@ -118,11 +159,17 @@ function ServerBrowserTab({ config, updateConfig }) {
                 favorite={isFavorite(server)}
                 onToggleFavorite={toggleFavorite}
                 onReport={handleReport}
+                onEdit={(s) => setEditing({ server: s })}
+                onReset={handleReset}
               />
             ))}
           </div>
         </div>
       ))}
+
+      {editing && (
+        <ServerEditModal server={editing.server} onSave={handleSave} onClose={() => setEditing(null)} />
+      )}
     </div>
   );
 }

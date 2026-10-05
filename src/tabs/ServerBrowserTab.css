@@ -264,3 +264,26 @@ button.server-card-name:hover { color: var(--gold-bright, #ffd700); }
   font-size: 11px;
   color: var(--text-dim);
 }
+
+/* Add / Edit modal */
+.server-edit {
+  box-sizing: border-box;
+  width: min(560px, calc(100vw - 32px));
+  padding: 20px;
+  overflow: hidden; /* ~430px tall, fits the 560px minimum window; avoids a 1px rounding scrollbar */
+}
+.server-edit .form-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.server-edit .form-input { width: 100%; min-width: 0; box-sizing: border-box; }
+.server-edit-suggest {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.server-edit-error {
+  margin-top: 10px;
+  color: var(--red);
+  font-size: 13px;
+}
