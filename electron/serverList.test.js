@@ -64,11 +64,31 @@ test('validateServerList removes the current host from previousHosts (any case) 
   assert.equal(errors.length, 1);
 });
 
-test('validateServerList keeps only known tag fields with the right types', () => {
-  const { list } = SL.validateServerList(doc([
-    entry({ tags: { expansion: ' ToAU ', rates: 3, levelSync: true, trusts: 'yes', multiBox: false, bogus: 'x' } }),
+test('validateServerList keeps the standard card fields; yes/no flags are true/false, anything else unknown', () => {
+  const { list, errors } = SL.validateServerList(doc([
+    entry({ tags: { expansion: ' ToAU ', exp: 'Retail', speed: '2x', levelSync: true, trusts: 'yes', multiBox: false, bogus: 'x' } }),
   ]));
-  assert.deepEqual(list.servers[0].tags, { expansion: 'ToAU', levelSync: true });
+  assert.deepEqual(list.servers[0].tags, { expansion: 'ToAU', exp: 'Retail', speed: '2x', levelSync: true, multiBox: false });
+  // a non-boolean flag and an unknown field (e.g. an old "rates" or a typo) are reported
+  assert.equal(errors.length, 2);
+  assert.match(errors.join('\n'), /trusts must be true or false/);
+  assert.match(errors.join('\n'), /unknown card field "bogus"/);
+});
+
+test('validateServerList rejects card values outside the standard wording', () => {
+  const { list, errors } = SL.validateServerList(doc([
+    entry({ tags: { expansion: 'Treasures', exp: '1x rates', speed: 'Slightly faster than retail' } }),
+  ]));
+  assert.deepEqual(list.servers[0].tags, {});
+  assert.equal(errors.length, 3);
+  assert.match(errors.join('\n'), /exp must be one of Retail, Custom or a multiplier like 2x/);
+});
+
+test('cardFields gives every server the same six fields, ? when unknown', () => {
+  assert.deepEqual(SL.cardFields({ expansion: 'ToAU', exp: 'Custom', trusts: false, levelSync: true }), {
+    expansion: 'ToAU', exp: 'Custom', speed: '?', trusts: false, levelSync: true, multiBox: null,
+  });
+  assert.deepEqual(SL.cardFields(undefined), { expansion: '?', exp: '?', speed: '?', trusts: null, levelSync: null, multiBox: null });
 });
 
 test('validateServerList keeps upstreamName and ignoredUpstream strings', () => {

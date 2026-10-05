@@ -12,8 +12,16 @@ const ISSUE_URL_MAX = 7000;
 const ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const HOST_RE = /^[A-Za-z0-9.-]+$/;
 const PORT_RE = /^\d{1,5}$/;
-const TAG_STRINGS = ['expansion', 'rates', 'moveSpeed'];
-const TAG_FLAGS = ['levelSync', 'trusts', 'multiBox'];
+// Standard card wording, so every server card reads the same ("1x" and "Retail" are one value).
+const EXPANSIONS = ['RoZ', 'CoP', 'ToAU', 'WotG', 'Abyssea', 'SoA', 'RoV', 'All'];
+const MULTIPLIER_RE = /^\d+(\.\d+)?x$/;
+const TAG_VALUES = {
+  expansion: { ok: v => EXPANSIONS.includes(v), describe: EXPANSIONS.join(', ') },
+  exp: { ok: v => ['Retail', 'Custom'].includes(v) || MULTIPLIER_RE.test(v), describe: 'Retail, Custom or a multiplier like 2x' },
+  speed: { ok: v => ['Retail', 'Old retail', 'Faster', 'Custom'].includes(v) || MULTIPLIER_RE.test(v), describe: 'Retail, Old retail, Faster, Custom or a multiplier like 2x' },
+};
+// true / false / missing = unknown
+const TAG_FLAGS = ['trusts', 'levelSync', 'multiBox'];
 
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 const sameHost = (a, b) => !!str(a) && !!str(b) && str(a).toLowerCase() === str(b).toLowerCase();
@@ -78,12 +86,18 @@ function normalizeServer(raw, errors) {
 
   const rawTags = raw.tags && typeof raw.tags === 'object' ? raw.tags : {};
   const tags = {};
-  for (const k of TAG_STRINGS) {
+  for (const [k, rule] of Object.entries(TAG_VALUES)) {
     const v = str(rawTags[k]);
-    if (v) tags[k] = v;
+    if (!v) continue;
+    if (rule.ok(v)) tags[k] = v;
+    else errors.push(`${where}: ${k} must be one of ${rule.describe} (got "${v}").`);
   }
   for (const k of TAG_FLAGS) {
-    if (rawTags[k] === true) tags[k] = true;
+    if (typeof rawTags[k] === 'boolean') tags[k] = rawTags[k];
+    else if (rawTags[k] !== undefined) errors.push(`${where}: ${k} must be true or false (leave it out if unknown).`);
+  }
+  for (const k of Object.keys(rawTags)) {
+    if (!(k in TAG_VALUES) && !TAG_FLAGS.includes(k)) errors.push(`${where}: unknown card field "${k}".`);
   }
 
   const server = {
@@ -93,6 +107,20 @@ function normalizeServer(raw, errors) {
   const upstreamName = str(raw.upstreamName);
   if (upstreamName) server.upstreamName = upstreamName;
   return server;
+}
+
+// The six fields every server card shows, in a fixed shape: '?' / null when unknown.
+function cardFields(tags) {
+  const t = tags && typeof tags === 'object' ? tags : {};
+  const flag = (k) => (typeof t[k] === 'boolean' ? t[k] : null);
+  return {
+    expansion: str(t.expansion) || '?',
+    exp: str(t.exp) || '?',
+    speed: str(t.speed) || '?',
+    trusts: flag('trusts'),
+    levelSync: flag('levelSync'),
+    multiBox: flag('multiBox'),
+  };
 }
 
 // JSON.parse, tolerating the byte-order mark Windows editors put at the start of a file.
@@ -382,6 +410,7 @@ module.exports = {
   sameHost,
   isLink,
   parseServerListText,
+  cardFields,
   validateServerList,
   resolveServerList,
   groupByCategory,

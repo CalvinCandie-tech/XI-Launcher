@@ -170,12 +170,48 @@ button.server-card-name:hover { color: var(--gold-bright, #ffd700); }
   background: rgba(200,160,60,0.12);
 }
 
-/* Tags */
-.server-card-tags {
+/* Standard facts: expansion · EXP · Speed, then Trusts / Level Sync / Multi-Box (same on every card) */
+.server-card-facts,
+.server-card-flags {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
 }
+
+.server-fact {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-card-alpha);
+  border: 1px solid var(--border);
+  color: var(--text-bright);
+}
+.server-fact-label {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+.server-fact.unknown,
+.server-tag-exp.unknown { color: var(--text-dim); }
+
+.server-flag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.server-flag.yes {
+  border-color: var(--gold-dim);
+  color: var(--gold);
+  background: rgba(200,160,60,0.07);
+}
+.server-flag.no {
+  color: var(--text-dim);
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 255, 255, 0.25);
+}
+.server-flag.unknown { color: var(--text-dim); border-style: dashed; }
 
 .server-tag {
   font-size: 11px;
@@ -191,12 +227,6 @@ button.server-card-name:hover { color: var(--gold-bright, #ffd700); }
   border-color: var(--teal-dim);
   color: var(--teal);
   background: var(--teal-alpha);
-}
-
-.server-tag-feature {
-  border-color: var(--gold-dim);
-  color: var(--gold);
-  background: rgba(200,160,60,0.07);
 }
 
 /* Note */

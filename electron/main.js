@@ -5438,7 +5438,7 @@ function registerIPC() {
       }
       return {
         success: true,
-        categories: serverList.groupByCategory(servers),
+        categories: serverList.groupByCategory(servers.map(s => ({ ...s, card: serverList.cardFields(s.tags) }))),
         source: state.source,
         updated: state.list.updated,
         fetchedAt: state.fetchedAt,

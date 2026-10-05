@@ -9,9 +9,24 @@ function StatusPill({ status }) {
   return <span className="server-status offline">● Offline</span>;
 }
 
-// One server on the Servers tab. Edit / Reset buttons only appear when the tab passes handlers.
+function Fact({ label, value }) {
+  return (
+    <span className={`server-fact${value === '?' ? ' unknown' : ''}`}>
+      <span className="server-fact-label">{label}</span> {value}
+    </span>
+  );
+}
+
+function Flag({ label, value }) {
+  const state = value === true ? 'yes' : value === false ? 'no' : 'unknown';
+  const mark = value === true ? '✓' : value === false ? '✗' : '?';
+  return <span className={`server-flag ${state}`}>{mark} {label}</span>;
+}
+
+// One server on the Servers tab. Every card shows the same six facts in the same order (? when
+// unknown). Edit / Reset only appear when the tab passes handlers.
 function ServerCard({ server, status, favorite, onToggleFavorite, onReport, onEdit, onReset }) {
-  const tags = server.tags || {};
+  const card = server.card || {};
   const open = (url) => api?.openExternal(url);
   const officialHost = server.official?.host;
 
@@ -30,6 +45,11 @@ function ServerCard({ server, status, favorite, onToggleFavorite, onReport, onEd
         </div>
         <div className="server-card-header-right">
           {server.host && <StatusPill status={status} />}
+          {onEdit && (
+            <button className="server-fav-btn server-card-edit" onClick={() => onEdit(server)} title="Edit this server on this PC" aria-label="Edit">
+              ✎
+            </button>
+          )}
           {server.host && (
             <button
               className={`server-fav-btn${favorite ? ' favorited' : ''}`}
@@ -54,13 +74,15 @@ function ServerCard({ server, status, favorite, onToggleFavorite, onReport, onEd
         </div>
       )}
 
-      <div className="server-card-tags">
-        {tags.expansion && <span className="server-tag server-tag-exp">{tags.expansion}</span>}
-        {tags.rates && <span className="server-tag">{tags.rates} rates</span>}
-        {tags.moveSpeed && <span className="server-tag">{tags.moveSpeed}</span>}
-        {tags.levelSync && <span className="server-tag server-tag-feature">Level Sync</span>}
-        {tags.trusts && <span className="server-tag server-tag-feature">Trusts</span>}
-        {tags.multiBox && <span className="server-tag server-tag-feature">Multi-Box</span>}
+      <div className="server-card-facts">
+        <span className={`server-tag server-tag-exp${card.expansion === '?' ? ' unknown' : ''}`}>{card.expansion || '?'}</span>
+        <Fact label="EXP" value={card.exp || '?'} />
+        <Fact label="Speed" value={card.speed || '?'} />
+      </div>
+      <div className="server-card-flags">
+        <Flag label="Trusts" value={card.trusts} />
+        <Flag label="Level Sync" value={card.levelSync} />
+        <Flag label="Multi-Box" value={card.multiBox} />
       </div>
 
       {server.note && <p className="server-card-note">{server.note}</p>}
@@ -69,15 +91,10 @@ function ServerCard({ server, status, favorite, onToggleFavorite, onReport, onEd
         {server.discord && <button className="btn btn-ghost btn-sm" onClick={() => open(server.discord)}>Discord</button>}
         {server.website && <button className="btn btn-ghost btn-sm" onClick={() => open(server.website)}>Website</button>}
         <span className="server-card-footer-spacer" />
-        {onEdit && (
-          <button className="btn btn-ghost btn-sm server-card-edit" onClick={() => onEdit(server)} title="Edit this server on this PC" aria-label="Edit">
-            ✎
-          </button>
-        )}
         {onReset && server.custom && <button className="btn btn-ghost btn-sm" onClick={() => onReset(server)}>Remove</button>}
         {!server.custom && (
-          <button className="btn btn-sm server-card-report" onClick={() => onReport(server)} title="Report a problem — wrong address or server closed? Tell the launcher team on GitHub">
-            ⚑ Report
+          <button className="btn btn-sm server-card-report" onClick={() => onReport(server)} title="Wrong address or server closed? Tell the launcher team on GitHub">
+            ⚑ Report problem
           </button>
         )}
       </div>

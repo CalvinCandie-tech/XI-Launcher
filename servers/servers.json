@@ -12,7 +12,7 @@
       "previousHosts": [],
       "website": "https://edenxi.com/",
       "discord": "https://discord.gg/S3EAWr2Jec",
-      "tags": { "expansion": "ToAU", "rates": "Retail", "levelSync": true, "multiBox": true },
+      "tags": { "expansion": "ToAU", "exp": "Retail", "speed": "Retail", "trusts": false, "levelSync": true, "multiBox": true },
       "note": ""
     },
     {
@@ -24,7 +24,7 @@
       "previousHosts": [],
       "website": "https://ffxi.party/",
       "discord": "https://discord.gg/srNwwCs",
-      "tags": { "expansion": "ToAU", "rates": "Retail", "moveSpeed": "Slightly faster than retail", "levelSync": true, "multiBox": true },
+      "tags": { "expansion": "ToAU", "exp": "Retail", "speed": "Faster", "trusts": false, "levelSync": true, "multiBox": true },
       "note": ""
     },
     {
@@ -36,7 +36,7 @@
       "previousHosts": [],
       "website": "https://phoenix-xi.com",
       "discord": "https://discord.gg/phoenix-xi",
-      "tags": { "expansion": "ToAU", "rates": "1x" },
+      "tags": { "expansion": "ToAU", "exp": "Retail" },
       "note": "Uses its own Phoenix Launcher — no public address to connect with XI Launcher."
     },
     {
@@ -48,7 +48,7 @@
       "previousHosts": [],
       "website": "https://gaiaxi.com/",
       "discord": "https://discord.gg/2c6HjwNuNK",
-      "tags": { "expansion": "ToAU", "rates": "Custom", "moveSpeed": "2x retail", "levelSync": true, "multiBox": true },
+      "tags": { "expansion": "ToAU", "exp": "Custom", "speed": "2x", "trusts": false, "levelSync": true, "multiBox": true },
       "note": ""
     },
     {
@@ -60,7 +60,7 @@
       "previousHosts": [],
       "website": "https://horizonxi.com/",
       "discord": "https://discord.gg/horizonxi",
-      "tags": { "expansion": "CoP", "rates": "Retail" },
+      "tags": { "expansion": "CoP", "exp": "Retail", "speed": "Old retail", "trusts": false, "multiBox": false },
       "note": "Uses its own HorizonXI launcher — it can't be started from XI Launcher."
     },
     {
@@ -72,7 +72,7 @@
       "previousHosts": [],
       "website": "https://ffxileveldown.fandom.com/wiki/FFXILevelDown_Wiki",
       "discord": "https://discord.gg/uZ5J2KwAPA",
-      "tags": { "expansion": "WotG", "rates": "Custom", "levelSync": true, "trusts": true, "multiBox": true },
+      "tags": { "expansion": "WotG", "exp": "Custom", "speed": "Retail", "trusts": true, "levelSync": true, "multiBox": true },
       "note": "75 and 99 players share one server since 2026-09-16."
     },
     {
@@ -84,7 +84,7 @@
       "previousHosts": [],
       "website": "https://na.nasomi.com/",
       "discord": "",
-      "tags": { "expansion": "ToAU", "levelSync": true, "multiBox": true },
+      "tags": { "expansion": "ToAU", "trusts": false, "levelSync": true, "multiBox": true },
       "note": ""
     },
     {
@@ -96,7 +96,7 @@
       "previousHosts": [],
       "website": "https://supernovaffxi.wordpress.com/",
       "discord": "https://discord.gg/QBBdfQh",
-      "tags": { "expansion": "ToAU", "rates": "Custom", "levelSync": true, "multiBox": true },
+      "tags": { "expansion": "ToAU", "exp": "Custom", "speed": "Custom", "trusts": false, "levelSync": true, "multiBox": true },
       "note": ""
     },
     {
@@ -108,7 +108,7 @@
       "previousHosts": [],
       "website": "https://catseyexi.com",
       "discord": "https://discord.gg/catseyexi",
-      "tags": { "expansion": "WotG", "rates": "Custom", "levelSync": true, "trusts": true, "multiBox": true },
+      "tags": { "expansion": "WotG", "exp": "Custom", "trusts": true, "levelSync": true, "multiBox": true },
       "note": ""
     },
     {
@@ -120,7 +120,7 @@
       "previousHosts": [],
       "website": "https://valhalla.group/",
       "discord": "https://discord.gg/enB8nh3FKp",
-      "tags": { "expansion": "Abyssea", "rates": "Custom", "levelSync": true, "trusts": true, "multiBox": true },
+      "tags": { "expansion": "Abyssea", "exp": "Custom", "speed": "Faster", "trusts": true, "levelSync": true, "multiBox": true },
       "note": ""
     },
     {
@@ -132,7 +132,7 @@
       "previousHosts": [],
       "website": "https://legendary-ffxi.pages.dev/",
       "discord": "https://discord.gg/7asbVtR",
-      "tags": { "expansion": "All", "rates": "Custom", "moveSpeed": "5x retail", "levelSync": true, "trusts": true, "multiBox": true },
+      "tags": { "expansion": "All", "exp": "Custom", "speed": "5x", "trusts": true, "levelSync": true, "multiBox": true },
       "note": "Connection address not listed yet — use Edit if you know it."
     },
     {
@@ -144,7 +144,7 @@
       "previousHosts": [],
       "website": "http://update.ff11sf.com/",
       "discord": "",
-      "tags": { "expansion": "All", "rates": "Retail", "levelSync": true, "trusts": true, "multiBox": true },
+      "tags": { "expansion": "All", "exp": "Retail", "speed": "Retail", "trusts": true, "levelSync": true, "multiBox": true },
       "note": ""
     }
   ]
