@@ -6,6 +6,7 @@ import Modal from '../components/Modal';
 import RegistryEditor from '../components/RegistryEditor';
 import LoaderPicker from '../components/LoaderPicker';
 import GameFilesPicker, { GAME_FILES_CHANGED_EVENT } from '../components/GameFilesPicker';
+import ProfileFilesUpdater from '../components/ProfileFilesUpdater';
 
 const api = window.xiAPI;
 
@@ -575,7 +576,11 @@ function ProfileTab({ config, updateConfig }) {
                       <button className="btn btn-ghost btn-sm" onClick={() => setShowGameFiles(false)}>✕</button>
                     </div>
                     <div className="loader-modal-body">
-                      <GameFilesPicker profileName={selectedProfile} ffxiPath={config.ffxiPath} />
+                      <GameFilesPicker profileName={selectedProfile} ffxiPath={config.ffxiPath} updaterName="the FFXI Files Updater below" />
+                      <div className="profile-files-updater">
+                        <div className="profile-files-updater-title">FFXI Files Updater</div>
+                        <ProfileFilesUpdater profileName={selectedProfile} />
+                      </div>
                     </div>
                   </div>
                 </Modal>
