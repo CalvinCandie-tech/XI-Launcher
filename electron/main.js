@@ -5338,7 +5338,7 @@ function registerIPC() {
 
   function readBundledServerList() {
     try {
-      return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'servers', 'servers.json'), 'utf-8'));
+      return serverList.parseServerListText(fs.readFileSync(path.join(__dirname, '..', 'servers', 'servers.json'), 'utf-8'));
     } catch {
       return null;
     }
@@ -5349,7 +5349,7 @@ function registerIPC() {
     const override = !app.isPackaged && process.env.XI_SERVER_LIST_URL;
     const url = override || serverList.SERVER_LIST_URL;
     if (override && !/^https?:/i.test(url)) {
-      return Promise.resolve(JSON.parse(fs.readFileSync(url, 'utf-8')));
+      return Promise.resolve(serverList.parseServerListText(fs.readFileSync(url, 'utf-8')));
     }
     return retryAsync(() => new Promise((resolve, reject) => {
       const req = https.get(url, { headers: { 'User-Agent': 'XI-Launcher', 'Cache-Control': 'no-cache' } }, (res) => {
@@ -5362,7 +5362,7 @@ function registerIPC() {
         res.on('data', c => data += c);
         res.on('end', () => {
           try {
-            resolve(JSON.parse(data));
+            resolve(serverList.parseServerListText(data));
           } catch {
             reject(new Error('Server list is not valid JSON'));
           }

@@ -95,6 +95,11 @@ function normalizeServer(raw, errors) {
   return server;
 }
 
+// JSON.parse, tolerating the byte-order mark Windows editors put at the start of a file.
+function parseServerListText(text) {
+  return JSON.parse(String(text).replace(/^﻿/, ''));
+}
+
 // Never throws. Bad entries are dropped (or bad fields cleared) and described in `errors`,
 // so one typo in servers.json can't take the Servers tab down.
 function validateServerList(json) {
@@ -361,6 +366,7 @@ module.exports = {
   str,
   sameHost,
   isLink,
+  parseServerListText,
   validateServerList,
   resolveServerList,
   groupByCategory,

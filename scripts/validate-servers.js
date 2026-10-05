@@ -3,12 +3,12 @@
 // Exits 1 on any problem — run by .github/workflows/servers-validate.yml.
 const fs = require('fs');
 const path = require('path');
-const { validateServerList } = require('../electron/serverList');
+const { parseServerListText, validateServerList } = require('../electron/serverList');
 
 const file = process.argv[2] || path.join(__dirname, '..', 'servers', 'servers.json');
 let json;
 try {
-  json = JSON.parse(fs.readFileSync(file, 'utf-8'));
+  json = parseServerListText(fs.readFileSync(file, 'utf-8'));
 } catch (e) {
   console.error(`✗ ${file}: ${e.message}`);
   process.exit(1);

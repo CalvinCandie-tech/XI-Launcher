@@ -319,3 +319,9 @@ test('the shipped servers/servers.json validates with no errors', () => {
   assert.deepEqual(errors, []);
   assert.ok(list.servers.length >= 10);
 });
+
+test('parseServerListText accepts a UTF-8 BOM (Windows editors add one)', () => {
+  const json = SL.parseServerListText('\uFEFF{"servers":[]}');
+  assert.deepEqual(json, { servers: [] });
+  assert.throws(() => SL.parseServerListText('not json'));
+});
