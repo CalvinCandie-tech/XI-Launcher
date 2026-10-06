@@ -14,6 +14,7 @@ const sandbox = require('./sandbox');
 const windowState = require('./windowState');
 const addonInstall = require('./addonInstall');
 const updateScript = require('./updateScript');
+const prereqs = require('./prereqs');
 
 /**
  * Extract a zip file using yauzl (streaming, handles large files, reports progress).
@@ -2591,6 +2592,26 @@ function registerIPC() {
       return { component: item.name, success, exitCode: exitCode === undefined ? null : exitCode };
     });
   }
+
+  // Read-only status of every FFXI/Ashita prerequisite (logic + sources in prereqs.js). Never
+  // installs anything. reg.exe exits 1 when a key/value doesn't exist; any other failure rejects
+  // so that package reports 'unknown' rather than a false 'installed'/'missing'.
+  ipcMain.handle('get-prereqs-status', () => prereqs.evaluatePrereqs({
+    readRegValue: (key, name, view) => new Promise((resolve, reject) => {
+      const args = ['query', key, '/v', name, ...(view ? [`/reg:${view}`] : [])];
+      execFile('reg', args, { windowsHide: true, timeout: 5000 }, (err, stdout) => {
+        if (!err) resolve(prereqs.parseRegQueryValue(stdout, name));
+        else if (err.code === 1 && !err.killed) resolve(null);
+        else reject(err);
+      });
+    }),
+    fileExists: (filePath) => fs.existsSync(filePath),
+    osInfo: {
+      build: prereqs.parseWindowsBuild(os.release()),
+      is64BitOS: process.arch === 'x64' || process.arch === 'arm64' || !!process.env.PROCESSOR_ARCHITEW6432,
+      windir: process.env.SystemRoot || 'C:\\Windows',
+    },
+  }));
 
   ipcMain.handle('install-prerequisites', async () => {
     const tmpDir = path.join(app.getPath('temp'), `xi-launcher-prereqs-${Date.now()}`);

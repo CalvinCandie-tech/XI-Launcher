@@ -145,6 +145,7 @@ contextBridge.exposeInMainWorld('xiAPI', {
   },
 
   // Prerequisite runtime installer (VC++ redistributables + .NET Framework)
+  getPrereqsStatus: () => ipcRenderer.invoke('get-prereqs-status'),
   installPrerequisites: () => ipcRenderer.invoke('install-prerequisites'),
   onPrerequisitesProgress: (callback) => {
     const handler = (_, percent, detail) => callback(percent, detail);
