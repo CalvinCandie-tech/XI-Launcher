@@ -166,8 +166,10 @@ function rowRunning(progress, rowId) {
   return { label: ROW_LABELS[state] || state, fraction: fraction === undefined ? null : fraction };
 }
 
-// The result entry for a row (the .NET collapse again: net48 requested, net481 installed).
-function resultForRow(result, rowId) {
+// The result entry for a row (the .NET collapse again: net48 requested, net481 installed). A
+// superseded row (net40, net452) is never installed itself, so a .NET result never shows on it.
+function resultForRow(result, rowId, category) {
+  if (category === 'superseded') return null;
   const results = (result && result.results) || [];
   return results.find((r) => r.id === rowId) || (isDotnet(rowId) ? results.find((r) => isDotnet(r.id)) : null) || null;
 }

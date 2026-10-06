@@ -9,7 +9,7 @@ const api = window.xiAPI;
 const STEPS_PRIVATE = ['welcome', 'paths', 'servers', 'profile', 'finish'];
 const STEPS_RETAIL = ['welcome', 'paths', 'profile', 'finish'];
 
-function SetupWizard({ config, updateConfig, onComplete }) {
+function SetupWizard({ config, updateConfig, onComplete, onPrereqStatus }) {
   const [step, setStep] = useState(0);
   const [ashitaPath, setAshitaPath] = useState(config.ashitaPath || '');
   const [ffxiPath, setFfxiPath] = useState(config.ffxiPath || '');
@@ -159,6 +159,8 @@ function SetupWizard({ config, updateConfig, onComplete }) {
     const result = await api.installPrerequisites();
     setPrereqInstalling(false);
     setPrereqResult(result);
+    // Hand the fresh status to the shared prereq state so the Home banner clears without a re-check.
+    if (onPrereqStatus && result && result.status) onPrereqStatus(result.status);
   };
 
   const savePaths = () => {

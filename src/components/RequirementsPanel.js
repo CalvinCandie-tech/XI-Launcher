@@ -30,7 +30,7 @@ function Row({ entry, prereqs }) {
   const { installing, progress, result, install } = prereqs;
   const pill = pillFor(entry);
   const run = installing ? rowRunning(progress, entry.id) : null;
-  const done = !installing && result ? resultForRow(result, entry.id) : null;
+  const done = !installing && result ? resultForRow(result, entry.id, entry.category) : null;
   const doneLabel = done ? describeRowResult(done) : null;
   const greyed = entry.status === 'covered' || entry.status === 'unsupported' || entry.category === 'superseded';
 

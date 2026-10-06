@@ -158,6 +158,16 @@ test('progress: the engine collapses .NET ids, so net481 events land on the requ
   assert.equal(U.resultForRow({ results: [{ id: 'vc2008-x86', state: 'installed' }] }, 'net48'), null);
 });
 
+test('row results: a .NET result never shows on a superseded row (net40 / net452), only on the .NET rows that can install', () => {
+  const ran = { results: [{ id: 'net481', state: 'installed' }] };
+  assert.equal(U.resultForRow(ran, 'net40', 'superseded'), null);
+  assert.equal(U.resultForRow(ran, 'net452', 'superseded'), null);
+  const failed = { results: [{ id: 'net481', state: 'failed', exitCode: 1603 }] };
+  assert.equal(U.resultForRow(failed, 'net40', 'superseded'), null, 'a failure is not pinned on a row that was never touched');
+  assert.equal(U.resultForRow(ran, 'net48', 'recommended').state, 'installed', 'the requested row still shows the collapsed result');
+  assert.equal(U.resultForRow(ran, 'net481', 'optional').state, 'installed');
+});
+
 // --- result wording -------------------------------------------------------------------------
 
 test('result wording: cancelled is calm and exact; errors pass through; failures count', () => {

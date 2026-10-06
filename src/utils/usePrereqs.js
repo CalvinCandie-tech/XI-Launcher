@@ -66,5 +66,9 @@ export default function usePrereqs() {
 
   const dismiss = useCallback(() => setDismissed(true), []);
 
-  return { available: !!api?.getPrereqsStatus, status, checking, installing, progress, result, dismissed, refresh, install, dismiss };
+  // For an install run outside this hook (the Setup Wizard): push the fresh status the engine
+  // returned so the Home banner and Settings rows don't go stale.
+  const applyStatus = useCallback((rows) => { if (Array.isArray(rows)) setStatus(rows); }, []);
+
+  return { available: !!api?.getPrereqsStatus, status, checking, installing, progress, result, dismissed, refresh, install, dismiss, applyStatus };
 }

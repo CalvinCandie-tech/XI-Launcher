@@ -706,6 +706,7 @@ function App() {
           config={config}
           updateConfig={updateConfig}
           onComplete={() => setShowWizard(false)}
+          onPrereqStatus={prereqs.applyStatus}
         />
       )}
       {addonUpdates.length > 0 && !showWizard && (
