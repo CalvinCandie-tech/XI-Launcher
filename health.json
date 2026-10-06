@@ -1,0 +1,46 @@
+{
+  "health": {
+    "eden": {
+      "lastOk": 1791293018286
+    },
+    "omega": {
+      "lastOk": 1791293018286
+    },
+    "gaia-xi": {
+      "firstFail": 1791293018286
+    },
+    "leveldown": {
+      "lastOk": 1791293018286
+    },
+    "nasomi": {
+      "firstFail": 1791293018286
+    },
+    "supernova": {
+      "lastOk": 1791293018286
+    },
+    "catseyexi": {
+      "lastOk": 1791293018286
+    },
+    "valhalla": {
+      "lastOk": 1791293018286
+    },
+    "ff11sf": {
+      "firstFail": 1791293018286
+    }
+  },
+  "upstream": [
+    "DSP Old School",
+    "Demiurge",
+    "Eden",
+    "Era",
+    "Gaia XI",
+    "HorizonXI",
+    "Legendary",
+    "LevelDown",
+    "Nasomi",
+    "Omega",
+    "Supernova",
+    "Valhalla",
+    "ff11sf"
+  ]
+}
