@@ -165,21 +165,42 @@ function buildInstallScript(plan, paths) {
 }
 
 // The NON-elevated wrapper that raises the single UAC prompt and waits. A declined prompt exits
-// 1223 so the caller can tell it from a real failure.
-function buildElevationScript(scriptPath) {
+// 1223 so the caller can tell it from a real failure, in any Windows display language.
+//
+// It starts the elevated process with Process.Start, not Start-Process: Windows PowerShell's
+// Start-Process catches the Win32Exception and rethrows a bare InvalidOperationException with only
+// the (localized) message text, so the error code is lost (PowerShell Process.cs, StartProcessCommand:
+// `new InvalidOperationException(message)` with no inner exception). Process.Start throws the
+// Win32Exception itself, whose NativeErrorCode is 1223 (ERROR_CANCELLED) when UAC is declined. The
+// catch walks the exception chain for it; any other error is rethrown and stays a failure.
+// launchOverride replaces the launch line and exists only for the test harness.
+function buildElevationScript(scriptPath, { launchOverride } = {}) {
+  const launch = launchOverride ? [`  ${launchOverride}`] : [
+    '  $psi = New-Object System.Diagnostics.ProcessStartInfo',
+    "  $psi.FileName = 'powershell.exe'",
+    `  $psi.Arguments = ${psQuote(`-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${scriptPath}"`)}`,
+    "  $psi.Verb = 'runas'",
+    '  $psi.UseShellExecute = $true',
+    '  $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden',
+    '  $proc = [System.Diagnostics.Process]::Start($psi)',
+    '  $proc.WaitForExit()',
+  ];
   return [
     "$ErrorActionPreference = 'Stop'",
     'try {',
-    `  Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ${psQuote(`"${scriptPath}"`)}) -Verb RunAs -Wait -WindowStyle Hidden`,
+    ...launch,
     '} catch {',
-    '  $native = $null',
-    '  if ($_.Exception -is [System.ComponentModel.Win32Exception]) { $native = $_.Exception.NativeErrorCode }',
-    `  if ($native -eq ${UAC_DECLINED}) { exit ${UAC_DECLINED} }`,
+    '  $err = $_.Exception',
+    '  while ($err) {',
+    `    if ($err -is [System.ComponentModel.Win32Exception] -and $err.NativeErrorCode -eq ${UAC_DECLINED}) { exit ${UAC_DECLINED} }`,
+    '    $err = $err.InnerException',
+    '  }',
     '  throw',
     '}',
   ].join('\r\n');
 }
 
+// 1223 from the wrapper is the language-independent signal; the English message is a fallback.
 function isUacDeclined(err) {
   return !!err && (err.exitCode === UAC_DECLINED || /canceled by the user|cancelled by the user/i.test(err.message || ''));
 }

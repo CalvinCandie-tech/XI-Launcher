@@ -189,9 +189,12 @@ test('install script: every installer is re-verified inside the elevated script,
 
 test('elevation script: one RunAs, quoted -File path, exits 1223 when the UAC prompt is declined', () => {
   const s = P.buildElevationScript("C:\\Users\\O'Brien s\\install.ps1");
-  assert.equal((s.match(/-Verb RunAs/g) || []).length, 1);
-  assert.ok(s.includes('\'"C:\\Users\\O\'\'Brien s\\install.ps1"\''), 'path wrapped in double quotes and apostrophe doubled');
-  assert.match(s, /NativeErrorCode/);
+  assert.equal((s.match(/\$psi\.Verb = 'runas'/g) || []).length, 1);
+  assert.equal((s.match(/Process\]::Start/g) || []).length, 1, 'Process.Start, not Start-Process (which drops the Win32Exception)');
+  assert.ok(!/Start-Process/.test(s));
+  assert.ok(s.includes('-File "C:\\Users\\O\'\'Brien s\\install.ps1"\''), 'path wrapped in double quotes and apostrophe doubled');
+  assert.match(s, /NativeErrorCode -eq 1223/);
+  assert.match(s, /InnerException/, 'the chain is walked');
   assert.match(s, /exit 1223/);
 });
 
@@ -211,6 +214,27 @@ function runPs(scriptText, dir) {
   fs.writeFileSync(file, '\uFEFF' + scriptText, 'utf8');
   return spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', file], { encoding: 'utf8', windowsHide: true });
 }
+
+// The elevation wrapper's catch block, run in real PowerShell with the launch line replaced by a throw
+// (a real UAC decline cannot be produced unattended). Only the error-chain handling is under test.
+const elevationExit = (launchOverride) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xi-prereq-elev-'));
+  try { return runPs(P.buildElevationScript('C:\\x\\install.ps1', { launchOverride }), dir).status; }
+  finally { fs.rmSync(dir, { recursive: true, force: true }); }
+};
+
+test('elevation wrapper: a Win32Exception 1223 exits 1223, whatever the language and however it is wrapped', WIN_ONLY, () => {
+  assert.equal(elevationExit("throw (New-Object System.ComponentModel.Win32Exception 1223)"), 1223, 'thrown directly');
+  assert.equal(elevationExit("throw (New-Object System.InvalidOperationException 'localized text', (New-Object System.ComponentModel.Win32Exception 1223))"), 1223, 'as an InnerException');
+  assert.equal(elevationExit("[void][System.Diagnostics.Process]::Start((New-Object System.Diagnostics.ProcessStartInfo -Property @{ FileName = 'C:\\\\no\\\\such\\\\file.exe'; UseShellExecute = $true }))"), 1,
+    'a real Process.Start failure (file not found, Win32Exception 2) is NOT mapped to 1223');
+});
+
+test('elevation wrapper: any other error, nested or not, is rethrown as a failure, never 1223', WIN_ONLY, () => {
+  assert.equal(elevationExit("throw (New-Object System.ComponentModel.Win32Exception 5)"), 1, 'access denied');
+  assert.equal(elevationExit("throw (New-Object System.InvalidOperationException 'blocked by policy', (New-Object System.ComponentModel.Win32Exception 1260))"), 1, 'policy-blocked is a failure');
+  assert.equal(elevationExit("throw 'plain string'"), 1);
+});
 
 // A temp folder whose name has a space, an apostrophe and a curly quote, like a nasty profile path.
 function nastyTemp() {
