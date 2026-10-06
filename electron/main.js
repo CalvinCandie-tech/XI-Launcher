@@ -16,6 +16,7 @@ const addonInstall = require('./addonInstall');
 const updateScript = require('./updateScript');
 const prereqs = require('./prereqs');
 const prereqInstall = require('./prereqInstall');
+const prereqFake = require('./prereqFake');
 
 /**
  * Extract a zip file using yauzl (streaming, handles large files, reports progress).
@@ -2529,7 +2530,23 @@ function registerIPC() {
     fileExists: (filePath) => fs.existsSync(filePath),
     osInfo: prereqsOsInfo,
   });
-  ipcMain.handle('get-prereqs-status', () => evaluatePrereqsNow());
+  const sendPrereqProgress = (percent, detail, info) => {
+    try { mainWindow?.webContents?.send('prerequisites-progress', percent, detail, info); } catch {}
+  };
+  // Dev-only: XI_PREREQS_FAKE=<fixture.json> replaces both handlers with a scripted fake (no network,
+  // registry or UAC). loadFixture() returns null for a packaged app, so this is inert in releases.
+  const prereqsFake = (() => {
+    try {
+      const fixture = prereqFake.loadFixture(process.env.XI_PREREQS_FAKE, app.isPackaged);
+      if (!fixture) return null;
+      console.warn(`[prereqs] XI_PREREQS_FAKE active: ${process.env.XI_PREREQS_FAKE}`);
+      return prereqFake.createFakeBackend(fixture, { sendProgress: sendPrereqProgress, sleep: (ms) => new Promise((r) => setTimeout(r, ms)) });
+    } catch (e) {
+      console.error(`[prereqs] XI_PREREQS_FAKE ignored: ${e.message}`);
+      return null;
+    }
+  })();
+  ipcMain.handle('get-prereqs-status', () => (prereqsFake ? prereqsFake.getStatus() : evaluatePrereqsNow()));
 
   // Support log: package, URL, signature verdict and exit code of every install run.
   const appendPrereqInstallLog = (line) => {
@@ -2549,16 +2566,14 @@ function registerIPC() {
     extractRoot: path.join(process.env.SystemRoot || 'C:\Windows', 'Temp'),
     download: (url, destPath, onProgress) => downloadFile(url, destPath, { label: 'Prerequisite download', onProgress }),
     runPowerShell: runPowerShellFile,
-    onProgress: (percent, detail) => {
-      try { mainWindow?.webContents?.send('prerequisites-progress', percent, detail); } catch {}
-    },
+    onProgress: sendPrereqProgress,
     log: appendPrereqInstallLog,
   });
   // Returns { results, restartRecommended, cancelled, error, status } — never rejects. No ids =
   // every required + recommended package that is missing.
-  ipcMain.handle('install-prerequisites', (_, ids) => installPrerequisites(
+  ipcMain.handle('install-prerequisites', (_, ids) => (prereqsFake ? prereqsFake.install() : installPrerequisites(
     Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : undefined
-  ));
+  )));
 
   // Watch for game process to exit, then notify renderer (per-profile watchers for multi-box)
   const gameExitWatchers = new Map();

@@ -1,0 +1,167 @@
+/* Settings -> Requirements. Progress bars reuse the launcher's teal -> gold fill (see UpdateModal). */
+
+.req-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-bottom: 12px;
+}
+
+.req-toolbar-note {
+  flex: 1 1 220px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.req-overall {
+  margin: 4px 0 14px;
+}
+
+.req-bar {
+  display: block;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.req-bar-big {
+  height: 5px;
+  background: var(--bg-deepest);
+  border-radius: 3px;
+  margin-bottom: 6px;
+}
+
+.req-bar-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--teal), var(--gold));
+  border-radius: inherit;
+  transition: width 0.3s ease;
+}
+
+/* Installing has no per-installer percentage: a sliding stripe instead of a fake number */
+.req-bar-indeterminate {
+  width: 40%;
+  animation: req-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes req-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .req-bar-indeterminate { animation: none; width: 100%; opacity: 0.6; }
+}
+
+.req-overall-text {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+
+.req-runline {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.req-runline-success { color: var(--green); }
+.req-runline-error { color: var(--red); }
+.req-runline-warn { color: var(--amber); }
+
+.req-group {
+  margin-top: 6px;
+}
+
+.req-group-title {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  padding: 10px 0 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.req-group-note {
+  font-family: var(--font-body);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-dim);
+}
+
+.req-row {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.req-row:last-child { border-bottom: none; }
+
+.req-row-grey .req-row-name { color: var(--text-dim); }
+
+.req-row-main {
+  flex: 1 1 240px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.req-row-name {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.req-row-detail {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.req-row-fail {
+  font-size: 12px;
+  color: var(--red);
+}
+
+/* Dim tone (covered / not supported) has no dot colour of its own in index.css */
+.req-pill-dim { color: var(--text-dim); }
+.req-pill-dim::before { background: var(--text-dim); }
+.req-pill { flex-shrink: 0; }
+
+.req-row-action {
+  flex: 0 0 168px;
+  display: flex;
+  justify-content: flex-end;
+  min-height: 28px;
+  align-items: center;
+}
+
+.req-run {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.req-run-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--gold-bright);
+  text-align: right;
+}
+
+.req-result {
+  font-size: 12px;
+  text-align: right;
+}
+.req-result-green { color: var(--green); }
+.req-result-red { color: var(--red); }
+.req-result-dim { color: var(--text-dim); }

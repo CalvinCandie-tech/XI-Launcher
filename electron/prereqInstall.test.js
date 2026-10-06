@@ -171,6 +171,22 @@ test('install script: every package is isolated in try/catch so a failure never 
   assert.throws(() => P.buildInstallScript(plan, { ...nastyPaths(plan), files: {} }), /No downloaded file/);
 });
 
+test('install script: every installer is re-verified inside the elevated script, right before it runs', () => {
+  const plan = [pkg('vc2008-x86'), pkg('directx-jun2010')];
+  const script = P.buildInstallScript(plan, nastyPaths(plan));
+  assert.ok(script.includes('Get-AuthenticodeSignature -LiteralPath $file'));
+  assert.ok(script.includes("-ne 'Valid'"), 'Status must be Valid');
+  assert.ok(script.includes("$requiredSigner = 'Microsoft Corporation'"), 'default signer');
+  assert.ok(script.includes('-cne $requiredSigner'), 'exact, case-sensitive CN comparison');
+  assert.ok(script.includes("throw ('signature changed: ' + $bad)"));
+  // The gate lives inside Invoke-Installer, ahead of Start-Process, so DXSETUP.exe goes through it too.
+  const fn = script.slice(script.indexOf('function Invoke-Installer'));
+  assert.ok(fn.indexOf('Test-InstallerSignature $file') < fn.indexOf('Start-Process'));
+  assert.equal((script.match(/Invoke-Installer /g) || []).length, 3, 'vc2008 + DirectX extract + DXSETUP all go through it');
+  assert.ok(script.includes('} catch {\r\n  $exitCode = -1'), 'any exception resets the exit code (a DXSETUP skip must not keep the extraction 0)');
+  assert.ok(P.buildInstallScript(plan, { ...nastyPaths(plan), signerCN: 'Test CN' }).includes("$requiredSigner = 'Test CN'"));
+});
+
 test('elevation script: one RunAs, quoted -File path, exits 1223 when the UAC prompt is declined', () => {
   const s = P.buildElevationScript("C:\\Users\\O'Brien s\\install.ps1");
   assert.equal((s.match(/-Verb RunAs/g) || []).length, 1);
@@ -203,72 +219,119 @@ function nastyTemp() {
 }
 const writeCmd = (file, body) => fs.writeFileSync(file, `@echo off\r\n${body}\r\n`);
 
-test('harness: fake installers exiting 0 / 1603 / 3010 / missing file, plus a fake DirectX self-extractor', WIN_ONLY, () => {
-  const dir = nastyTemp();
-  // Production passes a space-free dir (%SystemRoot%\Temp\...), so the fake extractor gets one too.
-  const extractDir = path.join(process.env.PUBLIC || 'C:\\Users\\Public', `xi-prereq-test-dx-${process.pid}`);
-  try {
-    const marker = `${extractDir}-ran.txt`; // ASCII-only path: cmd.exe would mangle the curly quote in `dir`
-    // Fake self-extractor: 2nd argument is /T:<dir>; "extracts" a fake DXSETUP.cmd that records its argument.
-    writeCmd(path.join(dir, 'directx-jun2010.cmd'), [
-      'set "A=%~2"',
-      'set "D=%A:~3%"',
-      'mkdir "%D%"',
-      `echo @echo off> "%D%\\DXSETUP.cmd"`,
-      `echo echo %%1^> "${marker}">> "%D%\\DXSETUP.cmd"`,
-      `echo exit /b 0 >> "%D%\\DXSETUP.cmd"`, // the space matters: "0>>" would be a handle redirect
-      'exit /b 0',
-    ].join('\r\n'));
-    writeCmd(path.join(dir, 'vc2008-x86.cmd'), 'exit /b 1603');
-    writeCmd(path.join(dir, 'vc2010-x86.cmd'), 'exit /b 3010');
-    writeCmd(path.join(dir, 'vc2012-x86.cmd'), 'exit /b 0');
-    // vc2013-x86 has no file on disk: Start-Process throws, the batch must carry on.
+// Stand-ins for installers. The in-script signature gate runs before every installer, and a signed
+// fake is not practical, so the accept path uses REAL Microsoft-signed Windows binaries (cmd.exe,
+// whoami.exe: Valid, CN=Microsoft Windows) with signerCN pointed at that CN, and arguments that make
+// them exit immediately with a chosen code. The reject path uses an unsigned file under the real
+// default CN. Production never sets signerCN.
+const SYS32 = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
+const SIGNED_CMD = path.join(SYS32, 'cmd.exe');
+const WINDOWS_SIGNER = 'Microsoft Windows';
+const exitsWith = (id, code) => ({ ...pkg(id), installer: { ...pkg(id).installer, args: ['/c', 'exit', String(code)] } });
+const harnessPaths = (dir, plan, files, extra = {}) => ({
+  files,
+  extractDir: path.join(dir, 'dx-extract'),
+  progressLogPath: path.join(dir, 'progress.log'),
+  resultsPath: path.join(dir, 'results.json'),
+  signerCN: WINDOWS_SIGNER,
+  ...extra,
+});
+const readResults = (paths) => JSON.parse(fs.readFileSync(paths.resultsPath, 'utf8')); // no BOM, valid JSON
 
-    const dx = { ...pkg('directx-jun2010'), installer: { ...pkg('directx-jun2010').installer, setupExe: 'DXSETUP.cmd' } };
-    const plan = [dx, pkg('vc2008-x86'), pkg('vc2010-x86'), pkg('vc2013-x86'), pkg('vc2012-x86')];
-    const paths = {
-      files: Object.fromEntries(plan.map((p) => [p.id, path.join(dir, `${p.id}.cmd`)])),
-      extractDir,
-      progressLogPath: path.join(dir, 'progress.log'),
-      resultsPath: path.join(dir, 'results.json'),
-    };
+test('harness: signed stand-ins exiting 0 / 1603 / 3010 are accepted and run; the batch carries on past a failure', WIN_ONLY, () => {
+  const dir = nastyTemp();
+  try {
+    const plan = [exitsWith('vc2008-x86', 1603), exitsWith('vc2010-x86', 3010), exitsWith('vc2012-x86', 0)];
+    const paths = harnessPaths(dir, plan, Object.fromEntries(plan.map((p) => [p.id, SIGNED_CMD])));
     const r = runPs(P.buildInstallScript(plan, paths), dir);
     assert.equal(r.status, 0, r.stderr || r.stdout);
-
-    const results = JSON.parse(fs.readFileSync(paths.resultsPath, 'utf8')); // no BOM, valid JSON
-    assert.deepEqual(results.map((x) => [x.id, x.exitCode]), [
-      ['directx-jun2010', 0], ['vc2008-x86', 1603], ['vc2010-x86', 3010], ['vc2013-x86', -1], ['vc2012-x86', 0],
-    ]);
-    assert.equal(results[3].error !== null, true, 'a file that cannot start records the error text');
-    assert.equal(results[0].error, null);
+    const results = readResults(paths);
+    assert.deepEqual(results.map((x) => [x.id, x.exitCode, x.error]), [['vc2008-x86', 1603, null], ['vc2010-x86', 3010, null], ['vc2012-x86', 0, null]]);
     for (const x of results) {
       assert.match(x.startedAt, /^\d{4}-\d\d-\d\dT/);
       assert.ok(Date.parse(x.endedAt) >= Date.parse(x.startedAt));
     }
-    assert.match(fs.readFileSync(marker, 'utf8'), /\/silent/, 'DXSETUP was run with /silent');
-    assert.equal(fs.existsSync(extractDir), false, 'extract dir is removed afterwards');
     const progress = fs.readFileSync(paths.progressLogPath, 'utf8').split(/\r?\n/).filter(Boolean);
-    assert.deepEqual(progress.slice(0, 4), ['STARTED|directx-jun2010', 'DONE|directx-jun2010|0', 'STARTED|vc2008-x86', 'DONE|vc2008-x86|1603']);
+    assert.deepEqual(progress.slice(0, 4), ['STARTED|vc2008-x86', 'DONE|vc2008-x86|1603', 'STARTED|vc2010-x86', 'DONE|vc2010-x86|3010']);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
-    fs.rmSync(extractDir, { recursive: true, force: true });
-    fs.rmSync(`${extractDir}-ran.txt`, { force: true });
+  }
+});
+
+test('harness: an UNSIGNED installer is skipped (signature changed), a missing file too, and the batch carries on', WIN_ONLY, () => {
+  const dir = nastyTemp();
+  try {
+    const unsigned = path.join(dir, 'vc2010-x86.cmd');
+    writeCmd(unsigned, `echo ran> "${path.join(dir, 'unsigned-ran.txt')}"\r\nexit /b 0`);
+    const plan = [exitsWith('vc2008-x86', 0), pkg('vc2010-x86'), pkg('vc2013-x86'), exitsWith('vc2012-x86', 0)];
+    const paths = harnessPaths(dir, plan, {
+      'vc2008-x86': SIGNED_CMD,
+      'vc2010-x86': unsigned,
+      'vc2013-x86': path.join(dir, 'does-not-exist.exe'),
+      'vc2012-x86': SIGNED_CMD,
+    });
+    const r = runPs(P.buildInstallScript(plan, paths), dir);
+    assert.equal(r.status, 0, r.stderr || r.stdout);
+    const results = readResults(paths);
+    assert.deepEqual(results.map((x) => x.exitCode), [0, -1, -1, 0]);
+    assert.match(results[1].error, /^signature changed: signature (?!Valid)\w+/);
+    assert.match(results[2].error, /^signature changed:/);
+    assert.equal(fs.existsSync(path.join(dir, 'unsigned-ran.txt')), false, 'the unsigned file was never executed');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('harness: the default signer CN rejects a validly signed file from another signer', WIN_ONLY, () => {
+  const dir = nastyTemp();
+  try {
+    const plan = [exitsWith('vc2008-x86', 0)];
+    const paths = harnessPaths(dir, plan, { 'vc2008-x86': SIGNED_CMD }, { signerCN: undefined }); // cmd.exe is CN=Microsoft Windows
+    assert.equal(runPs(P.buildInstallScript(plan, paths), dir).status, 0);
+    const [res] = readResults(paths);
+    assert.equal(res.exitCode, -1);
+    assert.match(res.error, /^signature changed: signed by \[Microsoft Windows\]/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('harness: DirectX extracts then runs a signed DXSETUP; a swapped (unsigned) DXSETUP is skipped, not reported as installed', WIN_ONLY, () => {
+  const dir = nastyTemp();
+  try {
+    const dx = pkg('directx-jun2010');
+    const files = { 'directx-jun2010': SIGNED_CMD }; // `cmd /Q /T:<dir> /C` exits 0, standing in for a successful extraction
+    const run = (setupSource, name) => {
+      const sub = path.join(dir, name);
+      fs.mkdirSync(path.join(sub, 'dx-extract'), { recursive: true });
+      setupSource(path.join(sub, 'dx-extract', 'DXSETUP.exe'));
+      const paths = harnessPaths(sub, [dx], files);
+      assert.equal(runPs(P.buildInstallScript([dx], paths), sub).status, 0);
+      assert.equal(fs.existsSync(paths.extractDir), false, 'extract dir is removed afterwards');
+      return readResults(paths)[0];
+    };
+    // Accept: whoami.exe (signed) is run with /silent and ends on its own; it is not -1 and has no error.
+    const ok = run((dest) => fs.copyFileSync(path.join(SYS32, 'whoami.exe'), dest), 'ok');
+    assert.equal(ok.error, null);
+    assert.notEqual(ok.exitCode, -1);
+    // Reject: the extraction succeeded (0) but DXSETUP is unsigned. Must be -1 + error, never 0.
+    const swapped = run((dest) => fs.writeFileSync(dest, 'MZ not a real exe'), 'swapped');
+    assert.equal(swapped.exitCode, -1);
+    assert.match(swapped.error, /^signature changed:/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
 test('harness: a failed extraction never runs DXSETUP', WIN_ONLY, () => {
   const dir = nastyTemp();
   try {
-    writeCmd(path.join(dir, 'directx-jun2010.cmd'), 'exit /b 7');
-    const dx = pkg('directx-jun2010');
-    const paths = {
-      files: { 'directx-jun2010': path.join(dir, 'directx-jun2010.cmd') },
-      extractDir: path.join(dir, 'dx-extract'),
-      progressLogPath: path.join(dir, 'progress.log'),
-      resultsPath: path.join(dir, 'results.json'),
-    };
+    const dx = { ...pkg('directx-jun2010'), installer: { ...pkg('directx-jun2010').installer, extractArgs: ['/c', 'exit', '7'] } };
+    const paths = harnessPaths(dir, [dx], { 'directx-jun2010': SIGNED_CMD });
+    fs.mkdirSync(paths.extractDir, { recursive: true });
+    fs.copyFileSync(path.join(SYS32, 'whoami.exe'), path.join(paths.extractDir, 'DXSETUP.exe')); // present, but must not run
     assert.equal(runPs(P.buildInstallScript([dx], paths), dir).status, 0);
-    const results = JSON.parse(fs.readFileSync(paths.resultsPath, 'utf8'));
+    const results = readResults(paths);
     assert.equal(results.length, 1, 'a single result is still a JSON array');
     assert.equal(results[0].exitCode, 7);
   } finally {
@@ -496,11 +559,43 @@ test('installer: elevation crashes without a result file -> failed, not installe
   assert.match(out.results[0].message, /PowerShell exited with code 1/);
 });
 
-test('installer: unknown requested id is reported as an error, not thrown', async () => {
+test('installer: unknown requested id is reported as an error, not thrown, and logged as ONE line (no stack)', async () => {
   const env = makeEnv();
   const out = await P.createPrereqInstaller(env.deps)(['bogus']);
   assert.match(out.error, /Unknown prerequisite id: bogus/);
   assert.ok(out.status);
+  assert.deepEqual(env.logLines.filter((l) => l.startsWith('ERROR')), ['ERROR Unknown prerequisite id: bogus']);
+  assert.ok(!env.logLines.some((l) => /\n\s+at /.test(l)), 'no stack trace anywhere in the log');
+});
+
+test('installer: not enough disk space is also a one-line ERROR', async () => {
+  const env = makeEnv({ free: 1000 });
+  await P.createPrereqInstaller(env.deps)();
+  const errLines = env.logLines.filter((l) => l.startsWith('ERROR'));
+  assert.equal(errLines.length, 1);
+  assert.ok(!errLines[0].includes('\n'), 'one line');
+  assert.match(errLines[0], /^ERROR Not enough free disk space/);
+});
+
+test('installer: a real exception (not a user-level error) keeps its stack in the log', async () => {
+  const env = makeEnv();
+  env.deps.makeTempDir = () => { throw new Error('EPERM: cannot create temp'); };
+  const out = await P.createPrereqInstaller(env.deps)();
+  assert.match(out.error, /EPERM/);
+  assert.match(env.logLines.find((l) => l.startsWith('ERROR')), /EPERM[\s\S]*\n\s+at /);
+});
+
+test('installer: an installer the elevated script refused (signature changed) is failed with no exit code, never installed', async () => {
+  const env = makeEnv({
+    missing: ['vc2008-x86', 'vc2010-x86'],
+    elevated: (e) => writeResults(e, [entry('vc2008-x86', -1, 'signature changed: signature NotSigned'), entry('vc2010-x86', 0)]),
+  });
+  const out = await P.createPrereqInstaller(env.deps)();
+  const bad = out.results.find((r) => r.id === 'vc2008-x86');
+  assert.deepEqual([bad.state, bad.exitCode], ['failed', null]);
+  assert.match(bad.message, /^Not run — signature changed/);
+  assert.equal(out.results.find((r) => r.id === 'vc2010-x86').state, 'installed');
+  assert.ok(env.logLines.some((l) => l.startsWith('EXIT vc2008-x86 NOT RUN')));
 });
 
 test('installer: progress events are throttled but always include the final 100', async () => {

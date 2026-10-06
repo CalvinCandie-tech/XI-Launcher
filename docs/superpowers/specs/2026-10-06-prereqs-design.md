@@ -1,7 +1,7 @@
 # Prerequisites checker — design (Phase 1: research + detection)
 
 **Date:** 2026-10-06
-**Status:** Phase 1 built (`electron/prereqs.js`, read-only IPC `get-prereqs-status`). Phase 2 built (`electron/prereqInstall.js`, IPC `install-prerequisites`; see "Phase 2 — as built"). Phase 3 is guidance only.
+**Status:** Phase 1 built (`electron/prereqs.js`, read-only IPC `get-prereqs-status`). Phase 2 built (`electron/prereqInstall.js`, IPC `install-prerequisites`; see "Phase 2 — as built"). Phase 3 built (Settings → Requirements, Home banner, dev fake mode; see "Phase 3 — as built").
 **Branch:** `feature/prereqs` (off `master` e5cb555)
 
 ## Read this first: a v1 installer already exists
@@ -182,15 +182,48 @@ The v1 installer is **replaced**, not joined: its `PREREQUISITES` array, SHA-256
 - Redirect hosts are **not** restricted in `downloadFile`; the signature gate is the integrity check, and every URL comes from the catalogue.
 
 ### Known gaps / for Phase 3
-- **TOCTOU**: the installers and `install.ps1` sit in the user's temp folder between the signature check (and the UAC click) and execution, so a same-user process could swap them. The owner decision was "verify before elevation"; re-verifying inside the elevated script is the cheap hardening if it is wanted.
+- ~~**TOCTOU**~~ — closed in Phase 3: the elevated script re-verifies every file right before it runs (see "Phase 3 — as built"). `install.ps1` itself is still written to the temp folder; the signature gate covers the installers it launches, not the script.
 - The 10 MB–265 MB download has no cancel. The 30-minute timeout on the elevated run kills only the wrapper, not an installer already running.
 - `describePrereqInstall` is the minimal message; per-package rows, per-package install buttons and the Requirements page are Phase 3 and can read `results` + `status` directly.
 
-## Phase 3 UI (guidance, not built)
+## Phase 3 UI (original guidance — built, see "Phase 3 — as built" below)
 
 - **Home banner only when a REQUIRED item is `missing`** (`summarize().requiredMissing`). Text names the item(s) and links to the Requirements page. `unknown` and `unsupported` never trigger it.
 - **Requirements page** lists every catalogue item with status (`installed`, `covered`, `missing`, `unsupported`, `unknown`), detail text, an **Install** button per missing item and an **Install all missing** button. `superseded` items show as "covered by .NET 4.8" and have no button.
 - **Never blocks Start Game.** The banner is dismissible; nothing gates launch.
+
+## Phase 3 — as built
+
+### Engine hardening
+- **Signature re-check inside the ELEVATED script.** `buildInstallScript` now defines `Test-InstallerSignature` and calls it from `Invoke-Installer` immediately before every `Start-Process`, so the installer *and* the extracted `DXSETUP.exe` are re-verified (Authenticode `Valid` + signer CN exactly `Microsoft Corporation`, case-sensitive). A file that fails throws `signature changed: <reason>`; the per-package catch records `exitCode = -1` (this also stops a skipped DXSETUP inheriting the extraction's `0`) and the batch carries on. The orchestrator reports it as `failed`, `exitCode: null`, message `Not run — signature changed: …`, log `EXIT <id> NOT RUN …`.
+- The signer CN is an optional `paths.signerCN` of the builder, default `Microsoft Corporation`. It exists only so the test harness can use real Microsoft-signed Windows binaries (CN=Microsoft Windows) as stand-in installers; production never sets it.
+- **Tests**: script-text tests; harness (real PowerShell, elevation off): signed `cmd.exe` with `/c exit N` as stand-in installers for the accept path (0 / 1603 / 3010, batch continues), an unsigned file and a missing file skipped (the unsigned file never runs), a validly signed file from the wrong signer rejected under the default CN, DirectX accept path (signed `whoami.exe` as DXSETUP) and a swapped unsigned DXSETUP → `-1` + error, never `0`.
+- **Logging**: `PrereqUserError` (unknown id, not enough disk space) logs one `ERROR <message>` line; real exceptions keep their stack.
+- **Additive engine changes for the UI**: status rows now carry `sizeBytes` (null when never downloaded); `prerequisites-progress` has a third argument `info = { phase: download|signature|elevation|install|recheck|done, id?, state?, fraction? }` (SetupWizard ignores it).
+
+### UI
+- `src/utils/usePrereqs.js` — one shared hook instance created in `App.js`: `status`, `checking`, `installing`, `progress`, `result`, `dismissed`, `refresh()`, `install(ids)`, `dismiss()`. Startup check runs ~800 ms after mount (never gates Start Game); status refreshes from the returned `status` after an install. No `xiAPI` → `status` stays null (nothing rendered, nothing throws).
+- `src/utils/prereqUi.js` — pure helpers (CommonJS so `electron/prereqUi.test.js` can require it): grouping, `selectInstallAllIds`, `shouldShowBanner`/`bannerText`, download-size sum, pills, the progress reducer, result wording.
+- `src/components/RequirementsPanel.js/.css` — the Settings → **Requirements** section (replaces the old "System Prerequisites" button; its orphaned `.settings-prereq-*` CSS removed). Groups Required / Recommended / Optional / Covered; pill + detail + per-row Install; "Install all missing (N)" with an approximate download size, a re-check, and a one-line note that one admin prompt appears; per-row progress (Downloading n% → Checking signature → Waiting for the admin prompt → Installing → Done), overall bar, per-row results, "Restart recommended", "Admin prompt was declined. Nothing was installed.", failed rows with exit code.
+- `src/components/home/PrereqBanner.js` — Home notice inside the existing `.home-notices` stack (same `.home-notice` styling as the update banner). **Banner rule**: shown iff a *required* package is `missing` or `unknown` and "Not now" has not been clicked this session. Wording: "Ashita recommends installing: <names>" (and "Couldn't check: <names>") — it never claims the game will not start. Buttons: **Install now** (installs the required missing/unknown ones, compact progress in the banner, disappears when the refreshed status is clean; a failure or cancel stays visible with a one-line result), **Details** (`guardedSetActiveTab('settings')` + a scroll nonce; SettingsTab polls up to 4 s for the section because the tab is on its loading skeleton on first visit), **Not now** (session only, not persisted).
+- "Install all missing" = required + recommended with status `missing`/`unknown`; optional (.NET 4.8.1) and superseded are never included. Size counts every .NET id once (the largest), an upper bound since the engine picks 4.8 or 4.8.1.
+- SetupWizard is unchanged (still calls `installPrerequisites()` and `describePrereqInstall`).
+
+### Dev-only fake mode
+- `XI_PREREQS_FAKE=<fixture.json>` — read in `electron/main.js` via `electron/prereqFake.js`. **Inert in packaged builds**: `loadFixture(env, app.isPackaged)` returns `null` before touching the variable or the file when packaged (unit-tested with a reader that throws). Unset → no change to either handler. When active it replaces `get-prereqs-status` and `install-prerequisites` (no network, registry, UAC or log writes) and replays the fixture's scripted `prerequisites-progress` events with their delays; after a scripted install the fake status becomes the result's `status`. It logs a warning at startup.
+- Fixtures in `scripts/fixtures/prereqs/` (format in its README.md): `required-missing` (slow demo pace, ends all-OK), `all-ok`, `mixed` (unknown + unsupported + covered + one recommended missing), `restart-recommended`, `cancelled`, `partial-failure`. A status may use the short form `{ default, overrides }` against the real catalogue.
+- Run: `$env:XI_PREREQS_FAKE='Z:\The Vault\xi-launcher\scripts\fixtures\prereqs\mixed.json'; npm start`.
+
+### Verified in this phase
+- `npm run test:electron` 231 → 262 (engine hardening, fake backend, fixtures, UI helpers).
+- Live in the dev build with each fixture: banner and its three buttons, Details scroll, Settings with mixed statuses, install-all mid-progress, restart-recommended, cancelled, partial failure, all-OK (no banner), banner at 760×560 and 2200×1250, and a real-mode launch (only VC++ 2008 x86 Missing, no banner). Screenshots in `.superpowers/shots/prereqs/` (git-ignored).
+
+### Known gaps
+- **No real install has been observed** (owner declined a live install here): the progress `info` stream during a real download, the real UAC prompt, a real installer exit code and the re-detect after a real install are only exercised through the fake backend and unit fakes.
+- No cancel button for a running download/install.
+- Banner dismissal is per session (not persisted); the banner is not re-shown after "Not now" until the launcher restarts.
+- Banner-initiated install succeeds silently (the banner just disappears); a "restart recommended" result is only visible in Settings → Requirements.
+- DirectPlay is still not handled.
 
 ## Open questions and risks for Phase 2
 

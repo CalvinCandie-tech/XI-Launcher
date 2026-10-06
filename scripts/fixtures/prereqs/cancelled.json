@@ -1,0 +1,51 @@
+{
+  "_doc": "The Windows admin prompt is declined. Nothing is installed; status unchanged.",
+  "status": {
+    "default": "installed",
+    "overrides": {
+      "directx-jun2010": "missing",
+      "vc2015-2022-x86": "missing"
+    }
+  },
+  "install": {
+    "events": [
+      { "delayMs": 0, "percent": 0, "detail": "Downloading DirectX End-User Runtime (June 2010)...", "info": { "phase": "download", "id": "directx-jun2010", "fraction": 0 } },
+      { "delayMs": 120, "percent": 15, "detail": "Downloading DirectX End-User Runtime (June 2010)... 50.1 / 95.6 MB", "info": { "phase": "download", "id": "directx-jun2010", "fraction": 0.52 } },
+      { "delayMs": 120, "percent": 30, "detail": "Downloading DirectX End-User Runtime (June 2010)... 95.6 / 95.6 MB", "info": { "phase": "download", "id": "directx-jun2010", "fraction": 1 } },
+      { "delayMs": 120, "percent": 30, "detail": "Downloading Visual C++ 2015-2022 Redistributable (x86)...", "info": { "phase": "download", "id": "vc2015-2022-x86", "fraction": 0 } },
+      { "delayMs": 120, "percent": 45, "detail": "Downloading Visual C++ 2015-2022 Redistributable (x86)... 6.6 / 13.3 MB", "info": { "phase": "download", "id": "vc2015-2022-x86", "fraction": 0.5 } },
+      { "delayMs": 120, "percent": 60, "detail": "Verifying Microsoft signatures...", "info": { "phase": "signature" } },
+      { "delayMs": 120, "percent": 65, "detail": "Requesting administrator permission...", "info": { "phase": "elevation" } },
+      { "delayMs": 120, "percent": 95, "detail": "Checking what is installed...", "info": { "phase": "recheck" } },
+      { "delayMs": 120, "percent": 100, "detail": "Cancelled", "info": { "phase": "done" } }
+    ],
+    "result": {
+      "results": [
+        {
+          "id": "directx-jun2010",
+          "name": "DirectX End-User Runtime (June 2010)",
+          "state": "cancelled",
+          "exitCode": null,
+          "message": "Not installed — administrator permission was declined"
+        },
+        {
+          "id": "vc2015-2022-x86",
+          "name": "Visual C++ 2015-2022 Redistributable (x86)",
+          "state": "cancelled",
+          "exitCode": null,
+          "message": "Not installed — administrator permission was declined"
+        }
+      ],
+      "restartRecommended": false,
+      "cancelled": true,
+      "error": null,
+      "status": {
+        "default": "installed",
+        "overrides": {
+          "directx-jun2010": "missing",
+          "vc2015-2022-x86": "missing"
+        }
+      }
+    }
+  }
+}

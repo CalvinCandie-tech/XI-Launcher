@@ -463,6 +463,9 @@
   font-family: var(--font-mono);
 }
 
+.prereq-banner-result-error { color: var(--red); }
+.prereq-banner-result-success { color: var(--green); }
+
 .home-notice-dismiss {
   background: none;
   border: none;

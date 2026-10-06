@@ -19,6 +19,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Modal from './components/Modal';
 import { ADDON_CATALOGUE } from './tabs/AddonsTab';
 import MissingAddonsModal from './components/MissingAddonsModal';
+import usePrereqs from './utils/usePrereqs';
 
 // Both catalogues need to be queried wherever a name might map to either a
 // /addon load entry or a /load entry (update check, missing-on-launch warning).
@@ -34,6 +35,9 @@ const api = window.xiAPI;
 function App() {
   const [config, setConfig] = useState(null);
   const [activeTab, setActiveTab] = useState('home');
+  // One shared Requirements check/installer feeds the Home banner and Settings -> Requirements.
+  const prereqs = usePrereqs();
+  const [requirementsScrollNonce, setRequirementsScrollNonce] = useState(0);
   // Tabs are mounted on first visit and kept mounted (hidden) afterwards, so an
   // in-flight download's progress UI + event listeners survive tab switches
   // instead of being torn down by a remount.
@@ -486,6 +490,12 @@ function App() {
     setActiveTab(tab);
   }, [settingsDirty, activeTab]);
 
+  // Home banner "Details": open Settings and scroll to the Requirements section.
+  const showRequirements = useCallback(() => {
+    guardedSetActiveTab('settings');
+    setRequirementsScrollNonce((n) => n + 1);
+  }, [guardedSetActiveTab]);
+
   const fadeOutMusic = useCallback(() => {
     if (!audioRef.current || audioRef.current.paused) return;
     const audio = audioRef.current;
@@ -646,12 +656,12 @@ function App() {
   const renderTabContent = (tab) => {
     const tabProps = { config, updateConfig };
     switch (tab) {
-      case 'home': return <HomeTab {...tabProps} onNavigate={guardedSetActiveTab} onLaunch={handleLaunch} isLaunching={isLaunching} launchLog={launchLog} updateInfo={updateInfo} onSkipVersion={handleSkipVersion} onDismissUpdate={handleDismissUpdate} onShowWizard={() => setShowWizard(true)} movedServers={movedServers} onApplyMove={handleApplyMove} onDismissMove={handleDismissMove} />;
+      case 'home': return <HomeTab {...tabProps} onNavigate={guardedSetActiveTab} onLaunch={handleLaunch} isLaunching={isLaunching} launchLog={launchLog} updateInfo={updateInfo} onSkipVersion={handleSkipVersion} onDismissUpdate={handleDismissUpdate} onShowWizard={() => setShowWizard(true)} prereqs={prereqs} onShowRequirements={showRequirements} movedServers={movedServers} onApplyMove={handleApplyMove} onDismissMove={handleDismissMove} />;
       case 'profiles': return <ProfileTab {...tabProps} />;
       case 'addons': return <AddonsTab {...tabProps} onCheckAddonUpdates={handleManualAddonCheck} />;
       case 'plugins': return <PluginsTab {...tabProps} />;
       // Script editor is now embedded in ProfileTab
-      case 'settings': return <SettingsTab {...tabProps} config={config} onSettingsSaved={() => saveCurrentProfileSettings(config)} onDirtyChange={setSettingsDirty} />;
+      case 'settings': return <SettingsTab {...tabProps} config={config} prereqs={prereqs} requirementsScrollNonce={requirementsScrollNonce} onSettingsSaved={() => saveCurrentProfileSettings(config)} onDirtyChange={setSettingsDirty} />;
       case 'xipivot': return <XIPivotTab {...tabProps} onSettingsSaved={() => saveCurrentProfileSettings(config)} />;
       case 'dgvoodoo': return <DgVoodooTab {...tabProps} />;
       case 'reshade': return <ReShadeTab {...tabProps} onNavigate={guardedSetActiveTab} />;

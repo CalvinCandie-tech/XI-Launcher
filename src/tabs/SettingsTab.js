@@ -4,7 +4,7 @@ import Modal from '../components/Modal';
 import RecPill from '../components/RecPill';
 import { REGISTRY_RECS } from '../components/RegistryEditor';
 import { getSection, setSectionValues, getScriptName } from '../utils/iniParser';
-import { describePrereqInstall } from '../utils/prereqMessage';
+import RequirementsPanel from '../components/RequirementsPanel';
 
 const api = window.xiAPI;
 
@@ -380,7 +380,7 @@ function GamepadTestModal({ onClose }) {
   );
 }
 
-function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
+function SettingsTab({ config, onSettingsSaved, onDirtyChange, prereqs, requirementsScrollNonce }) {
   const [regValues, setRegValues] = useState({});
   const [iniValues, setIniValues] = useState({});
   const [pendingWrites, setPendingWrites] = useState({});
@@ -433,26 +433,26 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
   const gamepadTestRef = useRef(null);
   const [detectedControllers, setDetectedControllers] = useState([]);
   const [controllersLoading, setControllersLoading] = useState(false);
-  const [prereqInstalling, setPrereqInstalling] = useState(false);
-  const [prereqProgress, setPrereqProgress] = useState({ percent: 0, detail: '' });
-  const [prereqResult, setPrereqResult] = useState(null);
 
+  // Home banner "Details" -> scroll to the Requirements section. On the first visit this tab mounts
+  // with the nonce already bumped and is still on its loading skeleton, so wait (briefly) for the
+  // section to exist.
   useEffect(() => {
-    if (!api?.onPrerequisitesProgress) return;
-    const unsub = api.onPrerequisitesProgress((percent, detail) => {
-      setPrereqProgress({ percent, detail });
-    });
-    return unsub;
-  }, []);
-
-  const installPrerequisites = async () => {
-    setPrereqInstalling(true);
-    setPrereqResult(null);
-    setPrereqProgress({ percent: 0, detail: 'Starting...' });
-    const result = await api.installPrerequisites();
-    setPrereqInstalling(false);
-    setPrereqResult(result);
-  };
+    if (!requirementsScrollNonce) return undefined;
+    let tries = 0;
+    const timer = setInterval(() => {
+      const el = document.getElementById('section-requirements');
+      const container = document.querySelector('.app-content');
+      if (el && container) {
+        clearInterval(timer);
+        const top = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop - 16;
+        container.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      } else if (++tries > 40) {
+        clearInterval(timer);
+      }
+    }, 100);
+    return () => clearInterval(timer);
+  }, [requirementsScrollNonce]);
 
   // Load registry values (read-only baseline) and INI overrides
   const loadValues = useCallback(async () => {
@@ -927,30 +927,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
         ))}
       </div>
 
-      <div className="section-header">System Prerequisites</div>
-      <div className="panel">
-        <p className="settings-hint settings-hint-compact">
-          DirectX, Visual C++ Runtimes and .NET Framework required by FFXI, PlayOnline, Ashita, and Windower. Safe to run any time — already-installed components are detected and skipped automatically.
-        </p>
-        <div className="settings-prereq-actions">
-          <button className="btn btn-primary" onClick={installPrerequisites} disabled={prereqInstalling}>
-            {prereqInstalling ? 'Installing...' : '↓ Verify & Install Prerequisites'}
-          </button>
-        </div>
-        {prereqInstalling && (
-          <div className="settings-prereq-progress-box">
-            <div className="settings-prereq-progress-bar">
-              <div className="settings-prereq-progress-fill" style={{ width: `${prereqProgress.percent}%` }} />
-            </div>
-            <span className="settings-prereq-progress-text">{prereqProgress.detail}</span>
-          </div>
-        )}
-        {prereqResult && !prereqInstalling && (() => {
-          const msg = describePrereqInstall(prereqResult);
-          const color = { success: 'var(--green)', error: 'var(--red)' }[msg.tone];
-          return <p className="settings-hint settings-hint-compact" style={color ? { color } : undefined}>{msg.text}</p>;
-        })()}
-      </div>
+      {prereqs && <RequirementsPanel prereqs={prereqs} />}
 
       <div className="settings-warning panel">
         Settings are saved to your Ashita profile and take effect next time you launch the game. Set a value to -1 to use the default from FFXI Config / Windows registry.

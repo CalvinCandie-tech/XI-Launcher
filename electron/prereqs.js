@@ -248,7 +248,8 @@ function parseWindowsBuild(release) {
 }
 
 function result(pkg, status, detail) {
-  return { id: pkg.id, name: pkg.name, category: pkg.category, status, detail };
+  // sizeBytes: approximate download size for the UI (null for packages that are never downloaded).
+  return { id: pkg.id, name: pkg.name, category: pkg.category, status, detail, sizeBytes: pkg.installer ? pkg.installer.sizeBytes : null };
 }
 
 // readRegValue(key, name, view) -> number | string | null (null = key or value absent); rejects/throws

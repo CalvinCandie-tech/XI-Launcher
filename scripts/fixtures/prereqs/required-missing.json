@@ -1,0 +1,51 @@
+{
+  "_doc": "DirectX + VC++ 2015-2022 missing. Install succeeds (slow, demo pace) and ends all-OK.",
+  "status": {
+    "default": "installed",
+    "overrides": {
+      "directx-jun2010": "missing",
+      "vc2015-2022-x86": "missing"
+    }
+  },
+  "install": {
+    "events": [
+      { "delayMs": 0, "percent": 0, "detail": "Downloading DirectX End-User Runtime (June 2010)...", "info": { "phase": "download", "id": "directx-jun2010", "fraction": 0 } },
+      { "delayMs": 700, "percent": 15, "detail": "Downloading DirectX End-User Runtime (June 2010)... 50.1 / 95.6 MB", "info": { "phase": "download", "id": "directx-jun2010", "fraction": 0.52 } },
+      { "delayMs": 700, "percent": 30, "detail": "Downloading DirectX End-User Runtime (June 2010)... 95.6 / 95.6 MB", "info": { "phase": "download", "id": "directx-jun2010", "fraction": 1 } },
+      { "delayMs": 300, "percent": 30, "detail": "Downloading Visual C++ 2015-2022 Redistributable (x86)...", "info": { "phase": "download", "id": "vc2015-2022-x86", "fraction": 0 } },
+      { "delayMs": 700, "percent": 45, "detail": "Downloading Visual C++ 2015-2022 Redistributable (x86)... 6.6 / 13.3 MB", "info": { "phase": "download", "id": "vc2015-2022-x86", "fraction": 0.5 } },
+      { "delayMs": 500, "percent": 60, "detail": "Verifying Microsoft signatures...", "info": { "phase": "signature" } },
+      { "delayMs": 700, "percent": 65, "detail": "Requesting administrator permission...", "info": { "phase": "elevation" } },
+      { "delayMs": 2500, "percent": 65, "detail": "Installing DirectX End-User Runtime (June 2010) (1 of 2)... please wait", "info": { "phase": "install", "id": "directx-jun2010", "state": "started" } },
+      { "delayMs": 4500, "percent": 80, "detail": "DirectX End-User Runtime (June 2010) finished", "info": { "phase": "install", "id": "directx-jun2010", "state": "done" } },
+      { "delayMs": 300, "percent": 80, "detail": "Installing Visual C++ 2015-2022 Redistributable (x86) (2 of 2)... please wait", "info": { "phase": "install", "id": "vc2015-2022-x86", "state": "started" } },
+      { "delayMs": 3500, "percent": 95, "detail": "Visual C++ 2015-2022 Redistributable (x86) finished", "info": { "phase": "install", "id": "vc2015-2022-x86", "state": "done" } },
+      { "delayMs": 400, "percent": 95, "detail": "Checking what is installed...", "info": { "phase": "recheck" } },
+      { "delayMs": 400, "percent": 100, "detail": "Done", "info": { "phase": "done" } }
+    ],
+    "result": {
+      "results": [
+        {
+          "id": "directx-jun2010",
+          "name": "DirectX End-User Runtime (June 2010)",
+          "state": "installed",
+          "exitCode": 0,
+          "message": "Installed"
+        },
+        {
+          "id": "vc2015-2022-x86",
+          "name": "Visual C++ 2015-2022 Redistributable (x86)",
+          "state": "installed",
+          "exitCode": 0,
+          "message": "Installed"
+        }
+      ],
+      "restartRecommended": false,
+      "cancelled": false,
+      "error": null,
+      "status": {
+        "default": "installed"
+      }
+    }
+  }
+}

@@ -33,6 +33,11 @@ const SKIP_STATUSES = ['installed', 'covered', 'unsupported'];
 
 const UAC_DECLINED = 1223; // ERROR_CANCELLED: the user clicked No on the UAC prompt
 
+const REQUIRED_SIGNER_CN = 'Microsoft Corporation';
+
+// A problem the user (or caller) caused or can read and act on: logged as one line, no stack.
+class PrereqUserError extends Error {}
+
 // PowerShell treats the Unicode curly single quotes as quote characters too, so an ordinary
 // '' double-up is not enough for a path like "C:\Users\O’Brien".
 const psQuote = (s) => "'" + String(s).replace(/['\u2018\u2019\u201A\u201B]/g, (c) => c + c) + "'";
@@ -64,7 +69,7 @@ function planInstall(statusResults, requestedIds, osInfo) {
   let wantDotnet = false;
 
   for (const id of requestedIds) {
-    if (!pkgById.has(id)) throw new Error(`Unknown prerequisite id: ${id}`);
+    if (!pkgById.has(id)) throw new PrereqUserError(`Unknown prerequisite id: ${id}`);
     const status = statusById.get(id);
     if (!status) throw new Error(`No detection result for prerequisite: ${id}`);
     if (SKIP_STATUSES.includes(status.status)) continue;
@@ -77,10 +82,17 @@ function planInstall(statusResults, requestedIds, osInfo) {
 }
 
 // The script that runs ELEVATED. paths = { files: {id: installerPath}, extractDir, progressLogPath,
-// resultsPath }. Runs every package in order, never stops on a failure, and rewrites resultsPath
-// after each package as [{id, exitCode, startedAt, endedAt, error}] so a crash still leaves a
-// record. progressLogPath gets STARTED|id / DONE|id|code lines for live UI progress.
+// resultsPath, signerCN? }. Runs every package in order, never stops on a failure, and rewrites
+// resultsPath after each package as [{id, exitCode, startedAt, endedAt, error}] so a crash still
+// leaves a record. progressLogPath gets STARTED|id / DONE|id|code lines for live UI progress.
+//
+// Every file is re-verified (Authenticode Valid + signer CN) immediately before it is run, inside
+// this elevated process: the installers sit in a user-writable temp folder between the first check
+// and the UAC click, and this closes that swap window. A file that no longer passes is skipped and
+// recorded as 'signature changed'. signerCN exists only so the test harness can use a real signed
+// Windows binary as a stand-in; production never sets it.
 function buildInstallScript(plan, paths) {
+  const signerCN = paths.signerCN || REQUIRED_SIGNER_CN;
   const lines = [
     "$ErrorActionPreference = 'Continue'",
     '$results = New-Object System.Collections.ArrayList',
@@ -90,7 +102,23 @@ function buildInstallScript(plan, paths) {
     'function Save-Results {',
     `  ${UTF8_NO_BOM_WRITE('$resultsPath', 'ConvertTo-Json -InputObject @($results) -Depth 3')}`,
     '}',
+    `$requiredSigner = ${psQuote(signerCN)}`,
+    'function Test-InstallerSignature([string]$file) {',
+    '  try {',
+    '    $sig = Get-AuthenticodeSignature -LiteralPath $file',
+    "    if ([string]$sig.Status -ne 'Valid') { return 'signature ' + [string]$sig.Status }",
+    "    $subject = ''",
+    '    if ($sig.SignerCertificate) { $subject = $sig.SignerCertificate.Subject }',
+    String.raw`    $m = [regex]::Match($subject, '(?:^|,\s*)CN=([^,"]*)(?:,|$)')`,
+    "    $cn = ''",
+    '    if ($m.Success) { $cn = $m.Groups[1].Value.Trim() }',
+    "    if ($cn -cne $requiredSigner) { return ('signed by [' + $cn + ']') }",
+    '    return $null',
+    "  } catch { return 'signature check failed: ' + $_.Exception.Message }",
+    '}',
     'function Invoke-Installer([string]$file, [string]$arguments) {',
+    '  $bad = Test-InstallerSignature $file',
+    "  if ($bad) { throw ('signature changed: ' + $bad) }",
     '  if ($arguments) { $p = Start-Process -FilePath $file -ArgumentList $arguments -Wait -PassThru }',
     '  else { $p = Start-Process -FilePath $file -Wait -PassThru }',
     '  return $p.ExitCode',
@@ -120,7 +148,9 @@ function buildInstallScript(plan, paths) {
     } else {
       lines.push(`  $exitCode = Invoke-Installer ${psQuote(file)} ${psQuote(inst.args.join(' '))}`);
     }
-    lines.push('} catch {', '  $errorText = $_.Exception.Message', '}');
+    // exitCode -1 on any exception: for DirectX the extraction code (0) is still in the variable
+    // when the DXSETUP signature check throws, and that must not read as "installed".
+    lines.push('} catch {', '  $exitCode = -1', '  $errorText = $_.Exception.Message', '}');
     if (inst.kind === 'dx-sfx') {
       lines.push(`Remove-Item -LiteralPath ${psQuote(paths.extractDir)} -Recurse -Force -ErrorAction SilentlyContinue`);
     }
@@ -229,7 +259,7 @@ const INSTALL_END = 95;
 //   extractRoot          where the DirectX self-extractor unpacks (a path without spaces)
 //   download(url, dest, onProgress(received, total)) -> Promise
 //   runPowerShell(scriptBody, timeoutMs) -> Promise; rejects with err.exitCode when it knows it
-//   onProgress(percent, detail)   log(line)
+//   onProgress(percent, detail, info)   log(line)      (info: see `emit` below)
 // Returns install(requestedIds?) -> Promise<{ results, restartRecommended, cancelled, error, status }>.
 // It never rejects: a failure of the whole run is reported in `error`.
 function createPrereqInstaller(deps) {
@@ -242,11 +272,13 @@ function createPrereqInstaller(deps) {
 
     const log = (line) => { try { deps.log(line); } catch { /* logging must never break an install */ } };
     let lastEmit = 0;
-    const emit = (percent, detail, force) => {
+    // info (3rd argument, additive) tells the UI which phase/package this is, so it need not parse
+    // the text: { phase: 'download'|'signature'|'elevation'|'install'|'recheck'|'done', id?, state?, fraction? }.
+    const emit = (percent, detail, force, info) => {
       const now = Date.now();
       if (!force && now - lastEmit < 250) return;
       lastEmit = now;
-      try { deps.onProgress(Math.round(percent), detail); } catch { /* renderer may be gone */ }
+      try { deps.onProgress(Math.round(percent), detail, info); } catch { /* renderer may be gone */ }
     };
 
     const results = [];
@@ -267,7 +299,7 @@ function createPrereqInstaller(deps) {
           const free = deps.freeBytes(tmpDir);
           if (free < needed) {
             const mb = (n) => Math.ceil(n / 1048576);
-            throw new Error(`Not enough free disk space to download the installers: need about ${mb(needed)} MB, only ${mb(free)} MB free.`);
+            throw new PrereqUserError(`Not enough free disk space to download the installers: need about ${mb(needed)} MB, only ${mb(free)} MB free.`);
           }
 
           // 1. Download every package. A failed download fails only that package.
@@ -277,12 +309,13 @@ function createPrereqInstaller(deps) {
             const dest = path.join(tmpDir, `${pkg.id}.exe`);
             const base = (DOWNLOAD_END * i) / plan.length;
             const span = DOWNLOAD_END / plan.length;
-            emit(base, `Downloading ${pkg.name}...`, true);
+            emit(base, `Downloading ${pkg.name}...`, true, { phase: 'download', id: pkg.id, fraction: 0 });
             try {
               await deps.download(pkg.installer.url, dest, (received, total) => {
                 if (total > 0) {
                   emit(base + (received / total) * span,
-                    `Downloading ${pkg.name}... ${(received / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB`);
+                    `Downloading ${pkg.name}... ${(received / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB`,
+                    false, { phase: 'download', id: pkg.id, fraction: received / total });
                 }
               });
               log(`DOWNLOAD ${pkg.id} ${pkg.installer.url} -> ok`);
@@ -296,7 +329,7 @@ function createPrereqInstaller(deps) {
           // 2. Authenticode, still non-elevated. Anything that does not pass is never run.
           const runnable = [];
           if (downloaded.length > 0) {
-            emit(DOWNLOAD_END, 'Verifying Microsoft signatures...', true);
+            emit(DOWNLOAD_END, 'Verifying Microsoft signatures...', true, { phase: 'signature' });
             const sigPath = path.join(tmpDir, 'signatures.json');
             let sigs = null;
             try {
@@ -321,7 +354,7 @@ function createPrereqInstaller(deps) {
 
           // 3. One elevated script for the whole batch (one UAC prompt).
           if (runnable.length > 0) {
-            emit(SIGNATURE_END, 'Requesting administrator permission...', true);
+            emit(SIGNATURE_END, 'Requesting administrator permission...', true, { phase: 'elevation' });
             const progressLogPath = path.join(tmpDir, 'progress.log');
             const resultsPath = path.join(tmpDir, 'results.json');
             const scriptPath = path.join(tmpDir, 'install.ps1');
@@ -347,7 +380,7 @@ function createPrereqInstaller(deps) {
                   const pct = SIGNATURE_END + ((INSTALL_END - SIGNATURE_END) * finished) / runnable.length;
                   emit(pct, marker === 'STARTED'
                     ? `Installing ${pkg.pkg.name} (${finished + 1} of ${runnable.length})... please wait`
-                    : `${pkg.pkg.name} finished`, true);
+                    : `${pkg.pkg.name} finished`, true, { phase: 'install', id, state: marker === 'STARTED' ? 'started' : 'done' });
                 }
                 consumed = lines.length;
               } catch { /* log not there yet */ }
@@ -379,6 +412,12 @@ function createPrereqInstaller(deps) {
                   results.push({ id: d.pkg.id, name: d.pkg.name, state: 'failed', exitCode: null, message: `Not installed — ${why}` });
                   continue;
                 }
+                if (typeof entry.error === 'string' && entry.error.startsWith('signature changed')) {
+                  // The in-script re-check refused the file: it never ran.
+                  log(`EXIT ${d.pkg.id} NOT RUN ${entry.error}`);
+                  results.push({ id: d.pkg.id, name: d.pkg.name, state: 'failed', exitCode: null, message: `Not run — ${entry.error}` });
+                  continue;
+                }
                 const verdict = classifyExitCode(d.pkg.id, entry.exitCode);
                 const message = entry.error ? `${verdict.message}: ${entry.error}` : verdict.message;
                 log(`EXIT ${d.pkg.id} code=${entry.exitCode} -> ${verdict.state}${entry.error ? ' error=' + entry.error : ''}`);
@@ -389,7 +428,8 @@ function createPrereqInstaller(deps) {
         }
       } catch (e) {
         error = e.message || String(e);
-        log(`ERROR ${e.stack || error}`);
+        // A problem the user can read (unknown id, no disk space) is one line; a real exception keeps its stack.
+        log(`ERROR ${e instanceof PrereqUserError ? error : (e.stack || error)}`);
       }
     } finally {
       if (pollTimer) clearInterval(pollTimer);
@@ -397,7 +437,7 @@ function createPrereqInstaller(deps) {
     }
 
     // Detection, not exit codes, is the source of truth: always hand back a fresh status.
-    emit(INSTALL_END, 'Checking what is installed...', true);
+    emit(INSTALL_END, 'Checking what is installed...', true, { phase: 'recheck' });
     let status = null;
     try {
       status = await deps.evaluate();
@@ -407,7 +447,7 @@ function createPrereqInstaller(deps) {
     }
     const restartRecommended = results.some((r) => r.state === 'restart');
     log(`END cancelled=${cancelled} restartRecommended=${restartRecommended} error=${error || '-'}`);
-    emit(100, cancelled ? 'Cancelled' : 'Done', true);
+    emit(100, cancelled ? 'Cancelled' : 'Done', true, { phase: 'done' });
     running = false;
     return { results, restartRecommended, cancelled, error, status };
   };
@@ -416,6 +456,7 @@ function createPrereqInstaller(deps) {
 module.exports = {
   INSTALL_ORDER,
   UAC_DECLINED,
+  PrereqUserError,
   defaultRequestedIds,
   planInstall,
   buildInstallScript,

@@ -150,7 +150,7 @@ contextBridge.exposeInMainWorld('xiAPI', {
   getPrereqsStatus: () => ipcRenderer.invoke('get-prereqs-status'),
   installPrerequisites: (ids) => ipcRenderer.invoke('install-prerequisites', ids),
   onPrerequisitesProgress: (callback) => {
-    const handler = (_, percent, detail) => callback(percent, detail);
+    const handler = (_, percent, detail, info) => callback(percent, detail, info);
     ipcRenderer.on('prerequisites-progress', handler);
     return () => ipcRenderer.removeListener('prerequisites-progress', handler);
   },

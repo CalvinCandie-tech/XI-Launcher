@@ -1,0 +1,29 @@
+{
+  "_doc": "Required OK; VC++ 2008 missing, VC++ 2012 could not be checked, .NET 4.8.1 not supported on this Windows; 4.0 / 4.5.2 covered.",
+  "status": {
+    "default": "installed",
+    "overrides": {
+      "vc2008-x86": "missing",
+      "vc2012-x86": [
+        "unknown",
+        "Could not check: registry read timed out"
+      ],
+      "net481": [
+        "unsupported",
+        "Needs Windows 10 version 20H2 (build 19042) or newer"
+      ],
+      "net48": [
+        "covered",
+        "Covered by .NET Framework 4.8.1 (Release 533509)"
+      ],
+      "net40": [
+        "covered",
+        "Covered by .NET Framework 4.8.1 (Release 533509)"
+      ],
+      "net452": [
+        "covered",
+        "Covered by .NET Framework 4.8.1 (Release 533509)"
+      ]
+    }
+  }
+}
