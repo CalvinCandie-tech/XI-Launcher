@@ -14,6 +14,7 @@ const sandbox = require('./sandbox');
 const windowState = require('./windowState');
 const addonInstall = require('./addonInstall');
 const updateScript = require('./updateScript');
+const { resolveRedirect } = require('./downloadRedirect');
 const prereqs = require('./prereqs');
 const prereqInstall = require('./prereqInstall');
 const prereqFake = require('./prereqFake');
@@ -480,14 +481,28 @@ function downloadFile(url, destPath, { headers = {}, stallMs = 60000, onProgress
       if (redirects > 10) return okReject(new Error('Too many redirects.'));
       // The stall timer below only starts once headers arrive; this one covers a
       // connection/TLS handshake that hangs first (AV HTTPS scanning, proxies).
-      const responseTimer = setTimeout(() => req.destroy(new Error('Download stalled — no response from server.')), stallMs);
-      const req = https.get(u, { headers: reqHeaders }, (res) => {
+      // req is declared first so the timer can never see it uninitialised.
+      let req = null;
+      const responseTimer = setTimeout(() => {
+        const err = new Error('Download stalled — no response from server.');
+        if (req) req.destroy(err); else okReject(err);
+      }, stallMs);
+      // https.get throws synchronously for a non-https or malformed URL. Inside a response
+      // callback that would be an uncaught exception and the promise would never settle, so every
+      // sync throw is turned into a rejection here.
+      const get = (...args) => {
+        try { return https.get(...args); } catch (e) { clearTimeout(responseTimer); okReject(e); return null; }
+      };
+      req = get(u, { headers: reqHeaders }, (res) => {
         clearTimeout(responseTimer);
         const sc = res.statusCode;
         if (sc === 301 || sc === 302 || sc === 307 || sc === 308) {
           if (!res.headers.location) return okReject(new Error('Redirect without Location header.'));
           res.resume();
-          return download(res.headers.location, redirects + 1);
+          // Relative Locations are resolved against the current URL; anything but https is refused.
+          const next = resolveRedirect(res.headers.location, u);
+          if (next.error) return okReject(new Error(next.error));
+          try { return download(next.url, redirects + 1); } catch (e) { return okReject(e); }
         }
         if (sc !== 200) { res.resume(); return okReject(new Error(`Download failed: HTTP ${sc}`)); }
         const total = parseInt(res.headers['content-length'] || '0', 10);
@@ -509,7 +524,7 @@ function downloadFile(url, destPath, { headers = {}, stallMs = 60000, onProgress
         res.on('end', () => { clearTimeout(stallTimer); file.end(); file.on('finish', okResolve); });
         res.on('error', (err) => { clearTimeout(stallTimer); file.destroy(); okReject(err); });
       });
-      req.on('error', (err) => { clearTimeout(responseTimer); okReject(err); });
+      if (req) req.on('error', (err) => { clearTimeout(responseTimer); okReject(err); });
     };
     download(url);
   }), { label });
