@@ -166,43 +166,77 @@
 .req-result-red { color: var(--red); }
 .req-result-dim { color: var(--text-dim); }
 
-/* Collapsible header: a real <button> that reuses the .section-header look (title, gradient rule) */
+/* Collapsible header: a card-style bar (real <button>) so it reads as something to click.
+   Left accent follows the summary tone. Reuses .section-header typography for the title. */
 .req-toggle {
   width: 100%;
-  background: none;
-  border: none;
-  padding: 0;
+  gap: 14px;
+  padding: 14px 16px 14px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--gold-dim);
+  border-left: 4px solid var(--text-dim);
+  border-radius: 8px;
   text-align: left;
   cursor: pointer;
   user-select: none;
+  margin-bottom: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.req-toggle::after { display: none; }
+.req-toggle:hover {
+  border-color: var(--gold);
+  box-shadow: 0 0 12px var(--gold-glow);
 }
 .req-toggle:hover .req-toggle-title { color: var(--gold-bright); }
 .req-toggle:focus-visible {
   outline: 2px solid var(--teal);
-  outline-offset: 4px;
-  border-radius: 4px;
+  outline-offset: 3px;
 }
+.req-toggle-ok { border-left-color: var(--green); }
+.req-toggle-warn { border-left-color: var(--amber); }
+.req-toggle-bad { border-left-color: var(--red); }
 
 .req-toggle-title { flex-shrink: 0; }
 
 /* One-line status; truncates on a narrow window instead of pushing the chevron off */
 .req-toggle-summary {
-  flex: 0 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 400;
+  font-size: 14px;
+  font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
-  color: var(--text-dim);
+  color: var(--text-secondary);
 }
 .req-toggle-summary-ok { color: var(--green); }
 .req-toggle-summary-warn { color: var(--amber); }
 .req-toggle-summary-bad { color: var(--red); }
 
-/* Title | summary | gradient rule | chevron (the rule is .section-header::after) */
-.req-toggle::after { order: 1; }
-.req-toggle .collapse-chevron { order: 2; flex-shrink: 0; }
+.req-toggle-hint {
+  flex-shrink: 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--text-primary);
+}
+.req-toggle:hover .req-toggle-hint { color: var(--gold-bright); }
+
+/* Chevron in a small box so it looks like a control */
+.req-toggle .collapse-chevron {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+  border: 1px solid var(--gold-dim);
+  border-radius: 6px;
+  background: var(--bg-deepest-alpha);
+}

@@ -68,13 +68,14 @@ function RequirementsPanel({ prereqs, open, onToggle }) {
     <div id="section-requirements">
       <button
         type="button"
-        className="section-header req-toggle"
+        className={`section-header req-toggle req-toggle-${summary.tone}`}
         aria-expanded={open}
         aria-controls="requirements-body"
         onClick={onToggle}
       >
         <span className="req-toggle-title">Requirements</span>
         <span className={`req-toggle-summary req-toggle-summary-${summary.tone}`} title={summary.text}>{summary.text}</span>
+        <span className="req-toggle-hint" aria-hidden="true">{open ? 'Hide' : 'Show'}</span>
         <span className={`collapse-chevron ${open ? 'open' : ''}`} aria-hidden="true">&#9660;</span>
       </button>
       <div className="panel req-panel" id="requirements-body" hidden={!open}>
