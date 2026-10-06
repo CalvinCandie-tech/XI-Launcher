@@ -2531,7 +2531,7 @@ function registerIPC() {
   const prereqsOsInfo = {
     build: prereqs.parseWindowsBuild(os.release()),
     is64BitOS: process.arch === 'x64' || process.arch === 'arm64' || !!process.env.PROCESSOR_ARCHITEW6432,
-    windir: process.env.SystemRoot || 'C:\Windows',
+    windir: process.env.SystemRoot || 'C:\\Windows',
   };
   const evaluatePrereqsNow = () => prereqs.evaluatePrereqs({
     readRegValue: (key, name, view) => new Promise((resolve, reject) => {
@@ -2578,7 +2578,7 @@ function registerIPC() {
     removeDir: (dir) => fs.rmSync(dir, { recursive: true, force: true }),
     // DirectX's self-extractor is not reliable with spaces in /T:, and the elevated script runs
     // as the same user, so extract under %SystemRoot%\Temp rather than the profile temp.
-    extractRoot: path.join(process.env.SystemRoot || 'C:\Windows', 'Temp'),
+    extractRoot: path.join(process.env.SystemRoot || 'C:\\Windows', 'Temp'),
     download: (url, destPath, onProgress) => downloadFile(url, destPath, { label: 'Prerequisite download', onProgress }),
     runPowerShell: runPowerShellFile,
     onProgress: sendPrereqProgress,

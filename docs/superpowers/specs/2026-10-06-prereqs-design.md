@@ -188,7 +188,7 @@ The v1 installer is **replaced**, not joined: its `PREREQUISITES` array, SHA-256
 
 ## Phase 3 UI (original guidance — built, see "Phase 3 — as built" below)
 
-- **Home banner only when a REQUIRED item is `missing`** (`summarize().requiredMissing`). Text names the item(s) and links to the Requirements page. `unknown` and `unsupported` never trigger it.
+- **Home banner only when a REQUIRED item is `missing` or `unknown`** (as built: `shouldShowBanner`; see "Phase 3 — as built"). Text names the item(s) and links to the Requirements page. `unsupported` and `covered` never trigger it.
 - **Requirements page** lists every catalogue item with status (`installed`, `covered`, `missing`, `unsupported`, `unknown`), detail text, an **Install** button per missing item and an **Install all missing** button. `superseded` items show as "covered by .NET 4.8" and have no button.
 - **Never blocks Start Game.** The banner is dismissible; nothing gates launch.
 
