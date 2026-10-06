@@ -240,6 +240,17 @@ function App() {
 
   // Music player
   const autoPlayedRef = useRef(false);
+  // Saved on/off choice (store key musicEnabled; missing means on). Autoplay waits for it.
+  const musicEnabledRef = useRef(true);
+  const [musicPrefLoaded, setMusicPrefLoaded] = useState(false);
+  useEffect(() => {
+    if (!api) { setMusicPrefLoaded(true); return; }
+    api.storeGet('musicEnabled')
+      .then(saved => { musicEnabledRef.current = saved !== false; })
+      .catch(() => {})
+      .finally(() => setMusicPrefLoaded(true));
+  }, []);
+
   useEffect(() => {
     if (!api?.listMusic) return;
     api.listMusic().then(tracks => setMusicTracks(tracks));
@@ -342,13 +353,21 @@ function App() {
   const toggleMusicRef = useRef(toggleMusic);
   useEffect(() => { toggleMusicRef.current = toggleMusic; }, [toggleMusic]);
 
-  // Auto-play music on startup once tracks are loaded
+  // Only the player's own play/pause click saves the choice. Automatic pauses
+  // (playlist end, game-launch fade-out) must not, or music would stay off forever.
+  const handleUserToggleMusic = useCallback(() => {
+    if (api && (musicPlaying || musicTracks.length > 0)) api.storeSet('musicEnabled', !musicPlaying);
+    toggleMusic();
+  }, [musicPlaying, musicTracks, toggleMusic]);
+
+  // Auto-play music on startup once tracks and the saved on/off choice are loaded
   useEffect(() => {
-    if (autoPlayedRef.current || musicTracks.length === 0 || musicPlaying) return;
+    if (!musicPrefLoaded || autoPlayedRef.current || musicTracks.length === 0 || musicPlaying) return;
     autoPlayedRef.current = true;
+    if (!musicEnabledRef.current) return;
     toggleMusicRef.current();
   // eslint-disable-next-line
-  }, [musicTracks]);
+  }, [musicTracks, musicPrefLoaded]);
 
   // Auto-play next track when index changes
   useEffect(() => {
@@ -715,7 +734,7 @@ function App() {
         <Sidebar
           activeTab={activeTab}
           onTabChange={guardedSetActiveTab}
-          onToggleMusic={toggleMusic}
+          onToggleMusic={handleUserToggleMusic}
           musicPlaying={musicPlaying}
           musicVolume={musicVolume}
           onVolumeChange={handleVolumeChange}
