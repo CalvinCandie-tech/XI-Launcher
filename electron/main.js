@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, protocol, safeStorage, session, Tray, Menu, nativeImage, screen } = require('electron');
+const { attachContextMenu } = require('./contextMenu');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -1182,6 +1183,9 @@ if (!hasSingleInstanceLock) {
     }
   });
 }
+
+// Right-click Cut/Copy/Paste/Select All on every window (Electron shows no menu by default).
+app.on('web-contents-created', (_event, wc) => attachContextMenu(wc, Menu));
 
 app.whenReady().then(async () => {
   // A second instance that lost the lock is quitting — don't initialize anything.
