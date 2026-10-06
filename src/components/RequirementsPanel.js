@@ -1,7 +1,8 @@
 import React from 'react';
+import './CollapsibleSection.css';
 import './RequirementsPanel.css';
 import {
-  groupPrereqs, canInstall, selectInstallAllIds, totalDownloadBytes, formatBytes,
+  groupPrereqs, canInstall, selectInstallAllIds, totalDownloadBytes, formatBytes, requirementsSummary,
   pillFor, rowRunning, resultForRow, describeRowResult, describeRun,
 } from '../utils/prereqUi';
 
@@ -54,17 +55,29 @@ function Row({ entry, prereqs }) {
 }
 
 // The Requirements section of the Settings tab: every catalogue item with status, per-row Install,
-// "Install all missing" and a re-check. Driven by the shared usePrereqs() instance.
-function RequirementsPanel({ prereqs }) {
+// "Install all missing" and a re-check. Driven by the shared usePrereqs() instance. A collapsible section:
+// the header always shows a one-line status; `open` / `onToggle` come from useRequirementsOpen (SettingsTab).
+function RequirementsPanel({ prereqs, open, onToggle }) {
   const { available, status, checking, installing, progress, result, refresh, install } = prereqs;
   const groups = groupPrereqs(status);
   const missingIds = selectInstallAllIds(status);
   const runLine = !installing ? describeRun(result) : null;
+  const summary = requirementsSummary({ available, status, checking, installing });
 
   return (
-    <>
-      <div className="section-header" id="section-requirements">Requirements</div>
-      <div className="panel req-panel">
+    <div id="section-requirements">
+      <button
+        type="button"
+        className="section-header req-toggle"
+        aria-expanded={open}
+        aria-controls="requirements-body"
+        onClick={onToggle}
+      >
+        <span className="req-toggle-title">Requirements</span>
+        <span className={`req-toggle-summary req-toggle-summary-${summary.tone}`} title={summary.text}>{summary.text}</span>
+        <span className={`collapse-chevron ${open ? 'open' : ''}`} aria-hidden="true">&#9660;</span>
+      </button>
+      <div className="panel req-panel" id="requirements-body" hidden={!open}>
         <p className="settings-hint settings-hint-compact">
           DirectX, Visual C++ runtimes and .NET Framework used by FFXI, PlayOnline, Ashita and Windower. Anything already
           installed is detected and left alone. Nothing here blocks Start Game.
@@ -110,7 +123,7 @@ function RequirementsPanel({ prereqs }) {
           </div>
         ))}
       </div>
-    </>
+    </div>
   );
 }
 

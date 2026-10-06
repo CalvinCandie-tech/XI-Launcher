@@ -251,3 +251,42 @@ test('fixtures: every committed fixture parses and its scripted result is self-c
     for (const x of r.results || []) assert.ok(fx.status.some((s) => s.id === x.id), `${f}: result id ${x.id} exists in the catalogue`);
   }
 });
+
+// --- Settings -> Requirements collapsed-header summary --------------------------------------
+
+const summary = (s, extra = {}) => U.requirementsSummary(Object.assign({ available: true, status: s, checking: false, installing: false }, extra));
+
+test('summary: everything installed', () => {
+  assert.deepEqual(summary(status()), { text: 'All required installed', tone: 'ok' });
+});
+
+test('summary: required fine, one recommended missing', () => {
+  assert.deepEqual(summary(status({ 'vc2008-x86': 'missing' })), { text: 'All required installed · 1 recommended missing', tone: 'warn' });
+});
+
+test('summary: two required missing wins the tone; recommended still listed', () => {
+  const s = status({ 'directx-jun2010': 'missing', 'vc2015-2022-x86': 'missing', 'vc2008-x86': 'missing' });
+  assert.deepEqual(summary(s), { text: '2 required missing · 1 recommended missing', tone: 'bad' });
+});
+
+test('summary: a required package that could not be checked is not reported as installed', () => {
+  assert.deepEqual(summary(status({ 'vc2015-2022-x86': ['unknown', 'x'] })), { text: "1 required couldn't be checked", tone: 'warn' });
+});
+
+test('summary: optional / covered / unsupported never count', () => {
+  const s = status({ net481: 'missing', net40: 'missing', 'vc2013-x86': ['unsupported', 'x'], 'vc2012-x86': ['covered', 'x'] });
+  assert.equal(summary(s).text, 'All required installed');
+});
+
+test('summary: loading states', () => {
+  assert.deepEqual(summary(null, { checking: true }), { text: 'Checking…', tone: 'dim' });
+  assert.deepEqual(summary(status(), { checking: true }), { text: 'Checking…', tone: 'dim' }, 're-check keeps the rows but says so');
+  assert.deepEqual(summary(null), { text: 'Not checked yet', tone: 'dim' });
+  assert.deepEqual(summary(status({ 'directx-jun2010': 'missing' }), { installing: true }), { text: 'Installing…', tone: 'dim' });
+  assert.equal(U.requirementsSummary({ available: false, status: null, checking: false, installing: false }).text, 'Desktop launcher only');
+});
+
+test("summary: an empty or malformed status is \"Couldn't check\"", () => {
+  assert.deepEqual(summary([]), { text: "Couldn't check", tone: 'warn' });
+  assert.deepEqual(summary({ error: 'boom' }), { text: "Couldn't check", tone: 'warn' });
+});

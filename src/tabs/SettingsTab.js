@@ -5,6 +5,7 @@ import RecPill from '../components/RecPill';
 import { REGISTRY_RECS } from '../components/RegistryEditor';
 import { getSection, setSectionValues, getScriptName } from '../utils/iniParser';
 import RequirementsPanel from '../components/RequirementsPanel';
+import useRequirementsOpen from '../utils/useRequirementsOpen';
 
 const api = window.xiAPI;
 
@@ -433,6 +434,9 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange, prereqs, requirem
   const gamepadTestRef = useRef(null);
   const [detectedControllers, setDetectedControllers] = useState([]);
   const [controllersLoading, setControllersLoading] = useState(false);
+
+  // Requirements open/closed lives here (not in the panel) so it survives the loading skeleton.
+  const [requirementsOpen, setRequirementsOpen] = useRequirementsOpen(prereqs, requirementsScrollNonce);
 
   // Home banner "Details" -> scroll to the Requirements section. On the first visit this tab mounts
   // with the nonce already bumped and is still on its loading skeleton, so wait (briefly) for the
@@ -927,7 +931,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange, prereqs, requirem
         ))}
       </div>
 
-      {prereqs && <RequirementsPanel prereqs={prereqs} />}
+      {prereqs && <RequirementsPanel prereqs={prereqs} open={requirementsOpen} onToggle={() => setRequirementsOpen((o) => !o)} />}
 
       <div className="settings-warning panel">
         Settings are saved to your Ashita profile and take effect next time you launch the game. Set a value to -1 to use the default from FFXI Config / Windows registry.

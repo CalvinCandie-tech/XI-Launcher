@@ -165,3 +165,44 @@
 .req-result-green { color: var(--green); }
 .req-result-red { color: var(--red); }
 .req-result-dim { color: var(--text-dim); }
+
+/* Collapsible header: a real <button> that reuses the .section-header look (title, gradient rule) */
+.req-toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+.req-toggle:hover .req-toggle-title { color: var(--gold-bright); }
+.req-toggle:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.req-toggle-title { flex-shrink: 0; }
+
+/* One-line status; truncates on a narrow window instead of pushing the chevron off */
+.req-toggle-summary {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-dim);
+}
+.req-toggle-summary-ok { color: var(--green); }
+.req-toggle-summary-warn { color: var(--amber); }
+.req-toggle-summary-bad { color: var(--red); }
+
+/* Title | summary | gradient rule | chevron (the rule is .section-header::after) */
+.req-toggle::after { order: 1; }
+.req-toggle .collapse-chevron { order: 2; flex-shrink: 0; }

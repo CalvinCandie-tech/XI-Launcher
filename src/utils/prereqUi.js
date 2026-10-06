@@ -52,6 +52,32 @@ function bannerText(status) {
   return parts.join('. ');
 }
 
+// One-line summary shown on the collapsed Requirements header: { text, tone } with tone
+// 'bad' (a required package is missing) | 'warn' | 'ok' | 'dim'. Optional / covered packages never count.
+function requirementsSummary(state) {
+  const { available, status, checking, installing } = state;
+  if (!available) return { text: 'Desktop launcher only', tone: 'dim' };
+  if (installing) return { text: 'Installing…', tone: 'dim' };
+  if (checking) return { text: 'Checking…', tone: 'dim' };
+  if (status == null) return { text: 'Not checked yet', tone: 'dim' };
+  if (!Array.isArray(status) || status.length === 0) return { text: "Couldn't check", tone: 'warn' };
+
+  const groups = groupPrereqs(status);
+  const problems = (list, label) => {
+    const missing = list.filter((e) => e.status === 'missing').length;
+    const unknown = list.filter((e) => e.status === 'unknown').length;
+    const parts = [];
+    if (missing) parts.push(`${missing} ${label} missing`);
+    if (unknown) parts.push(`${unknown} ${label} couldn't be checked`);
+    return parts;
+  };
+  const required = problems(groups.required, 'required');
+  const recommended = problems(groups.recommended, 'recommended');
+  const parts = (required.length ? required : ['All required installed']).concat(recommended);
+  const tone = groups.required.some((e) => e.status === 'missing') ? 'bad' : (required.length || recommended.length ? 'warn' : 'ok');
+  return { text: parts.join(' · '), tone };
+}
+
 // Approximate download size of the given ids. Every .NET id is ONE install (the engine picks 4.8 or
 // 4.8.1), so only the largest selected .NET package is counted.
 function totalDownloadBytes(status, ids) {
@@ -209,6 +235,7 @@ module.exports = {
   bannerPackages,
   shouldShowBanner,
   bannerText,
+  requirementsSummary,
   totalDownloadBytes,
   formatBytes,
   pillFor,
