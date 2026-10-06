@@ -58,11 +58,11 @@ function totalDownloadBytes(status, ids) {
   const byId = new Map((Array.isArray(status) ? status : []).map((e) => [e.id, e]));
   let total = 0;
   let dotnet = 0;
-  for (const id of ids) {
+  ids.forEach((id) => {
     const size = (byId.get(id) && byId.get(id).sizeBytes) || 0;
     if (isDotnet(id)) dotnet = Math.max(dotnet, size);
     else total += size;
-  }
+  });
   return total + dotnet;
 }
 
@@ -100,7 +100,7 @@ const rowIdFor = (id, requestedIds) => {
 
 function initialProgress(requestedIds) {
   return {
-    requestedIds: [...requestedIds],
+    requestedIds: requestedIds.slice(),
     percent: 0,
     detail: 'Starting...',
     phase: 'starting',
@@ -110,10 +110,17 @@ function initialProgress(requestedIds) {
 }
 
 function reduceProgress(state, percent, detail, info) {
-  const next = { ...state, percent, detail: detail || state.detail, rows: { ...state.rows }, fractions: { ...state.fractions } };
+  // Object.assign / forEach rather than spread / for-of: those make Babel inject ESM helper imports in the
+  // production build, which flips this CommonJS file to ESM and breaks its named imports.
+  const next = Object.assign({}, state, {
+    percent,
+    detail: detail || state.detail,
+    rows: Object.assign({}, state.rows),
+    fractions: Object.assign({}, state.fractions),
+  });
   if (!info) return next;
   next.phase = info.phase;
-  const each = (from, to) => { for (const id of Object.keys(next.rows)) if (from.includes(next.rows[id])) next.rows[id] = to; };
+  const each = (from, to) => { Object.keys(next.rows).forEach((id) => { if (from.includes(next.rows[id])) next.rows[id] = to; }); };
 
   switch (info.phase) {
     case 'download': {
