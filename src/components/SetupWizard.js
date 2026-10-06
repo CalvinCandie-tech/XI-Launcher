@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import './SetupWizard.css';
 import { DEFAULT_PROFILE_INI } from '../utils/profileTemplates';
 import Modal from './Modal';
+import { describePrereqInstall } from '../utils/prereqMessage';
 
 const api = window.xiAPI;
 
@@ -23,7 +24,7 @@ function SetupWizard({ config, updateConfig, onComplete }) {
   const [installError, setInstallError] = useState('');
   const [prereqInstalling, setPrereqInstalling] = useState(false);
   const [prereqProgress, setPrereqProgress] = useState({ percent: 0, detail: '' });
-  const [prereqResult, setPrereqResult] = useState(null); // { success, results, anyRebootRequired, error }
+  const [prereqResult, setPrereqResult] = useState(null); // { results, restartRecommended, cancelled, error, status }
   const [xiloaderFound, setXiloaderFound] = useState(false);
   const [xiloaderDownloading, setXiloaderDownloading] = useState(false);
   const [xiloaderProgress, setXiloaderProgress] = useState({ percent: 0, detail: '' });
@@ -220,7 +221,7 @@ function SetupWizard({ config, updateConfig, onComplete }) {
 
               <div className="wizard-field">
                 <label>System Prerequisites</label>
-                <span className="field-hint">Visual C++ Runtimes and .NET Framework — required by FFXI, PlayOnline, Ashita, and Windower</span>
+                <span className="field-hint">DirectX, Visual C++ Runtimes and .NET Framework — required by FFXI, PlayOnline, Ashita, and Windower</span>
                 {!prereqInstalling && !prereqResult && (
                   <button className="btn btn-primary btn-sm wizard-action-btn" onClick={installPrerequisites}>
                     ↓ Verify &amp; Install Prerequisites
@@ -234,23 +235,15 @@ function SetupWizard({ config, updateConfig, onComplete }) {
                     <span className="wizard-progress-detail">{prereqProgress.detail}</span>
                   </div>
                 )}
-                {prereqResult && prereqResult.success && (
-                  <p className="wizard-status-msg wizard-status-msg-success">
-                    ✓ All prerequisites installed{prereqResult.anyRebootRequired ? ' — a restart may be needed for some changes to take effect' : ''}
-                  </p>
-                )}
-                {prereqResult && !prereqResult.success && prereqResult.error && (
-                  <p className="wizard-status-msg wizard-status-msg-error">
-                    {prereqResult.error}{' '}
-                    <span className="wizard-link" onClick={installPrerequisites}>Retry</span>
-                  </p>
-                )}
-                {prereqResult && !prereqResult.success && !prereqResult.error && prereqResult.results && (
-                  <p className="wizard-status-msg wizard-status-msg-error">
-                    Some components failed: {prereqResult.results.filter(r => !r.success).map(r => r.component).join(', ')}.{' '}
-                    <span className="wizard-link" onClick={installPrerequisites}>Retry</span>
-                  </p>
-                )}
+                {prereqResult && !prereqInstalling && (() => {
+                  const msg = describePrereqInstall(prereqResult);
+                  return (
+                    <p className={`wizard-status-msg${msg.tone === 'info' ? '' : ` wizard-status-msg-${msg.tone}`}`}>
+                      {msg.text}{' '}
+                      {msg.retry && <span className="wizard-link" onClick={installPrerequisites}>Retry</span>}
+                    </p>
+                  );
+                })()}
               </div>
             </>
           )}

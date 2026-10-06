@@ -144,9 +144,11 @@ contextBridge.exposeInMainWorld('xiAPI', {
     return () => ipcRenderer.removeListener('ashita-install-progress', handler);
   },
 
-  // Prerequisite runtime installer (VC++ redistributables + .NET Framework)
+  // Prerequisites: detection and the one-click installer (DirectX, VC++ redistributables, .NET).
+  // installPrerequisites(ids?) -> { results, restartRecommended, cancelled, error, status };
+  // no ids = every required + recommended package that is missing.
   getPrereqsStatus: () => ipcRenderer.invoke('get-prereqs-status'),
-  installPrerequisites: () => ipcRenderer.invoke('install-prerequisites'),
+  installPrerequisites: (ids) => ipcRenderer.invoke('install-prerequisites', ids),
   onPrerequisitesProgress: (callback) => {
     const handler = (_, percent, detail) => callback(percent, detail);
     ipcRenderer.on('prerequisites-progress', handler);

@@ -15,6 +15,7 @@ const windowState = require('./windowState');
 const addonInstall = require('./addonInstall');
 const updateScript = require('./updateScript');
 const prereqs = require('./prereqs');
+const prereqInstall = require('./prereqInstall');
 
 /**
  * Extract a zip file using yauzl (streaming, handles large files, reports progress).
@@ -323,7 +324,8 @@ function runPowerShellFile(scriptBody, timeoutMs = 15000) {
       clearTimeout(timer);
       cleanup();
       if (timedOut) return reject(new Error(`PowerShell timed out after ${timeoutMs}ms`));
-      if (code !== 0) return reject(new Error(stderr.trim() || `PowerShell exited with code ${code}`));
+      // exitCode lets a caller tell a script's deliberate `exit N` (e.g. 1223 = UAC declined) apart.
+      if (code !== 0) return reject(Object.assign(new Error(stderr.trim() || `PowerShell exited with code ${code}`), { exitCode: code }));
       resolve();
     });
   });
@@ -2505,98 +2507,17 @@ function registerIPC() {
     }
   });
 
-  // Five official Microsoft installers covering the runtime prerequisites FFXI/
-  // PlayOnline/Ashita/Windower depend on. URLs and hashes sourced from Microsoft's
-  // winget-pkgs manifests and Microsoft Download Center, verified 2026-07-12 — see
-  // docs/superpowers/specs/2026-07-12-prerequisite-runtime-installer-design.md.
-  // VC++ 2015-2022 covers both the 2015 and 2017 requirements (shared runtime).
-  // .NET 4.5.2 covers the .NET 4.0 requirement (in-place upgrade model).
-  const PREREQUISITES = [
-    {
-      name: 'Visual C++ 2010 SP1 Redistributable (x86)',
-      filename: 'vcredist_2010_x86.exe',
-      url: 'https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x86.exe',
-      sha256: '99dce3c841cc6028560830f7866c9ce2928c98cf3256892ef8e6cf755147b0d8',
-      args: '/quiet /norestart',
-      successCodes: [0, 3010, 1638]
-    },
-    {
-      name: 'Visual C++ 2012 Update 4 Redistributable (x86)',
-      filename: 'vcredist_2012_x86.exe',
-      url: 'https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x86.exe',
-      sha256: 'b924ad8062eaf4e70437c8be50fa612162795ff0839479546ce907ffa8d6e386',
-      args: '/quiet',
-      successCodes: [0, 3010, 1638]
-    },
-    {
-      name: 'Visual C++ 2013 Redistributable (x86)',
-      filename: 'vcredist_2013_x86.exe',
-      url: 'https://download.visualstudio.microsoft.com/download/pr/10912113/5da66ddebb0ad32ebd4b922fd82e8e25/vcredist_x86.exe',
-      sha256: '53b605d1100ab0a88b867447bbf9274b5938125024ba01f5105a9e178a3dcdbd',
-      args: '/quiet',
-      successCodes: [0, 3010, 1638]
-    },
-    {
-      name: 'Visual C++ 2015-2022 Redistributable (x86)',
-      filename: 'vcredist_2015_2022_x86.exe',
-      url: 'https://download.visualstudio.microsoft.com/download/pr/57eef8ae-a341-46c3-b0bc-c041027b54cd/F0BAB33A302B3CDB2E11113760D016F54FD3D2632C65BA7834FAC4F0ABD7F1A3/VC_redist.x86.exe',
-      sha256: 'f0bab33a302b3cdb2e11113760d016f54fd3d2632c65ba7834fac4f0abd7f1a3',
-      args: '/install /quiet /norestart',
-      successCodes: [0, 3010, 1638]
-    },
-    {
-      name: '.NET Framework 4.5.2',
-      filename: 'ndp452_x86_x64.exe',
-      url: 'https://download.microsoft.com/download/e/2/1/e21644b5-2df2-47c2-91bd-63c560427900/NDP452-KB2901907-x86-x64-AllOS-ENU.exe',
-      sha256: '6c2c589132e830a185c5f40f82042bee3022e721a216680bd9b3995ba86f3781',
-      args: '/q /norestart',
-      successCodes: [0, 3010]
-    }
-  ];
-
-  // Compute the lowercase hex SHA256 of a file on disk.
-  function sha256File(filePath) {
-    return new Promise((resolve, reject) => {
-      const hash = crypto.createHash('sha256');
-      const rs = fs.createReadStream(filePath);
-      rs.on('error', reject);
-      rs.on('data', (chunk) => hash.update(chunk));
-      rs.on('end', () => resolve(hash.digest('hex')));
-    });
-  }
-
-  // Builds the PowerShell script that runs (elevated) all downloaded installers in
-  // sequence, logging STARTED/DONE lines to progressLogPath as it goes (polled by
-  // the non-elevated main process for live UI progress) and writing final exit
-  // codes as JSON to resultFilePath.
-  function buildPrereqInnerScript(items, progressLogPath, resultFilePath) {
-    const lines = ['$results = @{}'];
-    for (const item of items) {
-      const safeName = escapePSString(item.name);
-      lines.push(`Add-Content -Path '${escapePSString(progressLogPath)}' -Value 'STARTED|${safeName}'`);
-      lines.push(`$p = Start-Process -FilePath '${escapePSString(item.localPath)}' -ArgumentList '${escapePSString(item.args)}' -Wait -PassThru`);
-      lines.push(`$results['${safeName}'] = $p.ExitCode`);
-      lines.push(`Add-Content -Path '${escapePSString(progressLogPath)}' -Value ('DONE|${safeName}|' + $p.ExitCode)`);
-    }
-    lines.push(`$results | ConvertTo-Json | Set-Content -Path '${escapePSString(resultFilePath)}'`);
-    return lines.join('\n');
-  }
-
-  // Turns the { name: exitCode } map read back from resultFilePath into a
-  // per-component success/failure list, using each PREREQUISITES entry's own
-  // successCodes (0, 3010, and — for the four VC++ entries — 1638).
-  function classifyPrereqResults(items, exitCodesByName) {
-    return items.map((item) => {
-      const exitCode = exitCodesByName[item.name];
-      const success = item.successCodes.includes(exitCode);
-      return { component: item.name, success, exitCode: exitCode === undefined ? null : exitCode };
-    });
-  }
-
-  // Read-only status of every FFXI/Ashita prerequisite (logic + sources in prereqs.js). Never
-  // installs anything. reg.exe exits 1 when a key/value doesn't exist; any other failure rejects
-  // so that package reports 'unknown' rather than a false 'installed'/'missing'.
-  ipcMain.handle('get-prereqs-status', () => prereqs.evaluatePrereqs({
+  // Prerequisites (DirectX / VC++ / .NET): read-only detection plus the one-click installer. The
+  // catalogue, planning, script builders and orchestration live in prereqs.js / prereqInstall.js
+  // (spec: docs/superpowers/specs/2026-10-06-prereqs-design.md); this is only the Electron glue.
+  // reg.exe exits 1 when a key/value doesn't exist; any other failure rejects so that package
+  // reports 'unknown' rather than a false 'installed'/'missing'.
+  const prereqsOsInfo = {
+    build: prereqs.parseWindowsBuild(os.release()),
+    is64BitOS: process.arch === 'x64' || process.arch === 'arm64' || !!process.env.PROCESSOR_ARCHITEW6432,
+    windir: process.env.SystemRoot || 'C:\Windows',
+  };
+  const evaluatePrereqsNow = () => prereqs.evaluatePrereqs({
     readRegValue: (key, name, view) => new Promise((resolve, reject) => {
       const args = ['query', key, '/v', name, ...(view ? [`/reg:${view}`] : [])];
       execFile('reg', args, { windowsHide: true, timeout: 5000 }, (err, stdout) => {
@@ -2606,132 +2527,38 @@ function registerIPC() {
       });
     }),
     fileExists: (filePath) => fs.existsSync(filePath),
-    osInfo: {
-      build: prereqs.parseWindowsBuild(os.release()),
-      is64BitOS: process.arch === 'x64' || process.arch === 'arm64' || !!process.env.PROCESSOR_ARCHITEW6432,
-      windir: process.env.SystemRoot || 'C:\\Windows',
-    },
-  }));
-
-  ipcMain.handle('install-prerequisites', async () => {
-    const tmpDir = path.join(app.getPath('temp'), `xi-launcher-prereqs-${Date.now()}`);
-    const sendProgress = (percent, detail) => {
-      try { mainWindow?.webContents?.send('prerequisites-progress', percent, detail); } catch {}
-    };
-    const cleanup = () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} };
-
-    try {
-      fs.mkdirSync(tmpDir, { recursive: true });
-
-      // Phase 1 (0-50%): download and checksum-verify every installer before
-      // anything is executed. A mismatch aborts the whole batch immediately.
-      const downloaded = [];
-      for (let i = 0; i < PREREQUISITES.length; i++) {
-        const item = PREREQUISITES[i];
-        const destPath = path.join(tmpDir, item.filename);
-        const baseP = Math.round((i / PREREQUISITES.length) * 50);
-        const spanP = Math.round(50 / PREREQUISITES.length);
-
-        sendProgress(baseP, `Downloading ${item.name}...`);
-        try {
-          await downloadFile(item.url, destPath, {
-            label: item.name,
-            onProgress: (received, total) => {
-              if (total > 0) {
-                const pct = baseP + Math.round((received / total) * spanP);
-                const mb = (received / 1048576).toFixed(1);
-                const totalMb = (total / 1048576).toFixed(1);
-                sendProgress(pct, `Downloading ${item.name}... ${mb} / ${totalMb} MB`);
-              }
-            }
-          });
-        } catch (e) {
-          cleanup();
-          return { success: false, error: `Download failed for ${item.name}: ${e.message}. Nothing was installed.` };
-        }
-
-        sendProgress(baseP + spanP, `Verifying ${item.name}...`);
-        const actualHash = await sha256File(destPath);
-        if (actualHash.toLowerCase() !== item.sha256.toLowerCase()) {
-          cleanup();
-          return { success: false, error: `Checksum verification failed for ${item.name}. The downloaded file may be corrupted or tampered with. Nothing was installed. (expected ${item.sha256.slice(0, 12)}…, got ${actualHash.slice(0, 12)}…)` };
-        }
-        downloaded.push({ ...item, localPath: destPath });
-      }
-
-      // Phase 2 (50-55%): build the elevated inner script.
-      sendProgress(50, 'Preparing installation...');
-      const progressLog = path.join(tmpDir, 'progress.log');
-      const resultFile = path.join(tmpDir, 'result.json');
-      fs.writeFileSync(progressLog, '', 'utf-8');
-      const innerScript = buildPrereqInnerScript(downloaded, progressLog, resultFile);
-      const innerScriptPath = path.join(tmpDir, 'inner.ps1');
-      fs.writeFileSync(innerScriptPath, innerScript, 'utf-8');
-
-      // Phase 3 (55-95%): launch elevated (one UAC prompt for the whole batch) via
-      // Node's async spawn (through runPowerShellFile) so the main process stays
-      // responsive, and poll progressLog concurrently to drive per-component
-      // progress — the -Wait call itself gives no visibility into what's running.
-      sendProgress(55, 'Requesting administrator permission...');
-      // $ErrorActionPreference = 'Stop' is required here: Start-Process -Verb RunAs
-      // raises a non-terminating error when the user declines the UAC prompt, so
-      // without it this outer script (and therefore the wrapping powershell.exe
-      // process runPowerShellFile spawns) would exit 0 even on a decline — losing
-      // the failure signal and falling through to Phase 4 with no result file,
-      // which misreports every component as failed instead of surfacing the real
-      // "administrator permission" error via friendlyError() below.
-      const outerScript = `$ErrorActionPreference = 'Stop'\nStart-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','${escapePSString(innerScriptPath)}' -Verb RunAs -Wait -WindowStyle Hidden`;
-
-      let lastLineCount = 0;
-      const totalMarkers = downloaded.length * 2; // STARTED + DONE per component
-      const pollTimer = setInterval(() => {
-        try {
-          const content = fs.readFileSync(progressLog, 'utf-8');
-          // Add-Content writes aren't atomic against a concurrent readFileSync, so a
-          // poll tick can land mid-write and see a truncated final line (e.g.
-          // "STARTED|Visual C+"). If the raw content doesn't end in a newline, the
-          // last split element is a possibly-partial fragment — drop it and don't
-          // advance lastLineCount past it, so the complete line is re-read (and
-          // processed) on a later tick instead of being silently consumed.
-          const endsWithNewline = content.endsWith('\n');
-          let lines = content.split('\n').filter(Boolean);
-          if (!endsWithNewline && lines.length > 0) lines = lines.slice(0, -1);
-          for (let i = lastLineCount; i < lines.length; i++) {
-            const parts = lines[i].split('|');
-            const stageMarker = parts[0];
-            const name = parts[1];
-            const pct = 55 + Math.round(((i + 1) / totalMarkers) * 40);
-            if (stageMarker === 'STARTED') sendProgress(pct, `Installing ${name}... please wait`);
-            else if (stageMarker === 'DONE') sendProgress(pct, `${name} finished`);
-          }
-          lastLineCount = lines.length;
-        } catch {}
-      }, 500);
-
-      try {
-        await runPowerShellFile(outerScript, 600000); // 10 minutes for the whole batch
-      } catch (e) {
-        clearInterval(pollTimer);
-        cleanup();
-        return { success: false, error: friendlyError(e, 'Prerequisite installation') };
-      }
-      clearInterval(pollTimer);
-
-      // Phase 4 (95-100%): read results, classify, report.
-      sendProgress(95, 'Verifying results...');
-      let exitCodesByName = {};
-      try { exitCodesByName = JSON.parse(fs.readFileSync(resultFile, 'utf-8')); } catch {}
-      const results = classifyPrereqResults(downloaded, exitCodesByName);
-      const allSuccess = results.every(r => r.success);
-      const anyRebootRequired = results.some(r => r.exitCode === 3010);
-      cleanup();
-      sendProgress(100, allSuccess ? 'All prerequisites installed successfully' : 'Some components failed');
-      return { success: allSuccess, results, anyRebootRequired };
-    } catch (e) {
-      cleanup();
-      return { success: false, error: `Installation failed: ${e.message}` };
-    }
+    osInfo: prereqsOsInfo,
   });
+  ipcMain.handle('get-prereqs-status', () => evaluatePrereqsNow());
+
+  // Support log: package, URL, signature verdict and exit code of every install run.
+  const appendPrereqInstallLog = (line) => {
+    const logDir = path.join(app.getPath('userData'), 'logs');
+    fs.mkdirSync(logDir, { recursive: true });
+    fs.appendFileSync(path.join(logDir, 'prereqs-install.log'), `${new Date().toISOString()} ${line}\n`);
+  };
+  const installPrerequisites = prereqInstall.createPrereqInstaller({
+    evaluate: evaluatePrereqsNow,
+    osInfo: prereqsOsInfo,
+    freeBytes: (dir) => checkDiskSpace(dir),
+    marginBytes: DISK_SPACE_MARGIN,
+    makeTempDir: () => fs.mkdtempSync(path.join(app.getPath('temp'), 'xi-launcher-prereqs-')),
+    removeDir: (dir) => fs.rmSync(dir, { recursive: true, force: true }),
+    // DirectX's self-extractor is not reliable with spaces in /T:, and the elevated script runs
+    // as the same user, so extract under %SystemRoot%\Temp rather than the profile temp.
+    extractRoot: path.join(process.env.SystemRoot || 'C:\Windows', 'Temp'),
+    download: (url, destPath, onProgress) => downloadFile(url, destPath, { label: 'Prerequisite download', onProgress }),
+    runPowerShell: runPowerShellFile,
+    onProgress: (percent, detail) => {
+      try { mainWindow?.webContents?.send('prerequisites-progress', percent, detail); } catch {}
+    },
+    log: appendPrereqInstallLog,
+  });
+  // Returns { results, restartRecommended, cancelled, error, status } — never rejects. No ids =
+  // every required + recommended package that is missing.
+  ipcMain.handle('install-prerequisites', (_, ids) => installPrerequisites(
+    Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : undefined
+  ));
 
   // Watch for game process to exit, then notify renderer (per-profile watchers for multi-box)
   const gameExitWatchers = new Map();

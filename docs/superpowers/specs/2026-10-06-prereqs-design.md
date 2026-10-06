@@ -1,7 +1,7 @@
 # Prerequisites checker — design (Phase 1: research + detection)
 
 **Date:** 2026-10-06
-**Status:** Phase 1 built (`electron/prereqs.js`, read-only IPC `get-prereqs-status`). Phases 2 and 3 are guidance only.
+**Status:** Phase 1 built (`electron/prereqs.js`, read-only IPC `get-prereqs-status`). Phase 2 built (`electron/prereqInstall.js`, IPC `install-prerequisites`; see "Phase 2 — as built"). Phase 3 is guidance only.
 **Branch:** `feature/prereqs` (off `master` e5cb555)
 
 ## Read this first: a v1 installer already exists
@@ -131,14 +131,60 @@ None. Every package has a working Microsoft-hosted URL. The `details.aspx` pages
 
 Read-only checks (`reg query`, file existence), matching the live IPC output: DirectX 6/6 DLLs present; VC++ 2015-2022 v14.51.36247 installed; .NET `Release` 533509 → 4.8.1 installed, 4.8/4.5.2/4.0 covered; VC++ 2013 v12.0.40664, 2012 v11.0.61030, 2010 10.0.40219 installed; 2005 installed (8.0.61001); **2008 absent** (no 9.0 entries anywhere — a real "missing" case). The "required missing" and "Installed=0" cases cannot be reproduced here; the unit tests cover them with fakes.
 
-## Phase 2 approach (guidance, not built)
+## Phase 2 — as built
 
-1. Re-run `get-prereqs-status`; offer only `missing` items (plus a per-item **Install** button).
-2. Download to a temp dir over HTTPS from the catalogue URLs (follow redirects; reject any final host outside `download.microsoft.com`, `download.visualstudio.microsoft.com`, `aka.ms`, `go.microsoft.com`).
-3. **Before elevation**, for each file: `Get-AuthenticodeSignature` → `Status Valid` and `CN=Microsoft Corporation`. Any failure aborts the batch. This replaces hash pinning, which cannot work for the versionless 2015-2022 URL.
-4. One elevated PowerShell script runs the installers in sequence (DirectX first: extract with `/Q /T: /C`, then `DXSETUP.exe /silent`) under a single UAC prompt; progress log + result JSON as in the v1 design.
-5. Classify with `exitCodes` from the catalogue: `ok` (0, 1638 for VC++) = satisfied; `reboot` (3010, 1641) = satisfied + "restart recommended"; anything else = failed, shown by name with its code. 1602 = cancelled. Delete temp files in a `finally`.
-6. Re-run detection afterwards and show the real result rather than trusting exit codes.
+The v1 installer is **replaced**, not joined: its `PREREQUISITES` array, SHA-256 pins, `sha256File`, `buildPrereqInnerScript` and `classifyPrereqResults` are gone from `main.js`. The package data now comes only from the `prereqs.js` catalogue.
+
+### Files
+- `electron/prereqInstall.js` — no `electron` import. Pure: `planInstall`, `buildInstallScript`, `buildElevationScript`, `buildSignatureScript`, `classifyExitCode`, `evaluateSignature`, `parseSubjectCN`, `isUacDeclined`. Plus `createPrereqInstaller(deps)`, an orchestrator whose every side effect is injected (unit-tested with fakes).
+- `electron/main.js` — the glue only: real adapters (`downloadFile`, `checkDiskSpace`, `runPowerShellFile`, temp dir, log file). `runPowerShellFile` now rejects with `err.exitCode`.
+- `electron/preload.js` — `installPrerequisites(ids?)`.
+- `src/utils/prereqMessage.js` — `describePrereqInstall(result)`, the one-line summary the existing buttons show. Phase 3 can replace it.
+
+### IPC
+- **`install-prerequisites`** (name kept: the SetupWizard and Settings buttons already call it). `window.xiAPI.installPrerequisites(ids?)`. No ids = every `required` + `recommended` package that is missing. Ids may be any catalogue id; an unknown id returns `error` (nothing is downloaded).
+- **Never rejects.** Returns:
+
+```
+{
+  results: [{ id, name, state, exitCode, message }],  // one per package that was planned
+  restartRecommended: boolean,   // any state === 'restart'
+  cancelled: boolean,            // UAC prompt declined
+  error: string | null,          // whole-run failure: unknown id, no disk space, already running, ...
+  status: [...] | null           // FRESH evaluatePrereqs() output, always re-run at the end
+}
+```
+- `state` is `installed` | `restart` | `failed` | `cancelled`. `exitCode` is `null` when the installer never ran (download or signature failure, cancel). Packages that were installed/covered/unsupported are not in `results` — read them from `status`.
+- A second call while one is running returns `{ results: [], cancelled: false, restartRecommended: false, error: 'An installation is already running. Wait for it to finish.', status: null }`.
+- **Progress event** `prerequisites-progress` (unchanged name), `(percent, detail)`; percent is 0–100 and throttled (≤ 4/s plus the phase boundaries): 0–60 downloads (equal slice per package), 60–65 signatures, 65–95 installs (live from the script's progress log), 95–100 re-detect, final `100` with detail `Done` or `Cancelled`.
+- **Log**: `%APPDATA%\xi-launcher\logs\prereqs-install.log` (`app.getPath('userData')/logs`), appended, one ISO-timestamped line per event: `START` (requested ids, plan, OS build), `DOWNLOAD <id> <url>`, `SIGNATURE <id> status=… subject=… -> accepted|REJECTED`, `EXIT <id> code=… -> state`, `STATUS …`, `END`.
+
+### Flow
+1. `evaluate` → `planInstall` (skips installed / covered / unsupported; `unknown` is installed; order DirectX → VC++ 2005…2015-2022 → .NET). All .NET ids (4.0, 4.5.2, 4.8, 4.8.1) collapse into one install: **4.8.1 if build ≥ 19042, else 4.8** (unknown build → 4.8). 4.0 / 4.5.2 are never installed.
+2. Disk check on the temp drive: Σ `sizeBytes` (DirectX counted twice for the extraction) + the shared 256 MB margin.
+3. Download each package (`downloadFile`: redirects, stall timers, retry) into `mkdtemp(%TEMP%\xi-launcher-prereqs-)`. A failed download fails only that package.
+4. **Authenticode, still non-elevated**, one PowerShell call for all files: `Status == Valid` **and** signer CN exactly `Microsoft Corporation`. A rejected file is never run and is not in the elevated script. If the check itself cannot run, nothing is run.
+5. `install.ps1` (UTF-8 BOM) is run by a small wrapper: `Start-Process powershell -Verb RunAs -Wait` — **one UAC prompt**. Declined (Win32 1223, wrapper `exit 1223`) → `cancelled: true`, per-package `state: 'cancelled'`, no error text, retry allowed.
+6. The elevated script runs every installer in order, never stops on a failure, and rewrites `results.json` (`[{id, exitCode, startedAt, endedAt, error}]`, UTF-8 no BOM) after each package. DirectX: `directx_Jun2010_redist.exe /Q /T:<dir> /C`, then `<dir>\DXSETUP.exe /silent`; `<dir>` is `%SystemRoot%\Temp\xi-launcher-dx-<id>` (**no spaces**, because the self-extractor's `/T:` handling of a quoted path with spaces is unverified) and is deleted by the script.
+7. Exit codes are classified from the catalogue: `ok` → `installed` (0; 1638 only where the catalogue lists it, i.e. VC++), `reboot` (3010, 1641) → `restart`, everything else → `failed` with the code (1602, 1603, 1618 and 5100 have plain-language text). A script-level error (installer would not start) is appended to the message.
+8. Re-run detection and return it as `status`. The temp folder is removed in a `finally`. Detection, not the exit code, is the source of truth.
+
+### Verified in this phase
+- 231/231 `npm run test:electron` (195 + 36 new). The generated script ran in PowerShell 5.1 against fake installers exiting 0 / 1603 / 3010, an installer file that does not exist, and a fake DirectX self-extractor, in a folder whose name has a space, an apostrophe and a curly quote. It carried on after each failure, wrote valid BOM-less JSON (also for a single result), ran DXSETUP with `/silent` and removed the extract dir. The signature script returned `Valid` / `CN=Microsoft…` for a signed binary and rejected an unsigned file.
+- Live in the running launcher: `get-prereqs-status` → the real `planInstall` with all required + recommended ids gives exactly `[vc2008-x86]` on this machine; the IPC returns the `error` shape for an unknown id and an empty `results` + fresh `status` for already-covered ids; the log file is written; no temp folder is left behind.
+- **NOT OBSERVED** (owner declined the live install): a real download, the real signature call on a Microsoft installer through the launcher, the UAC prompt (declined and accepted), a real installer exit code, the `prerequisites-progress` stream during a download, and the re-detect after a real install.
+
+### What replaced the guesses in "Open questions"
+- Overlap with v1: resolved (replaced).
+- Elevation: one prompt; a declined prompt is `cancelled`, not an error.
+- Reboots: 3010 / 1641 → `restartRecommended`, never forced.
+- The old flow passed the elevated `.ps1` path to `Start-Process -ArgumentList` unquoted, which breaks for a temp path with a space (this machine's profile has one). The new wrapper quotes it.
+- Redirect hosts are **not** restricted in `downloadFile`; the signature gate is the integrity check, and every URL comes from the catalogue.
+
+### Known gaps / for Phase 3
+- **TOCTOU**: the installers and `install.ps1` sit in the user's temp folder between the signature check (and the UAC click) and execution, so a same-user process could swap them. The owner decision was "verify before elevation"; re-verifying inside the elevated script is the cheap hardening if it is wanted.
+- The 10 MB–265 MB download has no cancel. The 30-minute timeout on the elevated run kills only the wrapper, not an installer already running.
+- `describePrereqInstall` is the minimal message; per-package rows, per-package install buttons and the Requirements page are Phase 3 and can read `results` + `status` directly.
 
 ## Phase 3 UI (guidance, not built)
 
@@ -148,7 +194,7 @@ Read-only checks (`reg query`, file existence), matching the live IPC output: Di
 
 ## Open questions and risks for Phase 2
 
-- **Overlap with the shipped v1 installer** (top of this file) — replace, don't duplicate; the Settings/SetupWizard buttons should call the new flow.
+- ~~**Overlap with the shipped v1 installer**~~ — resolved in Phase 2 (replaced; the buttons call the new flow).
 - **DirectPlay** — Ashita's requirements page also says Windows 8+ may need the DirectPlay optional feature enabled. Not in the owner's list and not detected here; enabling it needs a different mechanism (DISM). Worth a decision.
 - **DirectX as REQUIRED** — see the import scan above. Ashita lists it as required, so it stays, but the banner should not claim the game will crash without it.
 - **Elevation** — one UAC prompt; a declined prompt must be a calm, retryable state.

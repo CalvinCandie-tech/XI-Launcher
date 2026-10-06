@@ -4,6 +4,7 @@ import Modal from '../components/Modal';
 import RecPill from '../components/RecPill';
 import { REGISTRY_RECS } from '../components/RegistryEditor';
 import { getSection, setSectionValues, getScriptName } from '../utils/iniParser';
+import { describePrereqInstall } from '../utils/prereqMessage';
 
 const api = window.xiAPI;
 
@@ -929,7 +930,7 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
       <div className="section-header">System Prerequisites</div>
       <div className="panel">
         <p className="settings-hint settings-hint-compact">
-          Visual C++ Runtimes and .NET Framework required by FFXI, PlayOnline, Ashita, and Windower. Safe to run any time — already-installed components are detected and skipped automatically.
+          DirectX, Visual C++ Runtimes and .NET Framework required by FFXI, PlayOnline, Ashita, and Windower. Safe to run any time — already-installed components are detected and skipped automatically.
         </p>
         <div className="settings-prereq-actions">
           <button className="btn btn-primary" onClick={installPrerequisites} disabled={prereqInstalling}>
@@ -944,16 +945,11 @@ function SettingsTab({ config, onSettingsSaved, onDirtyChange }) {
             <span className="settings-prereq-progress-text">{prereqProgress.detail}</span>
           </div>
         )}
-        {prereqResult && prereqResult.success && (
-          <p className="settings-hint settings-hint-compact" style={{ color: 'var(--green)' }}>
-            ✓ All prerequisites installed{prereqResult.anyRebootRequired ? ' — a restart may be needed for some changes to take effect' : ''}
-          </p>
-        )}
-        {prereqResult && !prereqResult.success && (
-          <p className="settings-hint settings-hint-compact" style={{ color: 'var(--red)' }}>
-            {prereqResult.error || `Some components failed: ${prereqResult.results.filter(r => !r.success).map(r => r.component).join(', ')}.`}
-          </p>
-        )}
+        {prereqResult && !prereqInstalling && (() => {
+          const msg = describePrereqInstall(prereqResult);
+          const color = { success: 'var(--green)', error: 'var(--red)' }[msg.tone];
+          return <p className="settings-hint settings-hint-compact" style={color ? { color } : undefined}>{msg.text}</p>;
+        })()}
       </div>
 
       <div className="settings-warning panel">
