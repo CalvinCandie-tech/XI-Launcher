@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './ProfileTab.css';
 import { DEFAULT_PROFILE_INI } from '../utils/profileTemplates';
+import { validateProfileName, uniqueCloneName } from '../utils/profileNames';
 import ScriptEditorTab from './ScriptEditorTab';
 import Modal from '../components/Modal';
 import RegistryEditor from '../components/RegistryEditor';
@@ -130,21 +131,9 @@ function ProfileTab({ config, updateConfig }) {
   const createProfile = async () => {
     const name = newProfileName.trim();
     if (!name) return;
-    // eslint-disable-next-line no-control-regex
-    if (/[\\/:*?"<>|\x00-\x1f]|\.\./.test(name)) {
-      setProfileError('Profile name cannot contain \\ / : * ? " < > | or ".."');
-      return;
-    }
-    if (name === '.' || name === '..') {
-      setProfileError('Profile name cannot be "." or ".."');
-      return;
-    }
-    if (name.length > 60) {
-      setProfileError('Profile name is too long (max 60 characters)');
-      return;
-    }
-    if (profiles.some(p => p.toLowerCase() === name.toLowerCase())) {
-      setProfileError(`A profile named "${name}" already exists`);
+    const nameError = validateProfileName(name, profiles);
+    if (nameError) {
+      setProfileError(nameError);
       return;
     }
     setProfileError('');
@@ -211,13 +200,8 @@ function ProfileTab({ config, updateConfig }) {
   const cloneProfile = async (name) => {
     const result = await api.readProfile(config.ashitaPath, name);
     if (!result.exists) return;
-    // Find a unique name
-    let cloneName = name + ' (Copy)';
-    let counter = 2;
-    while (profiles.includes(cloneName)) {
-      cloneName = `${name} (Copy ${counter})`;
-      counter++;
-    }
+    // First free "<name> (Copy N)": case-insensitive like Create, and cut short to fit the name limit
+    const cloneName = uniqueCloneName(name, profiles);
     // Replace the profile name in the INI content
     const content = result.content.replace(
       /^(\s*name\s*=\s*).*$/im,

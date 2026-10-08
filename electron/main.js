@@ -14,6 +14,7 @@ const sandbox = require('./sandbox');
 const windowState = require('./windowState');
 const addonInstall = require('./addonInstall');
 const updateScript = require('./updateScript');
+const psArgs = require('./psArgs');
 const { resolveRedirect } = require('./downloadRedirect');
 const prereqs = require('./prereqs');
 const prereqInstall = require('./prereqInstall');
@@ -2346,7 +2347,7 @@ function registerIPC() {
         const tmpScript = path.join(app.getPath('temp'), 'xi-launcher-reg-undo.ps1');
         fs.writeFileSync(tmpScript, regCmds, 'utf-8');
         execSync(
-          `powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy','Bypass','-File','${escapePSString(tmpScript)}' -Verb RunAs -Wait -WindowStyle Hidden"`,
+          `powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy','Bypass','-File',${psArgs.quoteForStartProcessInCmd(tmpScript)} -Verb RunAs -Wait -WindowStyle Hidden"`,
           { timeout: 30000 }
         );
         try { fs.unlinkSync(tmpScript); } catch (e) { console.error('[restore-registry] cleanup', e.message); }
@@ -2406,7 +2407,7 @@ function registerIPC() {
       const tmpScript = path.join(app.getPath('temp'), 'xi-launcher-reg.ps1');
       fs.writeFileSync(tmpScript, regCmds, 'utf-8');
       execSync(
-        `powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy','Bypass','-File','${escapePSString(tmpScript)}' -Verb RunAs -Wait -WindowStyle Hidden"`,
+        `powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy','Bypass','-File',${psArgs.quoteForStartProcessInCmd(tmpScript)} -Verb RunAs -Wait -WindowStyle Hidden"`,
         { timeout: 30000 }
       );
       try { fs.unlinkSync(tmpScript); } catch (e) { console.error('[write-ffxi-registry-batch] cleanup', e.message); }
@@ -2654,10 +2655,11 @@ function registerIPC() {
       }
       if (sync.error) return { error: sync.error };
       const iniName = `${opts.profileName}.ini`;
-      // Array literal handles a profile name with spaces — PowerShell quotes the
-      // element itself, so no manual double-quote wrapping is needed.
+      // Windows PowerShell 5.1 joins -ArgumentList elements with spaces WITHOUT quoting them, so
+      // "Clarey (Copy).ini" reached Ashita-cli as `Clarey` + `(Copy).ini` and it refused to start.
+      // buildAshitaArgList puts literal double quotes inside the element.
       const script = `$ErrorActionPreference = 'Stop'\n`
-        + `Start-Process -FilePath '${escapePSString(exe)}' -ArgumentList @('${escapePSString(iniName)}')`
+        + `Start-Process -FilePath '${escapePSString(exe)}' -ArgumentList ${psArgs.buildAshitaArgList(iniName)}`
         + ` -WorkingDirectory '${escapePSString(opts.ashitaPath)}' -Verb RunAs\n`;
       await runPowerShellFile(script, 15000);
       // Watch for game exit and notify renderer
