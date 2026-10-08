@@ -202,10 +202,10 @@ function ProfileTab({ config, updateConfig }) {
     if (!result.exists) return;
     // First free "<name> (Copy N)": case-insensitive like Create, and cut short to fit the name limit
     const cloneName = uniqueCloneName(name, profiles);
-    // Replace the profile name in the INI content
+    // Replace the profile name in the INI content (function form: a name containing $& or $1 stays literal)
     const content = result.content.replace(
       /^(\s*name\s*=\s*).*$/im,
-      `$1${cloneName}`
+      (_, prefix) => prefix + cloneName
     );
     await api.saveProfile(config.ashitaPath, cloneName, content);
     // Copy per-profile settings (server, login, loader choice) so the clone launches the same way
