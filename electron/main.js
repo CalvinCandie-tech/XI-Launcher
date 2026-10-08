@@ -15,6 +15,7 @@ const windowState = require('./windowState');
 const addonInstall = require('./addonInstall');
 const updateScript = require('./updateScript');
 const psArgs = require('./psArgs');
+const multiboxWait = require('./multiboxWait');
 const { resolveRedirect } = require('./downloadRedirect');
 const prereqs = require('./prereqs');
 const prereqInstall = require('./prereqInstall');
@@ -2626,6 +2627,30 @@ function registerIPC() {
     gameExitWatchers.clear();
   });
 
+  // Multi-box asks launch-game to track the profile's loader, then polls until that client shows
+  // the game window (see multiboxWait.js). trackId → { processName, baselinePids, pid }
+  const launchTracks = new Map();
+  let nextTrackId = 1;
+  const snapshotLoaderProcesses = (processName) => new Promise((resolve) => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', multiboxWait.buildSnapshotCommand(processName)],
+      { windowsHide: true, timeout: 10000 },
+      (err, stdout) => resolve(err ? null : multiboxWait.parseProcessJson(stdout)));
+  });
+
+  // → { state: 'starting' | 'waiting' | 'ready' | 'exited' | 'unknown' }. A failed snapshot counts
+  // as 'waiting' so one slow PowerShell doesn't end the wait early.
+  ipcMain.handle('poll-launch', async (_, trackId) => {
+    const track = launchTracks.get(trackId);
+    if (!track) return { state: 'unknown' };
+    const processes = await snapshotLoaderProcesses(track.processName);
+    if (!processes) return { state: track.pid === null ? 'starting' : 'waiting' };
+    const result = multiboxWait.assessLaunch(track, processes, track.processName);
+    track.pid = result.pid;
+    if (result.state === 'ready' || result.state === 'exited') launchTracks.delete(trackId);
+    return { state: result.state };
+  });
+  ipcMain.handle('end-launch-tracking', (_, trackId) => { launchTracks.delete(trackId); });
+
   // Game launch
   ipcMain.handle('launch-game', async (_, opts) => {
     try {
@@ -2654,6 +2679,13 @@ function registerIPC() {
         return { error: `Couldn't update profile "${opts.profileName}" before launch: ${e.message}` };
       }
       if (sync.error) return { error: sync.error };
+      // Loaders already running before this launch belong to earlier clients
+      let track = null;
+      if (opts.trackLoader) {
+        const processName = multiboxWait.loaderProcessName(loaders.parseIniBoot(fs.readFileSync(profileIni, 'utf-8')).file);
+        const baseline = processName ? await snapshotLoaderProcesses(processName) : null;
+        if (baseline) track = { processName, baselinePids: baseline.map((p) => p.pid), pid: null };
+      }
       const iniName = `${opts.profileName}.ini`;
       // Windows PowerShell 5.1 joins -ArgumentList elements with spaces WITHOUT quoting them, so
       // "Clarey (Copy).ini" reached Ashita-cli as `Clarey` + `(Copy).ini` and it refused to start.
@@ -2664,7 +2696,12 @@ function registerIPC() {
       await runPowerShellFile(script, 15000);
       // Watch for game exit and notify renderer
       watchForGameExit('pol.exe', profileKey);
-      return { success: true, message: `Ashita launched with profile: ${opts.profileName}${sync.resolved ? ` — ${sync.resolved.label}` : ''}` };
+      let trackId = null;
+      if (track) {
+        trackId = nextTrackId++;
+        launchTracks.set(trackId, track);
+      }
+      return { success: true, trackId, message: `Ashita launched with profile: ${opts.profileName}${sync.resolved ? ` — ${sync.resolved.label}` : ''}` };
     } catch (e) {
       const msg = e.message || '';
       if (msg.includes('elevation') || msg.includes('denied') || msg.includes('UAC')) {

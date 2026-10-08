@@ -59,6 +59,8 @@ contextBridge.exposeInMainWorld('xiAPI', {
 
   // Game launch
   launchGame: (opts) => ipcRenderer.invoke('launch-game', opts),
+  pollLaunch: (trackId) => ipcRenderer.invoke('poll-launch', trackId),
+  endLaunchTracking: (trackId) => ipcRenderer.invoke('end-launch-tracking', trackId),
   onGameExited: (callback) => {
     const handler = () => callback();
     ipcRenderer.on('game-exited', handler);

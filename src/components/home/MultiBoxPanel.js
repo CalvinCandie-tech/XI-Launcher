@@ -2,11 +2,11 @@ import React from 'react';
 import './HomePanels.css';
 
 // Multi-box drop-down: tick profiles and launch them one after another.
-function MultiBoxPanel({ profiles, activeProfile, selected, onToggle, launching, log, onLaunch }) {
+function MultiBoxPanel({ profiles, activeProfile, selected, onToggle, launching, waiting, log, onLaunch, onSkipWait }) {
   return (
     <div>
       <p className="home-multibox-hint">
-        Select profiles to launch simultaneously. Each will start in sequence with a 2-second delay.
+        Select profiles to launch one after another. Each starts once the previous one has reached the game window.
       </p>
       <div className="home-multibox-list">
         {profiles.map(name => (
@@ -24,6 +24,11 @@ function MultiBoxPanel({ profiles, activeProfile, selected, onToggle, launching,
       >
         {launching ? '◌ Launching...' : `Launch ${selected.length} Instance${selected.length !== 1 ? 's' : ''}`}
       </button>
+      {waiting && (
+        <button className="btn btn-ghost btn-sm home-full-btn" onClick={onSkipWait}>
+          Launch next now
+        </button>
+      )}
       {log && (
         <pre className="home-multibox-log">{log}</pre>
       )}

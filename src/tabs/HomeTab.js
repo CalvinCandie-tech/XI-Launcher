@@ -15,6 +15,11 @@ import PrereqBanner from '../components/home/PrereqBanner';
 
 const api = window.xiAPI;
 
+// Multi-box: how long the previous client gets to reach its game window before the rest stop
+const MULTIBOX_WAIT_LIMIT_MS = 2 * 60 * 1000;
+const MULTIBOX_START_LIMIT_MS = 30 * 1000; // for its loader to appear at all
+const MULTIBOX_POLL_MS = 1500;
+
 function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, launchLog, updateInfo, onSkipVersion, onDismissUpdate, onShowWizard, prereqs, onShowRequirements, movedServers, onApplyMove, onDismissMove }) {
   const [status, setStatus] = useState({ ashita: false, ffxi: false, xiloader: false, profileCount: 0 });
   const [loaderInfo, setLoaderInfo] = useState(null); // resolveLoader() for the active profile
@@ -29,6 +34,8 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
   const [multiBoxProfiles, setMultiBoxProfiles] = useState([]);
   const [multiBoxLaunching, setMultiBoxLaunching] = useState(false);
   const [multiBoxLog, setMultiBoxLog] = useState('');
+  const [multiBoxWaiting, setMultiBoxWaiting] = useState(false);
+  const skipMultiBoxWaitRef = useRef(false);
   const [serverStatus, setServerStatus] = useState(null); // { online, latency }
   const [updateDlStatus, setUpdateDlStatus] = useState(''); // '' | 'downloading' | 'installing' | 'error'
   const [updateDlProgress, setUpdateDlProgress] = useState({ percent: 0, detail: '' });
@@ -191,12 +198,38 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
     );
   };
 
+  // Waits until the client just launched shows its game window, so the next login doesn't overlap
+  // it. → 'ready' | 'exited' | 'never-started' | 'timeout' | 'skipped'
+  const waitForGameWindow = async (trackId) => {
+    const started = Date.now();
+    let seenLoader = false;
+    skipMultiBoxWaitRef.current = false;
+    setMultiBoxWaiting(true);
+    try {
+      for (;;) {
+        if (skipMultiBoxWaitRef.current) return 'skipped';
+        const { state } = await api.pollLaunch(trackId);
+        if (state === 'ready' || state === 'exited') return state;
+        if (state === 'unknown') return 'ready';
+        if (state === 'waiting') seenLoader = true;
+        const elapsed = Date.now() - started;
+        if (!seenLoader && elapsed > MULTIBOX_START_LIMIT_MS) return 'never-started';
+        if (elapsed > MULTIBOX_WAIT_LIMIT_MS) return 'timeout';
+        await new Promise(r => setTimeout(r, MULTIBOX_POLL_MS));
+      }
+    } finally {
+      setMultiBoxWaiting(false);
+      api.endLaunchTracking(trackId);
+    }
+  };
+
   const launchMultiBox = async () => {
     if (!api || multiBoxProfiles.length === 0) return;
     setMultiBoxLaunching(true);
     setMultiBoxLog('');
     const logs = [];
-    for (const profileName of multiBoxProfiles) {
+    for (const [index, profileName] of multiBoxProfiles.entries()) {
+      const isLast = index === multiBoxProfiles.length - 1;
       // Load per-profile settings if available
       let profileSettings = {};
       try {
@@ -210,17 +243,34 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
         serverPort: profileSettings.serverPort || config.serverPort,
         loginUser: profileSettings.loginUser || config.loginUser,
         loginPass: profileSettings.loginPass || config.loginPass,
-        hairpin: config.hairpin
+        hairpin: config.hairpin,
+        trackLoader: !isLast
       });
       if (result.error) {
         logs.push(`${profileName}: ${result.error}`);
       } else {
         logs.push(`${profileName}: launched`);
       }
-      // Small delay between launches to avoid conflicts
-      if (multiBoxProfiles.indexOf(profileName) < multiBoxProfiles.length - 1) {
+      if (isLast) break;
+      if (!result.trackId) {
+        // Failed launch (nothing logging in) or a retail profile (no loader to watch)
         await new Promise(r => setTimeout(r, 2000));
+        continue;
       }
+      setMultiBoxLog([...logs, `Waiting for ${profileName} to reach the game…`].join('\n'));
+      const outcome = await waitForGameWindow(result.trackId);
+      const stopReason = {
+        exited: `${profileName}: the loader closed before the game opened`,
+        'never-started': `${profileName}: the loader never started — check this profile launches on its own`,
+        timeout: `${profileName}: no game window after 2 minutes`,
+      }[outcome];
+      if (stopReason) {
+        const remaining = multiBoxProfiles.slice(index + 1).join(', ');
+        logs.push(`${stopReason}. Stopped — not launched: ${remaining}`);
+        break;
+      }
+      if (outcome === 'skipped') logs.push(`${profileName}: stopped waiting (Launch next now)`);
+      setMultiBoxLog(logs.join('\n'));
     }
     setMultiBoxLog(logs.join('\n'));
     setMultiBoxLaunching(false);
@@ -434,8 +484,10 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
           selected={multiBoxProfiles}
           onToggle={toggleMultiBoxProfile}
           launching={multiBoxLaunching}
+          waiting={multiBoxWaiting}
           log={multiBoxLog}
           onLaunch={launchMultiBox}
+          onSkipWait={() => { skipMultiBoxWaitRef.current = true; }}
         />
       ),
     },
