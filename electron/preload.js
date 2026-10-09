@@ -90,6 +90,8 @@ contextBridge.exposeInMainWorld('xiAPI', {
     return () => ipcRenderer.removeListener('update-download-progress', handler);
   },
   skipUpdateVersion: (version) => ipcRenderer.invoke('skip-update-version', version),
+  getWhatsNew: () => ipcRenderer.invoke('get-whats-new'),
+  dismissWhatsNew: () => ipcRenderer.invoke('dismiss-whats-new'),
 
   // Shell
   openExternal: (url) => ipcRenderer.invoke('open-external', url),

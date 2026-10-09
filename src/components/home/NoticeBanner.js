@@ -3,6 +3,19 @@ import './HomePanels.css';
 
 // Slim banners under the top bar: startup warnings and the launcher's own update
 // (available / downloading / failed). They overlay the video, so the title never moves.
+// "Fix thing · Fix other thing" from the release's section headings; the raw first markdown line
+// only when the notes had no headings.
+function updateSummary(info) {
+  const headings = (info.releaseHighlights || []).map(h => h.heading);
+  if (headings.length) return headings.join(' · ');
+  return (info.releaseNotes || '').split('\n')[0].replace(/^#+\s*/, '');
+}
+
+function updateTooltip(info) {
+  const lines = (info.releaseHighlights || []).map(h => (h.category ? `${h.category}: ` : '') + h.heading);
+  return lines.length ? lines.join('\n') : info.releaseNotes;
+}
+
 function NoticeBanner({
   startupWarnings, onDismissWarnings,
   updateInfo, updateDlStatus, updateDlProgress, updateDlError,
@@ -26,9 +39,9 @@ function NoticeBanner({
         <div className="home-notice">
           <span className="home-notice-title">Update Available</span>
           <span className="pill pill-gold pill-xs">v{updateInfo.latest}</span>
-          {updateInfo.releaseNotes && (
-            <span className="home-notice-text home-notice-oneline" title={updateInfo.releaseNotes}>
-              {updateInfo.releaseNotes.split('\n')[0]}
+          {updateSummary(updateInfo) && (
+            <span className="home-notice-text home-notice-oneline" title={updateTooltip(updateInfo)}>
+              {updateSummary(updateInfo)}
             </span>
           )}
           <div className="home-notice-actions">

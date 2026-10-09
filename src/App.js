@@ -49,6 +49,7 @@ function App() {
   const launchInFlightRef = useRef(false);
   const [launchLog, setLaunchLog] = useState('');
   const [updateInfo, setUpdateInfo] = useState(null);
+  const [whatsNew, setWhatsNew] = useState(null);
   const [showWizard, setShowWizard] = useState(false);
   const [addonUpdates, setAddonUpdates] = useState([]);
   const [launchWarning, setLaunchWarning] = useState(null);
@@ -210,6 +211,17 @@ function App() {
       if (info && !info.upToDate && !info.skipped && info.latest) setUpdateInfo(info);
     }).catch((err) => console.error('Update check failed:', err));
   }, []);
+
+  // "What's new" card after an update (null on a fresh install, an already-seen version, or no network)
+  useEffect(() => {
+    if (!api?.getWhatsNew) return;
+    api.getWhatsNew().then(info => { if (info?.items?.length) setWhatsNew(info); }).catch(() => {});
+  }, []);
+
+  const handleDismissWhatsNew = () => {
+    setWhatsNew(null);
+    api?.dismissWhatsNew?.();
+  };
 
   const handleSkipVersion = async (version) => {
     if (!api?.skipUpdateVersion) return;
@@ -675,7 +687,7 @@ function App() {
   const renderTabContent = (tab) => {
     const tabProps = { config, updateConfig };
     switch (tab) {
-      case 'home': return <HomeTab {...tabProps} onNavigate={guardedSetActiveTab} onLaunch={handleLaunch} isLaunching={isLaunching} launchLog={launchLog} updateInfo={updateInfo} onSkipVersion={handleSkipVersion} onDismissUpdate={handleDismissUpdate} onShowWizard={() => setShowWizard(true)} prereqs={prereqs} onShowRequirements={showRequirements} movedServers={movedServers} onApplyMove={handleApplyMove} onDismissMove={handleDismissMove} />;
+      case 'home': return <HomeTab {...tabProps} onNavigate={guardedSetActiveTab} onLaunch={handleLaunch} isLaunching={isLaunching} launchLog={launchLog} updateInfo={updateInfo} whatsNew={whatsNew} onDismissWhatsNew={handleDismissWhatsNew} onSkipVersion={handleSkipVersion} onDismissUpdate={handleDismissUpdate} onShowWizard={() => setShowWizard(true)} prereqs={prereqs} onShowRequirements={showRequirements} movedServers={movedServers} onApplyMove={handleApplyMove} onDismissMove={handleDismissMove} />;
       case 'profiles': return <ProfileTab {...tabProps} />;
       case 'addons': return <AddonsTab {...tabProps} onCheckAddonUpdates={handleManualAddonCheck} />;
       case 'plugins': return <PluginsTab {...tabProps} />;

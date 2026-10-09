@@ -10,6 +10,7 @@ import FilesUpdaterPanel from '../components/home/FilesUpdaterPanel';
 import MultiBoxPanel from '../components/home/MultiBoxPanel';
 import SetupCard from '../components/home/SetupCard';
 import NoticeBanner from '../components/home/NoticeBanner';
+import WhatsNewCard from '../components/home/WhatsNewCard';
 import MovedServerBanner from '../components/MovedServerBanner';
 import PrereqBanner from '../components/home/PrereqBanner';
 
@@ -20,7 +21,7 @@ const MULTIBOX_WAIT_LIMIT_MS = 2 * 60 * 1000;
 const MULTIBOX_START_LIMIT_MS = 30 * 1000; // for its loader to appear at all
 const MULTIBOX_POLL_MS = 1500;
 
-function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, launchLog, updateInfo, onSkipVersion, onDismissUpdate, onShowWizard, prereqs, onShowRequirements, movedServers, onApplyMove, onDismissMove }) {
+function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, launchLog, updateInfo, whatsNew, onDismissWhatsNew, onSkipVersion, onDismissUpdate, onShowWizard, prereqs, onShowRequirements, movedServers, onApplyMove, onDismissMove }) {
   const [status, setStatus] = useState({ ashita: false, ffxi: false, xiloader: false, profileCount: 0 });
   const [loaderInfo, setLoaderInfo] = useState(null); // resolveLoader() for the active profile
   const [startupWarnings, setStartupWarnings] = useState([]);
@@ -560,6 +561,9 @@ function HomeTab({ config, updateConfig, onNavigate, onLaunch, isLaunching, laun
           )}
         </div>
       </div>
+
+      {/* Bottom-right: one-time "what's new" after an update */}
+      <WhatsNewCard whatsNew={whatsNew} onDismiss={onDismissWhatsNew} onOpenNotes={(url) => api?.openExternal?.(url)} />
 
       {/* Bottom-left utility corner */}
       {setupComplete && onShowWizard && (

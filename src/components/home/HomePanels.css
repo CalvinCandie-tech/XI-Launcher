@@ -478,3 +478,101 @@
 .home-notice-dismiss:hover {
   color: var(--text-primary);
 }
+
+/* What's new card (one-time, after an update) — styled like the top-bar drop-downs.
+   Bottom-right corner of the Home tab, clear of the title and Start Game. */
+.home-whatsnew {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 10;
+  width: min(440px, calc(100% - 32px));
+  max-height: calc(100% - 140px);
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  background: var(--bg-deepest-alpha);
+  border: 1px solid var(--border-bright);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 8px var(--gold-glow);
+  backdrop-filter: blur(6px);
+  overflow: hidden;
+}
+
+.home-whatsnew-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px 7px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.home-whatsnew-head .home-notice-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.home-whatsnew-close {
+  margin-left: auto;
+}
+
+.home-whatsnew-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 14px;
+  overflow-y: auto;
+}
+
+.home-whatsnew-item {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.home-whatsnew-item:last-child {
+  border-bottom: none;
+}
+
+.home-whatsnew-tag {
+  flex: 0 0 62px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold-bright);
+}
+
+.home-whatsnew-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.home-whatsnew-heading {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-bright);
+}
+
+.home-whatsnew-detail {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.home-whatsnew-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--border);
+}

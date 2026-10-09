@@ -11,6 +11,7 @@ const loaders = require('./loaders');
 const serverList = require('./serverList');
 const ffxiMirror = require('./ffxiMirror');
 const sandbox = require('./sandbox');
+const whatsNew = require('./whatsNew');
 const windowState = require('./windowState');
 const addonInstall = require('./addonInstall');
 const updateScript = require('./updateScript');
@@ -724,6 +725,9 @@ function profileGameFiles(ashitaPath, profileName) {
   return gameFiles;
 }
 
+// True when this run is the first ever on this profile — set in startup, read by get-whats-new.
+let freshInstall = false;
+
 // The launcher is portable: a thumb drive's letter can change between PCs, or the folder can
 // be moved. Saved paths that pointed inside its previous folder (Ashita, xiloader, sandboxed
 // copies, custom loaders) are moved to where it is now. Paths elsewhere are left alone.
@@ -1262,6 +1266,10 @@ app.whenReady().then(async () => {
 
   await initStore();
 
+  // A store that has never recorded launcherRoot (written since 1.8.0) or a seen version is a new
+  // install — checked before relocateSavedPaths() records launcherRoot.
+  freshInstall = !store.get('launcherRoot') && !store.get('lastSeenVersion');
+
   // Run before anything reads a saved path: the launcher may have moved since last time.
   relocateSavedPaths();
 
@@ -1760,11 +1768,42 @@ function registerIPC() {
         latest,
         downloadUrl,
         releaseUrl: data.html_url || '',
-        releaseNotes: (data.body || '').slice(0, 500)
+        releaseNotes: (data.body || '').slice(0, 500),
+        releaseHighlights: whatsNew.summarizeReleaseNotes(data.body)
       };
     } catch (e) {
       return { upToDate: true, current: APP_VERSION, error: `Could not check for updates: ${e.message || e}` };
     }
+  });
+
+  // "What's new" card: shown once after an update. Notes come from this version's GitHub release;
+  // if they can't be fetched nothing is shown and the version is NOT marked seen, so the next
+  // launch tries again. Dev-only: XI_WHATS_NEW_FAKE=<release body .md> shows that text without
+  // touching the store or the network (ignored when packaged).
+  ipcMain.handle('get-whats-new', async () => {
+    try {
+      const fakePath = !app.isPackaged && process.env.XI_WHATS_NEW_FAKE;
+      if (fakePath) {
+        const items = whatsNew.summarizeReleaseNotes(fs.readFileSync(fakePath, 'utf8'));
+        console.warn(`[whats-new] XI_WHATS_NEW_FAKE active: ${fakePath}`);
+        return { version: APP_VERSION, items, releaseUrl: `https://github.com/${UPDATE_REPO}/releases/tag/v${APP_VERSION}`, fake: true };
+      }
+      const plan = whatsNew.planWhatsNew({ lastSeen: store.get('lastSeenVersion'), current: APP_VERSION, freshInstall });
+      if (plan === 'record') store.set('lastSeenVersion', APP_VERSION);
+      if (plan !== 'show') return null;
+      const data = await githubGet(`/repos/${UPDATE_REPO}/releases/tags/v${APP_VERSION}`);
+      const items = whatsNew.summarizeReleaseNotes(data?.body);
+      if (!items.length) return null;
+      return { version: APP_VERSION, items, releaseUrl: data.html_url || '' };
+    } catch (e) {
+      console.error('[whats-new]', e.message);
+      return null;
+    }
+  });
+
+  ipcMain.handle('dismiss-whats-new', () => {
+    if (!(!app.isPackaged && process.env.XI_WHATS_NEW_FAKE)) store.set('lastSeenVersion', APP_VERSION);
+    return { success: true };
   });
 
   ipcMain.handle('skip-update-version', async (_, version) => {
