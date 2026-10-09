@@ -173,11 +173,13 @@ function buildInstallScript(plan, paths) {
 // `new InvalidOperationException(message)` with no inner exception). Process.Start throws the
 // Win32Exception itself, whose NativeErrorCode is 1223 (ERROR_CANCELLED) when UAC is declined. The
 // catch walks the exception chain for it; any other error is rethrown and stays a failure.
-// launchOverride replaces the launch line and exists only for the test harness.
-function buildElevationScript(scriptPath, { launchOverride } = {}) {
+// launchOverride replaces the launch line and exists only for the test harness. psExe is the
+// powershell.exe to elevate; a full path avoids relying on the PATH lookup that ShellExecute does
+// for a bare name.
+function buildElevationScript(scriptPath, { launchOverride, psExe = 'powershell.exe' } = {}) {
   const launch = launchOverride ? [`  ${launchOverride}`] : [
     '  $psi = New-Object System.Diagnostics.ProcessStartInfo',
-    "  $psi.FileName = 'powershell.exe'",
+    `  $psi.FileName = ${psQuote(psExe)}`,
     `  $psi.Arguments = ${psQuote(`-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${scriptPath}"`)}`,
     "  $psi.Verb = 'runas'",
     '  $psi.UseShellExecute = $true',
@@ -482,6 +484,7 @@ module.exports = {
   planInstall,
   buildInstallScript,
   buildElevationScript,
+  psQuote,
   buildSignatureScript,
   parseSubjectCN,
   evaluateSignature,
