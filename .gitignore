@@ -11,3 +11,6 @@ runtime/
 
 # Local brainstorming session files
 .superpowers/
+
+# Per-release build output
+dist-*/
