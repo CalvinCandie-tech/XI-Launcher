@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const D = require('./defenderExclusion');
 
-// Coborn: "Start-Process : This command cannot be run due to the error: No application is associated
+// A LevelDown player: "Start-Process : This command cannot be run due to the error: No application is associated
 // with the specified file for this operation" from the nested `Start-Process powershell -Verb RunAs`.
 // Also: a non-admin launcher cannot read the exclusion list, so the old check said "Not excluded"
 // for everyone, even straight after a successful add.

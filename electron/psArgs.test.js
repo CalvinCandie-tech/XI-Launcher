@@ -39,8 +39,8 @@ test('regression: the unquoted element is never produced for any name', () => {
 
 test('quoteForStartProcess quotes a script path that contains a space (temp dir of a user with a space in their name)', () => {
   assert.equal(
-    P.quoteForStartProcess('C:\\Users\\Calvin Candie\\AppData\\Local\\Temp\\xi-launcher-reg.ps1'),
-    `'"C:\\Users\\Calvin Candie\\AppData\\Local\\Temp\\xi-launcher-reg.ps1"'`
+    P.quoteForStartProcess('C:\\Users\\Player\\AppData\\Local\\Temp\\xi-launcher-reg.ps1'),
+    `'"C:\\Users\\Player\\AppData\\Local\\Temp\\xi-launcher-reg.ps1"'`
   );
 });
 

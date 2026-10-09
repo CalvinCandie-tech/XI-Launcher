@@ -17,3 +17,7 @@ dist-*/
 
 # Local Claude Code config (agent definitions) - kept on disk, not published
 .claude/
+
+# Internal planning docs and review notes - kept on disk, not published
+docs/superpowers/
+docs/code-review-*.md
