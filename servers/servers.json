@@ -136,6 +136,18 @@
       "note": "Connection address not listed yet — use Edit if you know it."
     },
     {
+      "id": "leveldown-99",
+      "name": "LevelDown (99)",
+      "category": "99 - Custom Content",
+      "host": "leveldownffxi.com",
+      "port": "",
+      "previousHosts": [],
+      "website": "https://ffxileveldown.fandom.com/wiki/FFXILevelDown_Wiki",
+      "discord": "https://discord.gg/uZ5J2KwAPA",
+      "tags": { "expansion": "WotG", "exp": "Custom", "speed": "Retail", "trusts": true, "levelSync": true, "multiBox": true },
+      "note": "Same server as LevelDown under 75 — 75 and 99 players share it since 2026-09-16. If the address changes, update both entries."
+    },
+    {
       "id": "ff11sf",
       "name": "ff11sf",
       "category": "99 - Custom Content (Chinese Servers)",
