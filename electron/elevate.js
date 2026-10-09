@@ -7,8 +7,9 @@
 // Process.Start elevation wrapper prereqInstall uses (prereqInstall.buildElevationScript) and reads
 // the outcome back from a result file, because the elevated process's exit code never reaches us.
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
-const { psQuote } = require('./prereqInstall');
+const { psQuote, buildElevationScript, isUacDeclined } = require('./prereqInstall');
 
 // Full path to Windows PowerShell 5.1; the bare name only if that file is missing.
 function powerShellExe() {
@@ -48,4 +49,29 @@ function buildRegAddBody(regPath, entries) {
   ].join('\r\n')).join('\r\n');
 }
 
-module.exports = { powerShellExe, buildElevatedScript, parseElevatedResult, buildRegAddBody };
+// Builds runElevated(body, timeoutMs) around main.js's runPowerShellFile (which runs a script from
+// a temp .ps1 and rejects with err.exitCode on a non-zero exit).
+// -> { success } | { success: false, error, declined? }
+function createRunElevated(runPowerShellFile) {
+  return async function runElevated(body, timeoutMs = 120000) {
+    let workDir;
+    try {
+      workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xi-elevated-'));
+      const scriptPath = path.join(workDir, 'run.ps1');
+      const resultPath = path.join(workDir, 'result.txt');
+      // UTF-8 BOM so PowerShell reads non-ASCII paths correctly.
+      fs.writeFileSync(scriptPath, '﻿' + buildElevatedScript(body, resultPath), 'utf8');
+      await runPowerShellFile(buildElevationScript(scriptPath, { psExe: powerShellExe() }), timeoutMs);
+      let resultText = '';
+      try { resultText = fs.readFileSync(resultPath, 'utf8'); } catch { /* script never finished */ }
+      return parseElevatedResult(resultText);
+    } catch (e) {
+      if (isUacDeclined(e)) return { success: false, declined: true, error: 'UAC prompt was cancelled' };
+      return { success: false, error: e.message || String(e) };
+    } finally {
+      if (workDir) { try { fs.rmSync(workDir, { recursive: true, force: true }); } catch {} }
+    }
+  };
+}
+
+module.exports = { powerShellExe, buildElevatedScript, parseElevatedResult, buildRegAddBody, createRunElevated };

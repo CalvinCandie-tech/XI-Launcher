@@ -342,27 +342,8 @@ function runPowerShellFile(scriptBody, timeoutMs = 15000) {
   });
 }
 // Run a PowerShell body elevated behind ONE UAC prompt and report whether it really worked.
-// -> { success } | { success: false, error, declined? }. See elevate.js for why this replaced the
-// nested `Start-Process powershell -Verb RunAs` calls.
-async function runElevated(body, timeoutMs = 120000) {
-  let workDir;
-  try {
-    workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xi-elevated-'));
-    const scriptPath = path.join(workDir, 'run.ps1');
-    const resultPath = path.join(workDir, 'result.txt');
-    // UTF-8 BOM so PowerShell reads non-ASCII paths correctly.
-    fs.writeFileSync(scriptPath, '﻿' + elevate.buildElevatedScript(body, resultPath), 'utf8');
-    await runPowerShellFile(prereqInstall.buildElevationScript(scriptPath, { psExe: elevate.powerShellExe() }), timeoutMs);
-    let resultText = '';
-    try { resultText = fs.readFileSync(resultPath, 'utf8'); } catch { /* script never finished */ }
-    return elevate.parseElevatedResult(resultText);
-  } catch (e) {
-    if (prereqInstall.isUacDeclined(e)) return { success: false, declined: true, error: 'UAC prompt was cancelled' };
-    return { success: false, error: e.message || String(e) };
-  } finally {
-    if (workDir) { try { fs.rmSync(workDir, { recursive: true, force: true }); } catch {} }
-  }
-}
+// See elevate.js for why this replaced the nested `Start-Process powershell -Verb RunAs` calls.
+const runElevated = elevate.createRunElevated(runPowerShellFile);
 // Detect permission/elevation errors and return a user-friendly message
 function friendlyError(e, context) {
   const msg = e.message || String(e);
