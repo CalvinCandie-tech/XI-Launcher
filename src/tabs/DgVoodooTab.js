@@ -67,7 +67,12 @@ function DgVoodooTab({ config, updateConfig }) {
   const [confStatus, setConfStatus] = useState(''); // '' | 'writing' | 'done' | 'error'
   const [confMsg, setConfMsg] = useState('');
   const [removeStatus, setRemoveStatus] = useState('');
-  const [defenderExcluded, setDefenderExcluded] = useState(config?.dgvDefenderExcluded ?? null); // null=unknown, true, false
+  // true / false when known. null = can't tell: Windows only shows the exclusion list to an admin,
+  // so a launcher that didn't add the folder itself can't read it. A saved `false` came from the old
+  // check, which reported "not excluded" for everyone, so only a saved `true` is trusted.
+  const [defenderExcluded, setDefenderExcluded] = useState(config?.dgvDefenderExcluded === true ? true : null);
+  const [defenderChecking, setDefenderChecking] = useState(false);
+  const [avInfo, setAvInfo] = useState(null); // result of get-antivirus-info
   const [defenderAdding, setDefenderAdding] = useState(false);
   const [defenderMsg, setDefenderMsg] = useState('');
   const [dlStatus, setDlStatus] = useState(''); // '' | 'downloading' | 'done' | 'error'
@@ -108,12 +113,20 @@ function DgVoodooTab({ config, updateConfig }) {
     return () => clearTimeout(timer);
   }, [settings, ffxiPath, dgvStatus.confExists]);
 
-  // Check Defender exclusion status (requires admin — only run on explicit user action)
+  // Check Defender exclusion status. Needs no UAC prompt; a null result (can't tell) keeps whatever
+  // is already shown rather than flipping it to "not excluded".
   const checkDefenderExclusion = useCallback(async () => {
     if (!api?.checkDefenderExclusion || !ffxiPath) return;
-    const result = await api.checkDefenderExclusion(ffxiPath);
-    setDefenderExcluded(result.excluded);
-    updateConfig('dgvDefenderExcluded', result.excluded);
+    setDefenderChecking(true);
+    try {
+      const result = await api.checkDefenderExclusion(ffxiPath);
+      if (result.excluded === true || result.excluded === false) {
+        setDefenderExcluded(result.excluded);
+        updateConfig('dgvDefenderExcluded', result.excluded);
+      }
+    } finally {
+      setDefenderChecking(false);
+    }
   }, [ffxiPath, updateConfig]);
 
   const addDefenderExclusion = async () => {
@@ -277,6 +290,14 @@ function DgVoodooTab({ config, updateConfig }) {
     RECOMMENDED_SETTINGS[k] === value ? `${label} (Recommended)` : label;
 
   const currentStep = STEPS[step];
+
+  // Opening the Defender step: read the exclusion state and see which antivirus is really active.
+  useEffect(() => {
+    if (currentStep !== 'defender' || !ffxiPath) return;
+    checkDefenderExclusion();
+    api?.getAntivirusInfo?.().then(setAvInfo).catch(() => {});
+  }, [currentStep, ffxiPath, checkDefenderExclusion]);
+
   const canGoNext = () => {
     if (currentStep === 'copy' && !dgvStatus.d3d8Exists && copyStatus !== 'done') return false;
     return true;
@@ -726,12 +747,45 @@ function DgVoodooTab({ config, updateConfig }) {
                     </div>
                   </div>
                 )}
-                {defenderExcluded === null && (
+                {defenderExcluded === null && defenderChecking && (
                   <div className="dgv-defender-badge info">
                     <span className="dgv-verify-icon">?</span>
                     <div>
                       <strong>Checking...</strong>
                       <p>Verifying Defender exclusion status</p>
+                    </div>
+                  </div>
+                )}
+                {defenderExcluded === null && !defenderChecking && (
+                  <div className="dgv-defender-badge info">
+                    <span className="dgv-verify-icon">?</span>
+                    <div>
+                      <strong>Can't verify</strong>
+                      <p>
+                        Windows only shows the exclusion list to an administrator. Click Add Exclusion once and
+                        the launcher will remember it, or check Windows Security yourself.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {avInfo?.known && !avInfo.defenderActive && (
+                  <div className="dgv-defender-badge fail">
+                    <span className="dgv-verify-icon">!</span>
+                    <div>
+                      {avInfo.otherActive.length > 0 ? (
+                        <>
+                          <strong>{avInfo.otherActive.join(', ')} is your active antivirus</strong>
+                          <p>
+                            A Windows Defender exclusion won't stop it quarantining dgVoodoo2. Add your FFXI
+                            folder to its exclusion (allow) list as well.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <strong>Windows Defender looks switched off</strong>
+                          <p>If you have no other antivirus running, you can skip this step.</p>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -747,7 +801,7 @@ function DgVoodooTab({ config, updateConfig }) {
                   >
                     {defenderAdding ? 'Adding...' : defenderExcluded ? 'Exclusion Added' : 'Add Exclusion Automatically'}
                   </button>
-                  <button className="btn btn-ghost btn-sm" onClick={checkDefenderExclusion}>
+                  <button className="btn btn-ghost btn-sm" onClick={checkDefenderExclusion} disabled={defenderChecking}>
                     Recheck
                   </button>
                 </div>

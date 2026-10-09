@@ -19,6 +19,8 @@ const multiboxWait = require('./multiboxWait');
 const { resolveRedirect } = require('./downloadRedirect');
 const prereqs = require('./prereqs');
 const prereqInstall = require('./prereqInstall');
+const elevate = require('./elevate');
+const defenderExclusion = require('./defenderExclusion');
 const prereqFake = require('./prereqFake');
 
 /**
@@ -289,19 +291,21 @@ function runPowerShell(psCmd, timeoutMs = 15000) {
       shell: false,
       windowsHide: true,
     });
+    let stdout = '';
     let stderr = '';
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
       try { child.kill(); } catch {}
     }, timeoutMs);
+    child.stdout?.on('data', (c) => { stdout += c.toString(); });
     child.stderr?.on('data', (c) => { stderr += c.toString(); });
     child.on('error', (err) => { clearTimeout(timer); reject(err); });
     child.on('close', (code) => {
       clearTimeout(timer);
       if (timedOut) return reject(new Error(`PowerShell timed out after ${timeoutMs}ms`));
       if (code !== 0) return reject(new Error(stderr.trim() || `PowerShell exited with code ${code}`));
-      resolve();
+      resolve(stdout);
     });
   });
 }
@@ -336,6 +340,28 @@ function runPowerShellFile(scriptBody, timeoutMs = 15000) {
       resolve();
     });
   });
+}
+// Run a PowerShell body elevated behind ONE UAC prompt and report whether it really worked.
+// -> { success } | { success: false, error, declined? }. See elevate.js for why this replaced the
+// nested `Start-Process powershell -Verb RunAs` calls.
+async function runElevated(body, timeoutMs = 120000) {
+  let workDir;
+  try {
+    workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xi-elevated-'));
+    const scriptPath = path.join(workDir, 'run.ps1');
+    const resultPath = path.join(workDir, 'result.txt');
+    // UTF-8 BOM so PowerShell reads non-ASCII paths correctly.
+    fs.writeFileSync(scriptPath, '﻿' + elevate.buildElevatedScript(body, resultPath), 'utf8');
+    await runPowerShellFile(prereqInstall.buildElevationScript(scriptPath, { psExe: elevate.powerShellExe() }), timeoutMs);
+    let resultText = '';
+    try { resultText = fs.readFileSync(resultPath, 'utf8'); } catch { /* script never finished */ }
+    return elevate.parseElevatedResult(resultText);
+  } catch (e) {
+    if (prereqInstall.isUacDeclined(e)) return { success: false, declined: true, error: 'UAC prompt was cancelled' };
+    return { success: false, error: e.message || String(e) };
+  } finally {
+    if (workDir) { try { fs.rmSync(workDir, { recursive: true, force: true }); } catch {} }
+  }
 }
 // Detect permission/elevation errors and return a user-friendly message
 function friendlyError(e, context) {
@@ -2355,22 +2381,10 @@ function registerIPC() {
       }
       return { success: true, count: entries.length };
     } catch {
-      const regCmds = entries.map(({ key, value }) =>
-        `reg add '${escapePSString(backup.regPath)}' /v ${key} /t REG_DWORD /d ${value} /f`
-      ).join('; ');
-      try {
-        const tmpScript = path.join(app.getPath('temp'), 'xi-launcher-reg-undo.ps1');
-        fs.writeFileSync(tmpScript, regCmds, 'utf-8');
-        execSync(
-          `powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy','Bypass','-File',${psArgs.quoteForStartProcessInCmd(tmpScript)} -Verb RunAs -Wait -WindowStyle Hidden"`,
-          { timeout: 30000 }
-        );
-        try { fs.unlinkSync(tmpScript); } catch (e) { console.error('[restore-registry] cleanup', e.message); }
-        return { success: true, count: entries.length };
-      } catch (e) {
-        console.error('[restore-registry]', e.message);
-        return { success: false, error: 'Failed to restore registry. Try running as Administrator.' };
-      }
+      const elevated = await runElevated(elevate.buildRegAddBody(backup.regPath, entries));
+      if (elevated.success) return { success: true, count: entries.length };
+      console.error('[restore-registry]', elevated.error);
+      return { success: false, error: 'Failed to restore registry. Try running as Administrator.' };
     }
   });
 
@@ -2414,30 +2428,19 @@ function registerIPC() {
       // Needs elevation
     }
 
-    const regCmds = safeEntries.map(({ key, value }) =>
-      `reg add '${escapePSString(regPath)}' /v ${key} /t REG_DWORD /d ${value} /f`
-    ).join('; ');
+    const elevated = await runElevated(elevate.buildRegAddBody(regPath, safeEntries));
+    if (elevated.success) return { success: true, count: safeEntries.length };
+    console.error('[write-ffxi-registry-batch] elevated write failed:', elevated.error);
 
+    // Last resort: try HKCU fallback
+    const hkcuPath = regPath.replace(/^HKLM\\SOFTWARE\\(Wow6432Node\\)?/, 'HKCU\\SOFTWARE\\');
     try {
-      const tmpScript = path.join(app.getPath('temp'), 'xi-launcher-reg.ps1');
-      fs.writeFileSync(tmpScript, regCmds, 'utf-8');
-      execSync(
-        `powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy','Bypass','-File',${psArgs.quoteForStartProcessInCmd(tmpScript)} -Verb RunAs -Wait -WindowStyle Hidden"`,
-        { timeout: 30000 }
-      );
-      try { fs.unlinkSync(tmpScript); } catch (e) { console.error('[write-ffxi-registry-batch] cleanup', e.message); }
-      return { success: true, count: safeEntries.length };
-    } catch {
-      // Last resort: try HKCU fallback
-      const hkcuPath = regPath.replace(/^HKLM\\SOFTWARE\\(Wow6432Node\\)?/, 'HKCU\\SOFTWARE\\');
-      try {
-        for (const { key, value } of safeEntries) {
-          execSync(`reg add "${hkcuPath}" /v ${key} /t REG_DWORD /d ${value} /f`, { encoding: 'utf-8', timeout: 5000 });
-        }
-        return { success: true, count: safeEntries.length, fallback: hkcuPath };
-      } catch {
-        return { success: false, error: 'Registry write failed. The admin elevation prompt may have been cancelled. Try running XI Launcher as Administrator, or check that FFXI registry keys exist (run FFXI Config once if you haven\'t).' };
+      for (const { key, value } of safeEntries) {
+        execSync(`reg add "${hkcuPath}" /v ${key} /t REG_DWORD /d ${value} /f`, { encoding: 'utf-8', timeout: 5000 });
       }
+      return { success: true, count: safeEntries.length, fallback: hkcuPath };
+    } catch {
+      return { success: false, error: 'Registry write failed. The admin elevation prompt may have been cancelled. Try running XI Launcher as Administrator, or check that FFXI registry keys exist (run FFXI Config once if you haven\'t).' };
     }
   });
 
@@ -3468,11 +3471,15 @@ function registerIPC() {
       patchBuffer(data, enable);
       fs.writeFileSync(tmpFile, data);
 
-      const psCmd = `Start-Process powershell -Verb RunAs -Wait -ArgumentList '-NoProfile','-Command',\"Copy-Item -Path '${escapePSString(tmpFile)}' -Destination '${escapePSString(exePath)}' -Force\"`;
-      execSync(`powershell -NoProfile -Command "${psCmd}"`, { timeout: 30000 });
+      const elevated = await runElevated(
+        `  Copy-Item -LiteralPath ${prereqInstall.psQuote(tmpFile)} -Destination ${prereqInstall.psQuote(exePath)} -Force`
+      );
 
       // Clean up temp file
       try { fs.unlinkSync(tmpFile); } catch (_) {}
+      if (!elevated.success) {
+        return { success: false, error: elevated.declined ? 'UAC prompt was cancelled — patch not applied' : `Patch failed: ${elevated.error}` };
+      }
 
       // Verify it worked
       const verify = fs.readFileSync(exePath);
@@ -4432,30 +4439,53 @@ function registerIPC() {
   ipcMain.handle('add-defender-exclusion', async (_, folderPath) => {
     try {
       if (!folderPath) return { success: false, error: 'No folder path provided' };
+      // Elevated, so only the saved FFXI folder is accepted, like the other dgVoodoo handlers.
+      validateStoredFfxiPath(folderPath);
       const resolved = path.resolve(folderPath);
-      // Use elevated PowerShell to add the exclusion
-      const cmd = `powershell -Command "Start-Process powershell -ArgumentList '-Command','Add-MpPreference -ExclusionPath \\\"${escapePSString(resolved)}\\\"' -Verb RunAs -Wait"`;
-      execSync(cmd, { timeout: 30000 });
+      const result = await runElevated(defenderExclusion.buildExclusionBody(resolved));
+      if (result.declined) return { success: false, error: 'UAC prompt was cancelled — exclusion not added' };
+      if (!result.success) return { success: false, error: `Failed to add exclusion: ${result.error}` };
+      // Windows hides the exclusion list from a non-admin launcher, so remember what the verified
+      // add did; check-defender-exclusion can't read it back later.
+      const recorded = store.get('defenderExclusions') || [];
+      if (!defenderExclusion.isPathCovered(recorded, resolved)) store.set('defenderExclusions', [...recorded, resolved]);
       return { success: true };
     } catch (e) {
-      const msg = e.message || '';
-      if (msg.includes('canceled') || msg.includes('cancelled') || msg.includes('The operation was canceled')) {
-        return { success: false, error: 'UAC prompt was cancelled — exclusion not added' };
-      }
-      return { success: false, error: `Failed to add exclusion: ${msg}` };
+      return { success: false, error: `Failed to add exclusion: ${e.message || e}` };
     }
   });
 
+  // excluded: true | false | null. null = Windows won't show the list to a non-admin launcher and
+  // this launcher never added the folder, so it can't be known (shown as "can't verify", not "no").
   ipcMain.handle('check-defender-exclusion', async (_, folderPath) => {
     try {
-      if (!folderPath) return { excluded: false };
+      if (!folderPath) return { excluded: null, source: 'unverifiable' };
       const resolved = path.resolve(folderPath);
-      const output = execSync('powershell -Command "(Get-MpPreference).ExclusionPath"', { timeout: 10000, encoding: 'utf8' });
-      const exclusions = output.split(/\r?\n/).map(l => l.trim().toLowerCase()).filter(Boolean);
-      const found = exclusions.some(ex => resolved.toLowerCase() === ex || resolved.toLowerCase().startsWith(ex + path.sep));
-      return { excluded: found };
+      const output = await runPowerShell(defenderExclusion.EXCLUSION_QUERY_COMMAND, 15000);
+      const state = defenderExclusion.resolveExclusionState({
+        query: defenderExclusion.parseExclusionQuery(output),
+        recorded: store.get('defenderExclusions') || [],
+        folder: resolved,
+      });
+      // An admin read that no longer lists the folder means it was removed since we recorded it.
+      if (state.source === 'defender' && !state.excluded) {
+        const recorded = store.get('defenderExclusions') || [];
+        store.set('defenderExclusions', recorded.filter((p) => path.resolve(p).toLowerCase() !== resolved.toLowerCase()));
+      }
+      return state;
+    } catch (e) {
+      return { excluded: null, source: 'unverifiable', error: `Could not check exclusions: ${e.message}` };
+    }
+  });
+
+  // Which antivirus is actually protecting this PC. A Defender exclusion does nothing when another
+  // product has taken over, and that product needs the exclusion instead.
+  ipcMain.handle('get-antivirus-info', async () => {
+    try {
+      const output = await runPowerShell(defenderExclusion.AV_QUERY_COMMAND, 15000);
+      return defenderExclusion.parseAntivirusProducts(output);
     } catch {
-      return { excluded: false, error: 'Could not check exclusions' };
+      return defenderExclusion.parseAntivirusProducts('');
     }
   });
 

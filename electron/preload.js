@@ -199,6 +199,7 @@ contextBridge.exposeInMainWorld('xiAPI', {
   openDefenderSettings: () => ipcRenderer.invoke('open-defender-settings'),
   addDefenderExclusion: (folderPath) => ipcRenderer.invoke('add-defender-exclusion', folderPath),
   checkDefenderExclusion: (folderPath) => ipcRenderer.invoke('check-defender-exclusion', folderPath),
+  getAntivirusInfo: () => ipcRenderer.invoke('get-antivirus-info'),
   removeDgVoodoo: (ffxiPath) => ipcRenderer.invoke('remove-dgvoodoo', ffxiPath),
 
   // ReShade
