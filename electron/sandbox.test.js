@@ -115,6 +115,43 @@ test('rebaseClientCopy finds a launcher-managed copy under the current runtime f
   assert.equal(S.rebaseClientCopy(null, 'F:\\XI\\runtime'), null);
 });
 
+const DEFAULT_ASHITA = 'C:\\XI-Launcher\\runtime\\ashita';
+const gone = () => false;
+const present = () => true;
+
+test('staleRuntimePath resets a saved launcher folder whose old launcher is gone', () => {
+  assert.equal(
+    S.staleRuntimePath('D:\\Games\\FFXI\\Xi Launcher\\runtime\\ashita', DEFAULT_ASHITA, gone),
+    DEFAULT_ASHITA
+  );
+  assert.equal(
+    S.staleRuntimePath('d:/games/ffxi/xi launcher/runtime/xiloader/', 'C:\\XI-Launcher\\runtime\\xiloader', gone),
+    'C:\\XI-Launcher\\runtime\\xiloader'
+  );
+});
+
+test('staleRuntimePath checks the runtime folder, not the ashita folder', () => {
+  const seen = [];
+  S.staleRuntimePath('D:\\Old\\runtime\\ashita', DEFAULT_ASHITA, (p) => { seen.push(p); return false; });
+  assert.deepEqual(seen, ['D:\\Old\\runtime']);
+});
+
+test('staleRuntimePath keeps a saved path whose launcher folder still exists', () => {
+  assert.equal(S.staleRuntimePath('D:\\Old\\runtime\\ashita', DEFAULT_ASHITA, present), 'D:\\Old\\runtime\\ashita');
+});
+
+test('staleRuntimePath never touches a path the user chose elsewhere', () => {
+  assert.equal(S.staleRuntimePath('E:\\Tools\\Ashita', DEFAULT_ASHITA, gone), 'E:\\Tools\\Ashita');
+  assert.equal(S.staleRuntimePath('E:\\runtime\\ashita-backup', DEFAULT_ASHITA, gone), 'E:\\runtime\\ashita-backup');
+  assert.equal(S.staleRuntimePath('E:\\runtime\\clients\\ashita', DEFAULT_ASHITA, gone), 'E:\\runtime\\clients\\ashita');
+});
+
+test('staleRuntimePath leaves the current default and empty values alone', () => {
+  assert.equal(S.staleRuntimePath('c:\\xi-launcher\\runtime\\ashita\\', DEFAULT_ASHITA, gone), 'c:\\xi-launcher\\runtime\\ashita\\');
+  assert.equal(S.staleRuntimePath(undefined, DEFAULT_ASHITA, gone), undefined);
+  assert.equal(S.staleRuntimePath('', DEFAULT_ASHITA, gone), '');
+});
+
 const INSTALLED = 'C:\\Program Files (x86)\\PlayOnline\\SquareEnix\\FINAL FANTASY XI';
 
 test('resolveGameFiles uses the sandboxed copy the profile chose', () => {

@@ -747,6 +747,17 @@ function relocateSavedPaths() {
     if (changed) store.set('profileSettings', all);
     console.log(`[launcher] moved from ${lastRoot} to ${appRoot} — saved paths updated`);
   }
+  // Settings live in %APPDATA% and can outlive the launcher folder they point into (lost drive,
+  // reinstall elsewhere with no launcherRoot recorded). Such a path can only fail — Install Ashita
+  // died with EINVAL on a dead D: drive — so fall back to this launcher's own default.
+  for (const [key, defaultPath] of [['ashitaPath', defaultAshitaPath], ['xiloaderPath', defaultXiloaderPath]]) {
+    const saved = store.get(key);
+    const fixed = sandbox.staleRuntimePath(saved, defaultPath, fs.existsSync);
+    if (fixed !== saved) {
+      store.set(key, fixed);
+      console.log(`[launcher] ${key} ${saved} no longer exists — reset to ${fixed}`);
+    }
+  }
   store.set('launcherRoot', appRoot);
 }
 
@@ -2510,6 +2521,11 @@ function registerIPC() {
       // UNKNOWN on a file operation.
       if (/virus|potentially unwanted/i.test(msg) || (e.code === 'UNKNOWN' && e.path)) {
         return { success: false, error: `Windows blocked a file while installing Ashita (${msg}). ${avAdvice}` };
+      }
+      // EINVAL from mkdir/copy: the folder name or its drive is unusable (damaged or removed
+      // drive, odd characters), not a permissions problem.
+      if (e.code === 'EINVAL') {
+        return { success: false, error: `Windows rejected the install folder (${destPath}). Check that its drive is connected and healthy, or choose another Ashita folder under Profiles → Installation Paths.` };
       }
       if (msg.includes('EACCES') || msg.includes('EPERM') || msg.includes('EBUSY')) {
         // Only blame the install folder when it's the one that failed.

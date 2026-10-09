@@ -151,6 +151,18 @@ function rebaseClientCopy(p, runtimeDir) {
   return m ? path.win32.join(runtimeDir, m[1]) : null;
 }
 
+// A saved Ashita/xiloader folder of the form <launcher>\runtime\ashita (or \xiloader) is the
+// launcher's own default location. If the launcher it belonged to no longer exists — the drive
+// was lost, or settings outlived a reinstall that never recorded launcherRoot — it can only fail,
+// so use this launcher's default instead. Folders the user chose elsewhere are never touched.
+// `exists` is injected so this stays pure.
+function staleRuntimePath(saved, defaultPath, exists) {
+  if (typeof saved !== 'string' || !saved || isSameFolder(saved, defaultPath)) return saved;
+  const m = saved.match(/^(.*[\\/]runtime)[\\/](?:ashita|xiloader)[\\/]*$/i);
+  if (!m) return saved;
+  return exists(m[1]) ? saved : defaultPath;
+}
+
 // The FFXI folder PlayOnline's installer registered (InstallFolder value 0001), from
 // `reg query ...\PlayOnlineUS\InstallFolder` output, or null.
 function parseRegFfxiFolder(regOutput) {
@@ -175,5 +187,6 @@ module.exports = {
   parseRegFfxiFolder,
   isSameFolder,
   relocatePath,
+  staleRuntimePath,
   rebaseClientCopy,
 };
