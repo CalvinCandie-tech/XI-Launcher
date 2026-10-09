@@ -14,3 +14,6 @@ runtime/
 
 # Per-release build output
 dist-*/
+
+# Local Claude Code config (agent definitions) - kept on disk, not published
+.claude/
