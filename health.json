@@ -1,31 +1,31 @@
 {
   "health": {
     "eden": {
-      "lastOk": 1791723430125
+      "lastOk": 1791819284077
     },
     "omega": {
-      "lastOk": 1791723430125
+      "lastOk": 1791819284077
     },
     "gaia-xi": {
       "firstFail": 1791293018286
     },
     "leveldown": {
-      "lastOk": 1791723430125
+      "lastOk": 1791819284077
     },
     "nasomi": {
       "firstFail": 1791293018286
     },
     "supernova": {
-      "lastOk": 1791723430125
+      "lastOk": 1791819284077
     },
     "catseyexi": {
-      "lastOk": 1791723430125
+      "lastOk": 1791819284077
     },
     "valhalla": {
-      "lastOk": 1791723430125
+      "lastOk": 1791819284077
     },
     "leveldown-99": {
-      "lastOk": 1791723430125
+      "lastOk": 1791819284077
     },
     "ff11sf": {
       "firstFail": 1791293018286
@@ -34,6 +34,7 @@
   "upstream": [
     "DSP Old School",
     "Demiurge",
+    "DiftwoodXI",
     "Eden",
     "Era",
     "Gaia XI",
@@ -42,6 +43,7 @@
     "LevelDown",
     "Nasomi",
     "Omega",
+    "Scythe",
     "Supernova",
     "Valhalla",
     "ff11sf"
