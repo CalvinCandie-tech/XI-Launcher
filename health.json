@@ -1,31 +1,32 @@
 {
   "health": {
     "eden": {
-      "lastOk": 1793365348912
+      "lastOk": 1793450432972
     },
     "omega": {
-      "lastOk": 1793365348912
+      "lastOk": 1793365348912,
+      "firstFail": 1793450432972
     },
     "gaia-xi": {
       "firstFail": 1791293018286
     },
     "leveldown": {
-      "lastOk": 1793365348912
+      "lastOk": 1793450432972
     },
     "nasomi": {
       "firstFail": 1791293018286
     },
     "supernova": {
-      "lastOk": 1793365348912
+      "lastOk": 1793450432972
     },
     "catseyexi": {
-      "lastOk": 1793365348912
+      "lastOk": 1793450432972
     },
     "valhalla": {
-      "lastOk": 1793365348912
+      "lastOk": 1793450432972
     },
     "leveldown-99": {
-      "lastOk": 1793365348912
+      "lastOk": 1793450432972
     },
     "ff11sf": {
       "firstFail": 1791293018286
