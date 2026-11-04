@@ -1,7 +1,7 @@
 {
   "health": {
     "eden": {
-      "lastOk": 1793715839214
+      "lastOk": 1793803150346
     },
     "omega": {
       "lastOk": 1793365348912,
@@ -11,23 +11,22 @@
       "firstFail": 1791293018286
     },
     "leveldown": {
-      "lastOk": 1793715839214
+      "lastOk": 1793803150346
     },
     "nasomi": {
       "firstFail": 1791293018286
     },
     "supernova": {
-      "lastOk": 1793635467289,
-      "firstFail": 1793715839214
+      "lastOk": 1793803150346
     },
     "catseyexi": {
-      "lastOk": 1793715839214
+      "lastOk": 1793803150346
     },
     "valhalla": {
-      "lastOk": 1793715839214
+      "lastOk": 1793803150346
     },
     "leveldown-99": {
-      "lastOk": 1793715839214
+      "lastOk": 1793803150346
     },
     "ff11sf": {
       "firstFail": 1791293018286
